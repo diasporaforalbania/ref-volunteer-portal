@@ -1,0 +1,2201 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Referendumi — Portali i vullnetarëve</title>
+<style>
+  :root{
+    --teal:#0d9488; --teal-d:#0f766e; --teal-l:#2dd4bf; --cyan:#0891b2; --aqua:#22d3ee;
+    --green:#059669; --amber:#d97706; --red:#dc2626;
+    --ink:#102a2e; --muted:#5b7377;
+    --bg:#f2faf9; --card:#ffffff; --line:#d8ece9;
+    --shadow:0 1px 3px rgba(15,46,44,.08),0 1px 2px rgba(15,46,44,.06);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.5}
+  header.app{background:linear-gradient(90deg,var(--teal-d),var(--teal) 40%,var(--cyan) 78%,var(--aqua));color:#fff;padding:16px 22px}
+  .h-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;max-width:1180px;margin:0 auto}
+  .brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .brand h1{margin:0;font-size:23px;letter-spacing:.4px}
+  .brand .tag{font-size:13px;opacity:.92}
+  .who{display:flex;align-items:center;gap:10px;font-size:13.5px}
+  .who .av{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.7);background:rgba(255,255,255,.2)}
+  .who .nm{font-weight:600}
+  .who .rl{opacity:.9;font-size:12px}
+  nav.tabs{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .tabs-inner{display:flex;gap:2px;max-width:1180px;margin:0 auto;overflow-x:auto}
+  .tab{padding:13px 15px;border:none;background:none;font-size:14.5px;font-weight:600;color:var(--muted);
+       cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+  .tab .badge{background:var(--red);color:#fff;border-radius:20px;padding:0 6px;font-size:11px;margin-left:5px}
+  main{max-width:1180px;margin:0 auto;padding:22px 22px 90px}
+  h2.sec{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card .meta{color:var(--muted);font-size:12.5px}
+  label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#27484a}
+  input,textarea,select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;
+        font-size:15px;font-family:inherit;background:#fff;color:var(--ink)}
+  textarea{min-height:86px;resize:vertical}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:9px;
+       padding:11px 16px;font-size:14.5px;font-weight:600;cursor:pointer;background:var(--teal);color:#fff}
+  .btn:hover{filter:brightness(1.06)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+  .btn.sec{background:#e2f3f0;color:var(--teal-d)}
+  .btn.green{background:var(--green)}
+  .btn.amber{background:var(--amber)}
+  .btn.red{background:var(--red)}
+  .btn.ghost{background:transparent;color:var(--teal-d);padding:7px 9px}
+  .btn.sm{padding:7px 12px;font-size:12.5px}
+  .btn.wide{width:100%}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pill.ok{background:#ccfbf1;color:#0f766e}
+  .pill.gray{background:#e6eef0;color:#475467}
+  .pill.amber{background:#fef3c7;color:#92400e}
+  .pill.red{background:#fee2e2;color:#991b1b}
+  .pill.blue{background:#cdeef5;color:#0e6b86}
+  .empty{color:var(--muted);font-size:14px;padding:26px;text-align:center;border:1px dashed var(--line);border-radius:12px}
+  .bar{background:#e6eef0;border-radius:8px;height:14px;overflow:hidden;position:relative;margin:8px 0}
+  .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--aqua));transition:width .4s}
+  .bar.big{height:30px;border-radius:10px}
+  .list{list-style:none;margin:0;padding:0}
+  .list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .list li:last-child{border-bottom:none}
+  .notice{background:#ecfdf8;border:1px solid #a7f3d0;color:#0f766e;padding:11px 14px;border-radius:10px;font-size:13.5px;margin-bottom:14px}
+  .notice.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+  .notice.danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+  .stat{display:flex;align-items:center;gap:13px}
+  .stat .n{font-size:29px;font-weight:800;line-height:1}
+  .foot{max-width:1180px;margin:10px auto 40px;padding:0 22px;color:var(--muted);font-size:12.5px}
+  a.link{color:var(--teal);font-weight:600;text-decoration:none;cursor:pointer}
+  .back{display:inline-block;margin-bottom:10px;color:var(--teal);cursor:pointer;font-weight:600;font-size:14px}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:4px}
+
+  /* ---- hyrja (login) ---- */
+  .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px;
+    background:linear-gradient(160deg,#0f766e,#0891b2 55%,#22d3ee)}
+  .auth{background:#fff;border-radius:18px;box-shadow:0 12px 40px rgba(6,40,48,.28);padding:28px;width:100%;max-width:430px}
+  .auth h1{margin:0 0 2px;font-size:22px}
+  .auth .sub{margin-bottom:16px}
+  .switcher{display:flex;background:#eef7f6;border-radius:10px;padding:4px;margin-bottom:14px}
+  .switcher button{flex:1;border:none;background:none;padding:9px;border-radius:8px;font-weight:600;
+        font-size:14px;color:var(--muted);cursor:pointer}
+  .switcher button.on{background:#fff;color:var(--teal-d);box-shadow:var(--shadow)}
+
+  /* ---- karta (ID badge) ---- */
+  .badge{width:340px;max-width:100%;border-radius:16px;overflow:hidden;border:1px solid var(--line);
+    box-shadow:0 6px 22px rgba(15,46,44,.16);background:#fff}
+  .badge-top{background:linear-gradient(120deg,var(--teal-d),var(--cyan));color:#fff;padding:13px 16px}
+  .badge-top .t1{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;opacity:.9}
+  .badge-top .t2{font-size:15px;font-weight:700;line-height:1.25}
+  .badge-body{display:flex;gap:14px;padding:16px}
+  .badge-photo{width:96px;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#eef7f6;flex:none}
+  .badge-photo.ph{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center;padding:6px}
+  .badge-name{font-size:18px;font-weight:800;line-height:1.2;margin-bottom:2px}
+  .badge-line{font-size:12.5px;color:var(--muted)}
+  .badge-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;font-weight:700;color:var(--teal-d);margin-top:6px}
+  .badge-foot{border-top:1px solid var(--line);padding:11px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+  .badge-foot .qr{width:74px;height:74px;flex:none}
+  .badge-foot .qr canvas,.badge-foot .qr img{width:100%;height:100%;display:block}
+  .badge-foot .vf{font-size:11px;color:var(--muted);line-height:1.35}
+
+  /* ---- modal ---- */
+  .modal-bg{position:fixed;inset:0;background:rgba(9,32,36,.55);display:flex;align-items:flex-start;
+    justify-content:center;padding:20px;z-index:50;overflow-y:auto}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:560px;padding:22px;margin:auto;box-shadow:0 18px 50px rgba(6,40,48,.3)}
+  .modal h3{margin:0 0 3px;font-size:19px}
+  .modal-x{float:right;cursor:pointer;color:var(--muted);font-size:22px;line-height:1;border:none;background:none}
+  .kinds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .kind{border:1.5px solid var(--line);border-radius:11px;padding:11px 8px;text-align:center;cursor:pointer;background:#fff}
+  .kind .ic{font-size:21px}
+  .kind .lb{font-size:12px;font-weight:600;margin-top:3px}
+  .kind.on{border-color:var(--teal);background:#effaf8;box-shadow:0 0 0 3px #d5f2ee}
+
+  /* ---- FAB raporto ---- */
+  .fab{position:fixed;right:18px;bottom:18px;z-index:40;background:var(--red);color:#fff;border:none;
+    border-radius:30px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;
+    box-shadow:0 8px 22px rgba(220,38,38,.4);display:inline-flex;gap:8px;align-items:center}
+  .fab:hover{filter:brightness(1.07)}
+
+  /* ---- toast ---- */
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:60;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:#0f766e;color:#fff;padding:11px 18px;border-radius:24px;font-size:14px;font-weight:600;
+    box-shadow:0 6px 20px rgba(6,40,48,.3);max-width:92vw}
+  .toast.err{background:var(--red)}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+  table.tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+    padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.tbl td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.tbl tr:last-child td{border-bottom:none}
+  .scroll-x{overflow-x:auto}
+  .mini-av{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#eef7f6;border:1px solid var(--line);flex:none}
+  .avrow{display:flex;align-items:center;gap:9px}
+  .file-item{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .file-item:last-child{border-bottom:none}
+  .file-ic{width:40px;height:40px;border-radius:9px;background:#eef7f6;display:flex;align-items:center;
+    justify-content:center;font-size:19px;flex:none}
+  .config-warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:16px 20px;font-size:14px}
+  .config-warn code{background:#fff;padding:1px 5px;border-radius:5px}
+
+  /* ---- harta e terrenit (pa biblioteka — pllaka OSM si <img>) ---- */
+  .map-wrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:#e8eef0;height:420px;touch-action:none;cursor:grab;user-select:none}
+  .map-wrap.drag{cursor:grabbing}
+  .map-tiles,.map-pins{position:absolute;inset:0}
+  .map-tiles img{position:absolute;width:256px;height:256px;pointer-events:none;
+    image-rendering:-webkit-optimize-contrast}
+  .map-pins{pointer-events:none}
+  .map-pin{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(6,40,48,.4))}
+  .map-pin .pv{width:38px;height:38px;border-radius:50%;border:3px solid #fff;object-fit:cover;
+    background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px}
+  .map-pin .pt{width:0;height:0;border:6px solid transparent;border-top:9px solid #fff;margin-top:-2px}
+  .map-pin.on .pv{border-color:var(--amber);box-shadow:0 0 0 3px rgba(217,119,6,.45)}
+  .map-zoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:5px;z-index:3}
+  .map-zoom button{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:#fff;
+    font-size:19px;font-weight:700;color:var(--ink);cursor:pointer;line-height:1;box-shadow:var(--shadow)}
+  .map-zoom button:hover{background:#eef7f6}
+  /* Gjerësi fikse: pranë buzës së hartës kutia do të ngushtohej vetë. Vendi
+     llogaritet në JS që të mos dalë jashtë kornizës. */
+  .map-pop{position:absolute;z-index:4;background:#fff;border-radius:11px;box-shadow:0 8px 26px rgba(6,40,48,.3);
+    padding:10px 12px;font-size:13px;width:210px;transform:translateY(calc(-100% - 50px));pointer-events:auto}
+  .map-pop.below{transform:translateY(12px)}
+  .map-pop b{display:block;font-size:14px}
+  .map-pop .x{position:absolute;top:3px;right:7px;cursor:pointer;color:var(--muted);font-size:15px}
+  .map-attr{position:absolute;right:0;bottom:0;z-index:3;background:rgba(255,255,255,.82);
+    font-size:10.5px;padding:2px 6px;border-top-left-radius:6px;color:#475467}
+  .map-attr a{color:#475467}
+  .map-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    text-align:center;padding:20px;color:var(--muted);font-size:14px;z-index:2}
+
+  /* ---- hierarkia koordinator → zona → vullnetarë ---- */
+  .tree-co{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .tree-co>.hd{background:#eef7f6;padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tree-co>.hd .nm{font-weight:700}
+  .tree-zone{border-top:1px solid var(--line);padding:11px 14px 11px 26px}
+  .tree-zone .zh{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+  .tree-people{display:flex;flex-wrap:wrap;gap:7px;padding-left:4px}
+  .tree-p{display:flex;align-items:center;gap:7px;background:#f6fbfa;border:1px solid var(--line);
+    border-radius:20px;padding:3px 11px 3px 3px;font-size:12.5px}
+  .tree-p .mini-av{width:24px;height:24px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+  .dot.open{background:var(--green)} .dot.shut{background:#c3d2d4}
+
+  @media (max-width:560px){
+    .brand h1{font-size:19px}
+    main{padding:16px 14px 90px}
+    .kinds{grid-template-columns:1fr}
+    .kind{display:flex;align-items:center;gap:10px;text-align:left}
+    .kind .lb{margin-top:0}
+  }
+  /* ---- printimi i kartës ---- */
+  @media print{
+    body{background:#fff}
+    header.app,nav.tabs,.fab,.no-print,.foot{display:none!important}
+    main{padding:0}
+    .badge{box-shadow:none;border:1px solid #999;page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+<div id="toast"></div>
+
+<!-- Bibliotekat rrinë brenda dosjes: portali punon edhe nëse CDN-të janë të bllokuara
+     ose interneti është i dobët në terren. Mos i fshini nga dosja `lib/`. -->
+<script src="lib/supabase.min.js"></script>
+<script src="lib/qrcode.min.js"></script>
+<script>
+/* ============================================================================
+   KONFIGURIMI — Supabase → Project Settings → API.
+   Përdorni një projekt TË VEÇANTË nga platforma publike "Për Shqipërinë".
+   ============================================================================ */
+const SUPABASE_URL      = "https://yymmdyjjjvjbyleaoygf.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5bW1keWpqanZqYnlsZWFveWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3ODUzODEsImV4cCI6MjA5ODM2MTM4MX0.mxR0_mF37Ste8eFgKKEBNwFXAILVY8JdZMQo-1zbkE0";
+
+/* Objektivi tregohet edhe para se të ngarkohen statistikat. */
+const DEFAULT_GOAL = 50000;
+
+/* ============================================================================
+   Ndihmës
+   ============================================================================ */
+const $ = id => document.getElementById(id);
+const root = $('root');
+const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const truncate = (s,n) => { s=String(s||''); return s.length>n ? s.slice(0,n-1)+'…' : s; };
+const nf = n => (Number(n)||0).toLocaleString('sq-AL');
+
+const ROLES = {
+  ndihmes:     'Ndihmës',
+  mbledhes:    'Mbledhës i autorizuar',
+  koordinator: 'Koordinator',
+  jurist:      'Jurist',
+  admin:       'Qendra (admin)'
+};
+const KINDS = {
+  incident: { ic:'🚨', lb:'Incident',        d:'Pengesë, presion, konflikt në terren' },
+  legal:    { ic:'⚖️', lb:'Shqetësim ligjor', d:'Pyetje ose problem me procedurën/ligjin' },
+  material: { ic:'📦', lb:'Material i humbur', d:'Formularë, ID, fletushka të humbura/dëmtuara' }
+};
+const REPORT_STATUS = { open:['Hapur','red'], review:['Në shqyrtim','amber'], resolved:['E zgjidhur','ok'] };
+const CATS = {
+  guide:   ['📘','Guide-book / manuale'],
+  leaflet: ['📄','Fletë-palosje'],
+  form:    ['🖊️','Formularë'],
+  faq:     ['❓','Pyetjet e shpeshta'],
+  legal:   ['⚖️','Dokumente ligjore'],
+  other:   ['📎','Të tjera']
+};
+
+function toast(msg, isErr){
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('toast').appendChild(el);
+  setTimeout(()=>el.remove(), isErr ? 5200 : 3200);
+}
+const fail = e => toast(typeof e==='string' ? e : (e?.message || 'Ndodhi një gabim.'), true);
+
+/* Datat i shkruajmë vetë, pa `toLocaleDateString('sq-AL')`. Jo çdo shfletues e
+   ka shqipen: aty ku i mungon, ai bie fshehurazi te anglishtja dhe ora del
+   "06:00 PM" në vend të "18:00" — pikërisht te orari i turneve, ku ngatërresa
+   kushton. Kështu del njësoj kudo. */
+const MONTHS_S = ['jan','shk','mar','pri','maj','qer','kor','gus','sht','tet','nën','dhj'];
+const MONTHS_L = ['janar','shkurt','mars','prill','maj','qershor',
+                  'korrik','gusht','shtator','tetor','nëntor','dhjetor'];
+const p2 = n => String(n).padStart(2,'0');
+
+function fmtDate(ts){ if(!ts) return '—';
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS_S[d.getMonth()]} ${d.getFullYear()}`; }
+function fmtDateTime(ts){ if(!ts) return '—';
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS_S[d.getMonth()]}, ${p2(d.getHours())}:${p2(d.getMinutes())}`; }
+function fmtTime(ts){ if(!ts) return '—';
+  const d = new Date(ts);
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}`; }
+function ago(ts){
+  const s = (Date.now() - new Date(ts).getTime())/1000;
+  if(s<60) return 'tani';
+  if(s<3600) return Math.floor(s/60)+' min më parë';
+  if(s<86400) return Math.floor(s/3600)+' orë më parë';
+  return Math.floor(s/86400)+' ditë më parë';
+}
+function dur(from, to){
+  const ms = (to?new Date(to).getTime():Date.now()) - new Date(from).getTime();
+  const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
+  if(h > 0) return m > 0 ? `${h} orë e ${m} min` : `${h} orë`;
+  return `${m} min`;
+}
+function fmtSize(b){ b=b||0;
+  return b<1024 ? b+' B' : b<1048576 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB'; }
+function daysLeft(d){
+  if(!d) return null;
+  return Math.ceil((new Date(d+'T23:59:59').getTime() - Date.now())/86400000);
+}
+
+/* Zvogëlon fotot para ngarkimit — telefonat nxjerrin foto shumë të mëdha. */
+function shrinkImage(file, maxSide, quality){
+  return new Promise(resolve => {
+    if(!file.type.startsWith('image/')) return resolve(file);
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxSide/Math.max(img.width, img.height));
+      if(scale === 1 && file.size < 900*1024){ URL.revokeObjectURL(url); return resolve(file); }
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob(b => { URL.revokeObjectURL(url);
+        resolve(b ? new File([b], file.name.replace(/\.\w+$/,'')+'.jpg', {type:'image/jpeg'}) : file);
+      }, 'image/jpeg', quality||0.86);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+function getLocation(){
+  return new Promise(resolve => {
+    if(!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat:p.coords.latitude, lng:p.coords.longitude }),
+      () => resolve(null),
+      { timeout:8000, enableHighAccuracy:true });
+  });
+}
+function photoUrl(path){
+  if(!path) return null;
+  return sb.storage.from('vol-photos').getPublicUrl(path).data.publicUrl;
+}
+function matUrl(path){
+  return sb.storage.from('vol-materials').getPublicUrl(path).data.publicUrl;
+}
+function avatarHtml(path, name, cls){
+  const u = photoUrl(path);
+  return u ? `<img class="${cls||'mini-av'}" src="${esc(u)}" alt="${esc(name||'')}">`
+           : `<div class="${cls||'mini-av'}" style="display:flex;align-items:center;justify-content:center;
+                font-weight:700;color:#5b7377;font-size:13px">${esc((name||'?').trim().charAt(0).toUpperCase()||'?')}</div>`;
+}
+
+/* ============================================================================
+   Gjendja
+   ============================================================================ */
+let sb = null;          // klienti i Supabase
+let ME = null;          // rreshti im te `volunteers`
+let SESSION = null;
+let STATS = {};
+let active = 'home';
+const isStaff = () => ME && ['koordinator','jurist','admin'].includes(ME.role);
+const isAdmin = () => ME && ME.role === 'admin';
+
+function configMissing(){ return SUPABASE_URL.startsWith('PASTE_') || SUPABASE_ANON_KEY.startsWith('PASTE_'); }
+
+/* ============================================================================
+   Nisja
+   ============================================================================ */
+async function boot(){
+  if(configMissing()){ renderConfigNotice(); return; }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Faqja publike e verifikimit (?v=V-0001) — hapet pa login, nga QR-i i kartës.
+  const code = new URLSearchParams(location.search).get('v');
+  if(code){ return renderVerify(code); }
+
+  const { data:{ session } } = await sb.auth.getSession();
+  SESSION = session;
+  if(!session) return renderAuth('login');
+  await loadMe();
+}
+
+async function loadMe(){
+  // `units!unit_id`: mes `volunteers` dhe `units` ka tani DY lidhje —
+  // vullnetari i përket një njësie (`volunteers.unit_id`) dhe njësia ka një
+  // koordinator (`units.coordinator_id`). Pa e thënë se cilën duam, PostgREST
+  // nuk zgjedh dot vetë dhe kthen "more than one relationship was found".
+  const { data, error } = await sb.from('volunteers').select('*, units!unit_id(*)')
+    .eq('id', SESSION.user.id).maybeSingle();
+  if(error){ fail(error); return renderAuth('login'); }
+  if(!data){
+    // Llogaria ekziston por rreshti mungon (p.sh. triggeri s'ishte instaluar ende).
+    return renderGate('missing');
+  }
+  ME = data;
+  if(ME.status === 'pending')   return renderGate('pending');
+  if(ME.status === 'suspended') return renderGate('suspended');
+  renderApp();
+}
+
+function renderConfigNotice(){
+  root.innerHTML = `
+    <header class="app"><div class="h-row"><div class="brand">
+      <h1>Referendumi — Portali i vullnetarëve</h1></div></div></header>
+    <div class="config-warn"><b>Konfigurim i nevojshëm.</b> Vendosni <code>SUPABASE_URL</code> dhe
+      <code>SUPABASE_ANON_KEY</code> në krye të <code>index.html</code>, dhe ngarkoni
+      <code>schema.sql</code> te Supabase. Udhëzimet: <code>SETUP.md</code>.</div>`;
+}
+
+/* ============================================================================
+   HYRJA — login / regjistrim
+   ============================================================================ */
+function renderAuth(mode){
+  root.innerHTML = `
+  <div class="auth-wrap"><div class="auth">
+    <h1>Referendumi</h1>
+    <p class="sub">Portali i vullnetarëve · mbledhja e ${nf(DEFAULT_GOAL)} nënshkrimeve</p>
+
+    <div class="switcher">
+      <button class="${mode==='login'?'on':''}" onclick="renderAuth('login')">Hyr</button>
+      <button class="${mode==='signup'?'on':''}" onclick="renderAuth('signup')">Regjistrohu</button>
+    </div>
+
+    ${mode==='signup' ? `
+      <label>Emri dhe mbiemri *</label>
+      <input id="a_name" type="text" autocomplete="name" placeholder="Emri juaj i plotë">
+      <label>Qyteti / zona</label>
+      <input id="a_city" type="text" autocomplete="address-level2" placeholder="p.sh. Tiranë">
+      <label>Telefoni</label>
+      <input id="a_phone" type="tel" autocomplete="tel" placeholder="+355 …">
+    ` : ''}
+
+    <label>Email *</label>
+    <input id="a_email" type="email" autocomplete="email" placeholder="ju@shembull.com">
+    <label>Fjalëkalimi *</label>
+    <input id="a_pass" type="password" autocomplete="${mode==='signup'?'new-password':'current-password'}"
+           placeholder="${mode==='signup'?'të paktën 8 karaktere':''}"
+           onkeydown="if(event.key==='Enter')${mode==='signup'?'doSignup()':'doLogin()'}">
+
+    <div style="margin-top:16px">
+      <button class="btn wide" id="a_btn" onclick="${mode==='signup'?'doSignup()':'doLogin()'}">
+        ${mode==='signup'?'Krijo llogarinë':'Hyr në portal'}</button>
+    </div>
+
+    ${mode==='login' ? `<div style="margin-top:12px;text-align:center">
+        <a class="link" onclick="doReset()">Harrova fjalëkalimin</a></div>` : `
+      <p class="hint" style="margin-top:12px">Llogaria juaj shqyrtohet nga qendra para se të aktivizohet.
+        Kjo mbron fushatën — çdo vullnetar duhet të njihet nga koordinatori i tij.</p>`}
+  </div></div>`;
+}
+
+async function doLogin(){
+  const email = $('a_email').value.trim(), password = $('a_pass').value;
+  if(!email || !password) return fail('Plotësoni email-in dhe fjalëkalimin.');
+  $('a_btn').disabled = true;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  $('a_btn').disabled = false;
+  if(error) return fail(error.message === 'Invalid login credentials'
+      ? 'Email ose fjalëkalim i gabuar.' : error.message);
+  SESSION = data.session;
+  await loadMe();
+}
+
+async function doSignup(){
+  const full_name = $('a_name').value.trim();
+  const email = $('a_email').value.trim();
+  const password = $('a_pass').value;
+  const city = $('a_city').value.trim();
+  const phone = $('a_phone').value.trim();
+  if(!full_name) return fail('Shkruani emrin dhe mbiemrin.');
+  if(!email || !password) return fail('Plotësoni email-in dhe fjalëkalimin.');
+  if(password.length < 8) return fail('Fjalëkalimi duhet të ketë të paktën 8 karaktere.');
+
+  $('a_btn').disabled = true;
+  const { data, error } = await sb.auth.signUp({
+    email, password, options:{ data:{ full_name, city, phone } }
+  });
+  $('a_btn').disabled = false;
+  if(error) return fail(error.message);
+
+  if(!data.session){
+    // Konfirmimi i email-it është i ndezur te Supabase.
+    root.innerHTML = `<div class="auth-wrap"><div class="auth">
+      <h1>Kontrolloni email-in</h1>
+      <p class="sub">Ju dërguam një link konfirmimi te <b>${esc(email)}</b>. Hapeni, pastaj kthehuni këtu dhe hyni.</p>
+      <button class="btn wide" onclick="renderAuth('login')">Kthehu te hyrja</button></div></div>`;
+    return;
+  }
+  SESSION = data.session;
+  await loadMe();
+}
+
+async function doReset(){
+  const email = ($('a_email').value || '').trim();
+  if(!email) return fail('Shkruani email-in më sipër, pastaj klikoni sërish.');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('?')[0] });
+  if(error) return fail(error);
+  toast('Ju dërguam një email për rivendosjen e fjalëkalimit.');
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
+  ME = null; SESSION = null;
+  renderAuth('login');
+}
+
+/* ---- ekranet e pritjes / bllokimit ---- */
+function renderGate(kind){
+  const box = {
+    pending: ['⏳','Llogaria juaj është në pritje',
+      'Një koordinator duhet t\'ju miratojë para se të hyni në portal. Zakonisht brenda 24 orësh. Nëse ngutet, kontaktoni koordinatorin e njësisë suaj.'],
+    suspended: ['⛔','Llogaria juaj është pezulluar',
+      'Kontaktoni qendrën ose koordinatorin tuaj për sqarim.'],
+    missing: ['⚠️','Profili nuk u gjet',
+      'Llogaria u krijua, por profili i vullnetarit mungon. Njoftoni qendrën — ka gjasa që skema e bazës së të dhënave nuk është ngarkuar plotësisht.']
+  }[kind];
+  root.innerHTML = `<div class="auth-wrap"><div class="auth" style="text-align:center">
+    <div style="font-size:44px;line-height:1">${box[0]}</div>
+    <h1 style="margin-top:8px">${box[1]}</h1>
+    <p class="sub">${box[2]}</p>
+    <p class="hint">I lidhur si ${esc(SESSION?.user?.email||'')}</p>
+    <button class="btn sec wide" onclick="doLogout()">Dil</button>
+  </div></div>`;
+}
+
+/* ============================================================================
+   VERIFIKIMI PUBLIK — hapet nga QR-i i kartës, pa login
+   ============================================================================ */
+async function renderVerify(code){
+  root.innerHTML = `<div class="auth-wrap"><div class="auth" style="text-align:center">
+    <p class="sub">Po verifikohet…</p></div></div>`;
+  const { data, error } = await sb.rpc('verify_volunteer', { p_code: code });
+  const v = Array.isArray(data) ? data[0] : data;
+
+  let inner;
+  if(error || !v){
+    inner = `<div style="font-size:44px">❌</div>
+      <h1 style="margin-top:8px">Nuk u gjet</h1>
+      <p class="sub">Kodi <b>${esc(code)}</b> nuk i përket asnjë vullnetari të regjistruar.
+      Mos i jepni nënshkrimin dikujt që nuk verifikohet dot.</p>`;
+  } else if(!v.valid){
+    inner = `<div style="font-size:44px">⚠️</div>
+      <h1 style="margin-top:8px">Kartë jo aktive</h1>
+      <p class="sub"><b>${esc(v.full_name)}</b> (${esc(v.volunteer_code)}) nuk është aktualisht
+      vullnetar aktiv i kësaj fushate.</p>`;
+  } else {
+    const u = photoUrl(v.photo_path);
+    inner = `<div style="font-size:44px">✅</div>
+      <h1 style="margin-top:8px">Vullnetar i verifikuar</h1>
+      <p class="sub">Kjo kartë është aktive për mbledhjen e nënshkrimeve.</p>
+      ${u ? `<img src="${esc(u)}" alt="" style="width:130px;height:160px;object-fit:cover;
+              border-radius:12px;border:1px solid var(--line);margin:6px auto 12px;display:block">` : ''}
+      <div style="font-size:20px;font-weight:800">${esc(v.full_name)}</div>
+      <div class="badge-code">${esc(v.volunteer_code)}</div>
+      <div class="badge-line" style="margin-top:6px">${esc(ROLES[v.role]||v.role)}${v.unit_name?' · '+esc(v.unit_name):''}</div>
+      ${v.city?`<div class="badge-line">${esc(v.city)}</div>`:''}`;
+  }
+  root.innerHTML = `<div class="auth-wrap"><div class="auth" style="text-align:center">
+    ${inner}
+    <div class="notice" style="margin-top:18px;text-align:left">Verifikim publik i fushatës për referendumin.
+      Nëse dyshoni për keqpërdorim, njoftoni qendrën.</div>
+  </div></div>`;
+}
+
+/* ============================================================================
+   Guaska e aplikacionit
+   ============================================================================ */
+function tabList(){
+  const t = [
+    ['home','Hyrje'], ['news','Njoftime'], ['field','Terreni'], ['shifts','Orari'],
+    ['materials','Materiale'], ['reports','Raportimet'], ['badge','Karta ime']
+  ];
+  if(isStaff()) t.push(['panel','Paneli']);
+  if(isAdmin()) t.push(['history','Historiku']);
+  return t;
+}
+
+function renderApp(){
+  root.innerHTML = `
+  <header class="app"><div class="h-row">
+    <div class="brand"><h1>Referendumi</h1><span class="tag">Portali i vullnetarëve</span></div>
+    <div class="who">
+      ${avatarHtml(ME.photo_path, ME.full_name, 'av')}
+      <div><div class="nm">${esc(ME.full_name || SESSION.user.email)}</div>
+           <div class="rl">${esc(ROLES[ME.role]||ME.role)}${ME.units?' · '+esc(ME.units.name):''}</div></div>
+      <button class="btn ghost sm" style="color:#fff;border:1px solid rgba(255,255,255,.5)" onclick="doLogout()">Dil</button>
+    </div>
+  </div></header>
+  <nav class="tabs"><div class="tabs-inner" id="tabs"></div></nav>
+  <main id="view"></main>
+  <div class="foot">Referendumi · portali i vullnetarëve. Mbajeni fushatën të qetë, të ligjshme dhe të dokumentuar.</div>
+  <button class="fab no-print" onclick="openReport()">⚠️ Raporto</button>`;
+  buildTabs();
+  go(active);
+}
+
+function buildTabs(){
+  const open = isStaff() ? (STATS.open_reports||0) : 0;
+  const pend = isStaff() ? (STATS.pending||0) : 0;
+  $('tabs').innerHTML = tabList().map(([k,l])=>{
+    let b = '';
+    if(k==='panel' && pend) b = `<span class="badge">${pend}</span>`;
+    if(k==='reports' && open) b = `<span class="badge">${open}</span>`;
+    return `<button class="tab ${k===active?'active':''}" onclick="go('${k}')">${l}${b}</button>`;
+  }).join('');
+}
+
+function go(k){
+  destroyMap();                       // harta rri vetëm te Terreni
+  active = k;
+  buildTabs();
+  window.scrollTo(0,0);
+  ({ home:vHome, news:vNews, field:vField, shifts:vShifts, materials:vMaterials,
+     reports:vReports, badge:vBadge, panel:vPanel, history:vHistory }[k])();
+}
+const loading = () => { $('view').innerHTML = `<div class="empty">Po ngarkohet…</div>`; };
+
+async function loadStats(){
+  const { data } = await sb.rpc('campaign_stats');
+  STATS = data || {};
+  return STATS;
+}
+
+/* ============================================================================
+   Hyrje
+   ============================================================================ */
+async function vHome(){
+  loading();
+  const [stats, mine, ann, units, openShift] = await Promise.all([
+    loadStats(),
+    sb.from('checkins').select('signatures, started_at, ended_at').eq('volunteer_id', ME.id),
+    sb.from('announcements').select('*').order('pinned',{ascending:false})
+      .order('created_at',{ascending:false}).limit(3),
+    sb.rpc('unit_totals'),
+    sb.from('checkins').select('*').eq('volunteer_id', ME.id).is('ended_at', null)
+      .order('started_at',{ascending:false}).limit(1).maybeSingle()
+  ]);
+
+  const goal = stats.goal || DEFAULT_GOAL;
+  const total = stats.signatures || 0;
+  const pct = Math.min(100, goal ? (total/goal*100) : 0);
+  const myRows = mine.data || [];
+  const mySig = myRows.reduce((a,r)=>a+(r.signatures||0), 0);
+  const dl = daysLeft(stats.deadline);
+  const uRows = (units.data||[]).slice().sort((a,b)=>b.signatures-a.signatures);
+
+  $('view').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">Progresi i fushatës</h3>
+        ${dl!=null ? `<span class="pill ${dl<14?'red':dl<30?'amber':'ok'}">
+          ${dl>0 ? dl+' ditë të mbetura' : dl===0 ? 'Afati skadon sot' : 'Afati kaloi'}</span>` : ''}
+      </div>
+      <div style="font-size:34px;font-weight:800;line-height:1.15;margin-top:8px">
+        ${nf(total)} <span style="font-size:19px;font-weight:600;color:var(--muted)">/ ${nf(goal)} nënshkrime</span>
+      </div>
+      <div class="bar big"><span style="width:${pct}%"></span></div>
+      <div class="meta">${pct.toFixed(1)}% e objektivit · edhe ${nf(Math.max(0, goal-total))} për të mbledhur
+        ${stats.deadline ? ' · afati '+fmtDate(stats.deadline) : ''}</div>
+    </div>
+
+    <div class="grid g4" style="margin-bottom:16px">
+      ${statCard('var(--teal)', nf(mySig), 'Nënshkrimet e mia')}
+      ${statCard('var(--cyan)', nf(stats.volunteers||0), 'Vullnetarë aktivë')}
+      ${statCard('var(--aqua)', nf(stats.active_shifts||0), 'Në terren tani')}
+      ${statCard('var(--green)', nf(stats.open_units||0), 'Njësi të hapura')}
+    </div>
+
+    ${openShift.data ? `
+      <div class="notice"><b>Jeni në terren</b> te ${esc(openShift.data.location_name)} — filluat
+        ${fmtTime(openShift.data.started_at)} (${dur(openShift.data.started_at)}).
+        <a class="link" onclick="go('field')">Mbyllni turnin →</a></div>` : `
+      <div class="card" style="margin-bottom:16px">
+        <div class="row" style="justify-content:space-between">
+          <div><h3 style="margin:0">Jeni në terren?</h3>
+            <div class="meta">Bëni check-in kur filloni të mblidhni nënshkrime në një vend.</div></div>
+          <button class="btn green" onclick="go('field')">📍 Check-in</button>
+        </div></div>`}
+
+    <div class="grid g2">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:baseline">
+          <h3 style="margin:0">Njoftimet e fundit</h3>
+          <a class="link" onclick="go('news')">Të gjitha →</a></div>
+        <div style="margin-top:8px">
+          ${(ann.data||[]).length ? (ann.data||[]).map(annRow).join('')
+            : '<div class="empty">Ende pa njoftime.</div>'}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Ecuria e njësive</h3>
+        <div class="meta">Çdo njësi ka territorin dhe objektivin e vet.</div>
+        <div style="margin-top:10px">
+          ${uRows.length ? uRows.slice(0,6).map(u=>{
+            const p = u.target ? Math.min(100, u.signatures/u.target*100) : 0;
+            return `<div style="margin-bottom:11px">
+              <div class="row" style="justify-content:space-between;gap:6px">
+                <span><b>${esc(u.code)}</b> <span class="meta">${esc(u.region||u.name||'')}</span></span>
+                <span class="meta">${nf(u.signatures)}${u.target?' / '+nf(u.target):''}</span></div>
+              <div class="bar"><span style="width:${p}%"></span></div></div>`;
+          }).join('') : '<div class="empty">Ende pa njësi. Krijohen te Paneli.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g4" style="margin-top:16px">
+      ${quickCard('📘','Materialet','Guide-book, fletushka, formularë',"go('materials')")}
+      ${quickCard('🪪','Karta ime','Foto-ID për identifikim në terren',"go('badge')")}
+      ${quickCard('⚠️','Raporto','Incident, ligj, material i humbur',"openReport()")}
+      ${quickCard('📍','Terreni','Check-in dhe historiku i turneve',"go('field')")}
+    </div>`;
+}
+function statCard(c,n,l){
+  return `<div class="card"><div class="stat"><span class="n" style="color:${c}">${n}</span>
+    <span style="font-size:13.5px">${l}</span></div></div>`;
+}
+function quickCard(ic,t,d,fn){
+  return `<div class="card" style="cursor:pointer" onclick="${fn}">
+    <div style="font-size:25px">${ic}</div>
+    <div style="font-weight:700;margin-top:4px">${t}</div>
+    <div class="meta">${d}</div></div>`;
+}
+
+/* ============================================================================
+   NJOFTIMET
+   ============================================================================ */
+function annRow(a){
+  const lv = { info:['ok','Njoftim'], important:['amber','E rëndësishme'], urgent:['red','URGJENTE'] }[a.level] || ['ok','Njoftim'];
+  return `<div style="padding:11px 0;border-bottom:1px solid var(--line)">
+    <div class="row" style="gap:7px">
+      ${a.pinned?'<span title="E fiksuar">📌</span>':''}
+      <span class="pill ${lv[0]}">${lv[1]}</span>
+      <b>${esc(a.title)}</b></div>
+    <div class="meta" style="margin-top:3px">${esc(a.author_name||'Qendra')} · ${ago(a.created_at)}</div>
+  </div>`;
+}
+
+async function vNews(){
+  loading();
+  const { data } = await sb.from('announcements').select('*')
+    .order('pinned',{ascending:false}).order('created_at',{ascending:false});
+  const rows = data || [];
+  $('view').innerHTML = `
+    <h2 class="sec">Njoftime</h2>
+    <p class="sub">Njoftimet e rëndësishme nga qendra dhe koordinatorët.</p>
+    ${isStaff() ? `
+      <div class="card no-print" style="margin-bottom:18px">
+        <h3>Publiko një njoftim</h3>
+        <label>Titulli</label><input id="an_title" placeholder="p.sh. Ndryshim i orarit për të shtunën">
+        <label>Teksti</label><textarea id="an_body" placeholder="Detajet…"></textarea>
+        <div class="row">
+          <div style="flex:1;min-width:150px"><label>Rëndësia</label>
+            <select id="an_level">
+              <option value="info">Njoftim</option>
+              <option value="important">E rëndësishme</option>
+              <option value="urgent">Urgjente</option>
+            </select></div>
+          <div style="flex:1;min-width:150px"><label>Për kë</label>
+            <select id="an_aud">
+              <option value="all">Të gjithë vullnetarët</option>
+              <option value="staff">Vetëm qendra &amp; koordinatorët</option>
+            </select></div>
+          <div style="flex:1;min-width:150px"><label>Fikso lart</label>
+            <select id="an_pin"><option value="no">Jo</option><option value="yes">Po</option></select></div>
+        </div>
+        <div style="margin-top:13px"><button class="btn" onclick="addAnn()">Publiko</button></div>
+      </div>` : ''}
+
+    ${rows.length ? rows.map(a=>{
+      const lv = { info:['ok','Njoftim'], important:['amber','E rëndësishme'], urgent:['red','URGJENTE'] }[a.level] || ['ok','Njoftim'];
+      return `<div class="card" style="margin-bottom:12px">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div class="row" style="gap:7px">
+            ${a.pinned?'<span title="E fiksuar">📌</span>':''}
+            <span class="pill ${lv[0]}">${lv[1]}</span>
+            ${a.audience==='staff'?'<span class="pill gray">interne</span>':''}
+            <h3 style="margin:0">${esc(a.title)}</h3></div>
+          ${isStaff()?`<button class="btn ghost sm" onclick="delAnn('${a.id}')">Fshi</button>`:''}
+        </div>
+        ${a.body?`<div style="white-space:pre-wrap;margin-top:8px">${esc(a.body)}</div>`:''}
+        <div class="meta" style="margin-top:9px">${esc(a.author_name||'Qendra')} · ${fmtDateTime(a.created_at)}</div>
+      </div>`;
+    }).join('') : '<div class="empty">Ende pa njoftime.</div>'}`;
+}
+
+async function addAnn(){
+  const title = $('an_title').value.trim();
+  if(!title) return fail('Shkruani titullin.');
+  const { error } = await sb.from('announcements').insert({
+    title, body: $('an_body').value.trim(),
+    level: $('an_level').value, audience: $('an_aud').value,
+    pinned: $('an_pin').value === 'yes',
+    author_id: ME.id, author_name: ME.full_name
+  });
+  if(error) return fail(error);
+  toast('Njoftimi u publikua.');
+  vNews();
+}
+async function delAnn(id){
+  if(!confirm('Të fshihet ky njoftim?')) return;
+  const { error } = await sb.from('announcements').delete().eq('id', id);
+  if(error) return fail(error);
+  vNews();
+}
+
+/* ============================================================================
+   TERRENI — check-in / check-out
+   ============================================================================ */
+async function vField(){
+  loading();
+  const [openShift, myShifts, activeNow, units] = await Promise.all([
+    sb.from('checkins').select('*').eq('volunteer_id', ME.id).is('ended_at', null)
+      .order('started_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('checkins').select('*').eq('volunteer_id', ME.id)
+      .order('started_at',{ascending:false}).limit(25),
+    sb.rpc('field_active'),
+    sb.rpc('unit_totals')
+  ]);
+  const cur   = openShift.data;
+  const mine  = myShifts.data || [];
+  const now   = activeNow.data || [];
+  const uAll  = units.data || [];
+  const uOpen = uAll.filter(u => u.is_open);
+  const myTotal = mine.reduce((a,r)=>a+(r.signatures||0), 0);
+  const curUnit = cur ? uAll.find(u => u.id === cur.unit_id) : null;
+  // Njësia e vullnetarit del e para në listë — aty punon zakonisht.
+  const preferred = uOpen.some(u => u.id === ME.unit_id) ? ME.unit_id : (uOpen[0]?.id || '');
+
+  $('view').innerHTML = `
+    <h2 class="sec">Terreni</h2>
+    <p class="sub">Bëni check-in te një nga njësitë e hapura dhe mbyllni turnin kur largoheni.
+      Kështu dimë kush është ku, dhe numërohen nënshkrimet.</p>
+
+    ${cur ? `
+      <div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div><h3 style="margin:0">📍 Në terren: ${esc(curUnit ? curUnit.code+' · '+curUnit.name : cur.location_name)}</h3>
+            <div class="meta">${cur.location_name && curUnit ? esc(cur.location_name)+' · ' : ''}${esc(cur.city||'')}
+              · filloi ${fmtTime(cur.started_at)} · ${dur(cur.started_at)}
+              ${cur.lat?` · <a class="link" target="_blank" rel="noopener"
+                href="https://www.google.com/maps?q=${cur.lat},${cur.lng}">harta</a>`:''}</div></div>
+          <span class="pill ok">turn i hapur</span>
+        </div>
+        <label>Sa nënshkrime u mblodhën? *</label>
+        <input id="co_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
+               value="${cur.signatures||''}">
+        <label>Shënime (opsionale)</label>
+        <textarea id="co_notes" placeholder="si shkoi, çfarë duhet ditur…">${esc(cur.notes||'')}</textarea>
+        <div class="row" style="margin-top:13px">
+          <button class="btn" id="co_btn" onclick="checkOut('${cur.id}')">Mbyll turnin</button>
+          <button class="btn ghost sm" onclick="cancelShift('${cur.id}')">Anulo turnin</button>
+        </div>
+      </div>` : uOpen.length ? `
+      <div class="card" style="margin-bottom:18px">
+        <h3>Fillo një turn</h3>
+        <div class="meta">Zgjidhni njësinë ku po mblidhni. Vendndodhja ndihmon koordinatorët
+          të shohin mbulimin e territorit në hartë.</div>
+        <label>Njësia e hapur *</label>
+        <select id="ci_unit">
+          ${uOpen.map(u=>`<option value="${u.id}" ${u.id===preferred?'selected':''}>
+            ${esc(u.code)} · ${esc(u.name)}${u.territory?' — '+esc(truncate(u.territory,34)):''}</option>`).join('')}
+        </select>
+        <label>Pika e saktë brenda njësisë (opsionale)</label>
+        <input id="ci_loc" placeholder="p.sh. para bashkisë, te hyrja e pazarit">
+        <label>Qyteti / zona</label>
+        <input id="ci_city" value="${esc(ME.city||'')}" placeholder="p.sh. Tiranë">
+        <div class="row" style="margin-top:13px">
+          <button class="btn green" id="ci_btn" onclick="checkIn()">📍 Bëj check-in</button>
+          <span class="hint" id="ci_geo">Do të kërkohet leje për vendndodhjen (mund ta refuzoni).</span>
+        </div>
+      </div>` : `
+      <div class="card" style="margin-bottom:18px">
+        <h3>Asnjë njësi e hapur</h3>
+        <div class="meta">Mbledhja bëhet vetëm te njësitë që i ka hapur qendra. Sapo të hapet
+          një njësi, do të mund të bëni check-in këtu. Pyetni koordinatorin tuaj.</div>
+      </div>`}
+
+    <div class="grid g2">
+      <div class="card">
+        <h3>Në terren tani <span class="pill blue">${now.length}</span></h3>
+        <div class="meta">Kush po mbledh nënshkrime në këtë moment.</div>
+        <div style="margin-top:10px">
+          ${now.length ? now.map(c=>`
+            <div class="file-item">
+              ${avatarHtml(c.photo_path, c.volunteer_name)}
+              <div style="flex:1;min-width:0">
+                <b>${esc(c.volunteer_name)}</b>
+                <div class="meta">${esc(c.unit_code||'—')}${c.location_name?' · '+esc(c.location_name):''}
+                  ${c.city?' · '+esc(c.city):''}</div></div>
+              <span class="meta">${dur(c.started_at)}</span>
+            </div>`).join('') : '<div class="empty">Askush në terren tani.</div>'}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Turnet e mia</h3>
+        <div class="meta">${mine.length} turne · ${nf(myTotal)} nënshkrime gjithsej.</div>
+        <div class="scroll-x" style="margin-top:10px">
+          ${mine.length ? `<table class="tbl"><thead><tr>
+            <th>Data</th><th>Njësia</th><th>Kohëzgjatja</th><th style="text-align:right">Firma</th></tr></thead><tbody>
+            ${mine.map(r=>{
+              const u = uAll.find(x=>x.id===r.unit_id);
+              return `<tr>
+              <td>${fmtDate(r.started_at)}</td>
+              <td>${esc(u ? u.code : truncate(r.location_name,20))}</td>
+              <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill ok">hapur</span>'}</td>
+              <td style="text-align:right"><b>${nf(r.signatures)}</b></td></tr>`;
+            }).join('')}
+          </tbody></table>` : '<div class="empty">Ende pa turne.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div><h3 style="margin:0">Harta e mbledhësve aktivë</h3>
+          <div class="meta">Vendndodhja e regjistruar në çastin e check-in-it.
+            Shfaqen vetëm turnet e hapura.</div></div>
+        <button class="btn sec sm" onclick="vField()">↻ Rifresko</button>
+      </div>
+      <div class="map-wrap" id="map" style="margin-top:12px">
+        <div class="map-tiles" id="map_tiles"></div>
+        <div class="map-pins" id="map_pins"></div>
+        <div class="map-zoom">
+          <button onclick="mapZoom(1)" title="Afro">+</button>
+          <button onclick="mapZoom(-1)" title="Largo">−</button>
+        </div>
+        <div class="map-attr">© <a href="https://www.openstreetmap.org/copyright"
+          target="_blank" rel="noopener">OpenStreetMap</a></div>
+      </div>
+      <div class="hint" id="map_hint"></div>
+    </div>`;
+
+  initMap(now.filter(c => c.lat != null && c.lng != null));
+}
+
+async function checkIn(){
+  const unit_id = $('ci_unit').value;
+  if(!unit_id) return fail('Zgjidhni njësinë ku po mblidhni nënshkrime.');
+  const btn = $('ci_btn'); btn.disabled = true; btn.textContent = 'Po merret vendndodhja…';
+  const pos = await getLocation();
+  btn.textContent = 'Po ruhet…';
+  const detail = $('ci_loc').value.trim();
+  const { error } = await sb.from('checkins').insert({
+    volunteer_id: ME.id, volunteer_name: ME.full_name, unit_id,
+    location_name: detail, city: $('ci_city').value.trim() || null,
+    lat: pos?.lat ?? null, lng: pos?.lng ?? null
+  });
+  btn.disabled = false;
+  if(error){
+    // Njësia mund të jetë mbyllur pikërisht ndërkohë — RLS e ndalon insertin.
+    return fail(error.code === '42501'
+      ? 'Kjo njësi nuk është më e hapur. Rifreskoni faqen dhe zgjidhni një tjetër.'
+      : error);
+  }
+  if(!pos) toast('Check-in u regjistrua, por pa vendndodhje — nuk dilni në hartë.');
+  else toast('Check-in u regjistrua. Punë të mbarë!');
+  vField();
+}
+
+async function checkOut(id){
+  const sig = parseInt($('co_sig').value, 10);
+  if(isNaN(sig) || sig < 0) return fail('Shkruani sa nënshkrime u mblodhën (0 nëse asnjë).');
+  $('co_btn').disabled = true;
+  const { error } = await sb.from('checkins')
+    .update({ ended_at:new Date().toISOString(), signatures:sig, notes:$('co_notes').value.trim()||null })
+    .eq('id', id);
+  $('co_btn').disabled = false;
+  if(error) return fail(error);
+  toast(`Turni u mbyll · ${sig} nënshkrime. Faleminderit!`);
+  vField();
+}
+
+async function cancelShift(id){
+  if(!confirm('Të anulohet ky turn? Nuk do të numërohet.')) return;
+  const { error } = await sb.from('checkins').delete().eq('id', id);
+  if(error) return fail(error);
+  vField();
+}
+
+/* ============================================================================
+   HARTA — pa biblioteka dhe pa CDN, si gjithçka tjetër këtu.
+   Pllakat e OpenStreetMap merren si <img> të thjeshta dhe vendosen me
+   projeksionin Web-Mercator. Nëse interneti mungon, pllakat nuk vijnë por
+   lista "Në terren tani" mbi hartë punon gjithsesi.
+   ============================================================================ */
+const TILE = 256;
+let MAP = null;
+
+const lon2wx = (lon,z) => (lon+180)/360 * Math.pow(2,z) * TILE;
+const lat2wy = (lat,z) => {
+  const r = Math.max(-85.05, Math.min(85.05, lat)) * Math.PI/180;
+  return (1 - Math.log(Math.tan(r) + 1/Math.cos(r))/Math.PI)/2 * Math.pow(2,z) * TILE;
+};
+
+function destroyMap(){
+  if(MAP?.off) MAP.off();
+  MAP = null;
+}
+
+function initMap(pins){
+  // Gjithmonë e shuajmë të mëparshmen: vField() rithërritet edhe pa ndërruar
+  // skedë (rifreskim, pas check-in-it), dhe pa këtë do të mbeteshin dëgjues
+  // të lidhur me një element që s'ekziston më.
+  destroyMap();
+  const el = $('map');
+  if(!el) return;
+  const hint = $('map_hint');
+
+  if(!pins.length){
+    $('map_tiles').innerHTML = '';
+    $('map_pins').innerHTML  = '';
+    el.insertAdjacentHTML('beforeend',
+      `<div class="map-msg" id="map_msg">Askush në terren me vendndodhje të ndarë.<br>
+       Harta mbushet vetëm kur dikush bën check-in dhe lejon GPS-in.</div>`);
+    if(hint) hint.textContent = '';
+    return;
+  }
+  $('map_msg')?.remove();
+
+  // Kuadrati që i mbyll të gjitha pikat → nga aty del qendra dhe zmadhimi.
+  const lats = pins.map(p=>p.lat), lngs = pins.map(p=>p.lng);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats);
+  const minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+  const w = el.clientWidth || 600, h = el.clientHeight || 420;
+
+  let z = 13;
+  for(let t=18; t>=2; t--){
+    const dx = lon2wx(maxLng,t) - lon2wx(minLng,t);
+    const dy = lat2wy(minLat,t) - lat2wy(maxLat,t);
+    if(dx <= w-90 && dy <= h-90){ z = t; break; }
+  }
+  if(pins.length === 1) z = Math.min(z, 15);
+
+  const cLat = (minLat+maxLat)/2, cLng = (minLng+maxLng)/2;
+  MAP = { el, pins, z, cx: lon2wx(cLng,z), cy: lat2wy(cLat,z), open:null };
+
+  // Tërheqja me maus ose gisht.
+  let dragging=false, sx=0, sy=0, scx=0, scy=0, moved=0;
+  const down = e => {
+    const p = e.touches ? e.touches[0] : e;
+    dragging=true; moved=0; sx=p.clientX; sy=p.clientY; scx=MAP.cx; scy=MAP.cy;
+    el.classList.add('drag');
+  };
+  const move = e => {
+    if(!dragging || !MAP) return;
+    const p = e.touches ? e.touches[0] : e;
+    const dx = p.clientX-sx, dy = p.clientY-sy;
+    moved = Math.max(moved, Math.abs(dx)+Math.abs(dy));
+    MAP.cx = scx - dx; MAP.cy = scy - dy;
+    if(e.cancelable) e.preventDefault();
+    drawMap();
+  };
+  const up = () => { dragging=false; el.classList.remove('drag'); };
+  const wheel = e => {
+    if(!MAP) return;
+    e.preventDefault();
+    mapZoom(e.deltaY < 0 ? 1 : -1);
+  };
+
+  el.addEventListener('mousedown', down);
+  el.addEventListener('touchstart', down, {passive:true});
+  window.addEventListener('mousemove', move);
+  el.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('mouseup', up);
+  window.addEventListener('touchend', up);
+  el.addEventListener('wheel', wheel, {passive:false});
+  MAP.off = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    window.removeEventListener('touchend', up);
+  };
+
+  if(hint) hint.textContent = `${pins.length} mbledhës në hartë · tërhiqni për ta lëvizur, `
+    + `+ / − për zmadhim. Klikoni një pikë për detajet.`;
+  drawMap();
+}
+
+function mapZoom(d){
+  if(!MAP) return;
+  const nz = Math.max(2, Math.min(18, MAP.z + d));
+  if(nz === MAP.z) return;
+  const f = Math.pow(2, nz - MAP.z);
+  MAP.cx *= f; MAP.cy *= f; MAP.z = nz;
+  drawMap();
+}
+
+function drawMap(){
+  if(!MAP) return;
+  const { el, z } = MAP;
+  const w = el.clientWidth, h = el.clientHeight;
+  if(!w || !h) return;
+
+  const n = Math.pow(2, z);
+  const left = MAP.cx - w/2, top = MAP.cy - h/2;
+  const tiles = $('map_tiles'), pinsEl = $('map_pins');
+  if(!tiles || !pinsEl) return;
+
+  // Pllakat: mbajmë ato që duhen, heqim ato që dolën nga pamja.
+  const want = new Set();
+  const t0x = Math.floor(left/TILE), t1x = Math.floor((left+w)/TILE);
+  const t0y = Math.max(0, Math.floor(top/TILE)), t1y = Math.min(n-1, Math.floor((top+h)/TILE));
+  for(let tx=t0x; tx<=t1x; tx++){
+    for(let ty=t0y; ty<=t1y; ty++){
+      const key = `${z}/${tx}/${ty}`;
+      want.add(key);
+      let img = tiles.querySelector(`[data-k="${key}"]`);
+      if(!img){
+        const wx = ((tx % n) + n) % n;                 // bota mbështillet horizontalisht
+        img = document.createElement('img');
+        img.dataset.k = key;
+        img.loading = 'lazy';
+        img.alt = '';
+        img.src = `https://tile.openstreetmap.org/${z}/${wx}/${ty}.png`;
+        tiles.appendChild(img);
+      }
+      img.style.left = (tx*TILE - left) + 'px';
+      img.style.top  = (ty*TILE - top)  + 'px';
+    }
+  }
+  tiles.querySelectorAll('img').forEach(i => { if(!want.has(i.dataset.k)) i.remove(); });
+
+  // Pikat e mbledhësve.
+  pinsEl.innerHTML = MAP.pins.map((p,i)=>{
+    const x = lon2wx(p.lng,z) - left, y = lat2wy(p.lat,z) - top;
+    if(x < -60 || y < -60 || x > w+60 || y > h+60) return '';
+    const av = p.photo_path
+      ? `<img class="pv" src="${esc(photoUrl(p.photo_path))}" alt="">`
+      : `<div class="pv">${esc((p.volunteer_name||'?').trim().charAt(0).toUpperCase())}</div>`;
+    return `<div class="map-pin ${MAP.open===i?'on':''}" style="left:${x}px;top:${y}px"
+              onclick="mapPin(${i})" title="${esc(p.volunteer_name)}">${av}<div class="pt"></div></div>`;
+  }).join('');
+
+  if(MAP.open != null){
+    const p = MAP.pins[MAP.open];
+    const x = lon2wx(p.lng,z) - left, y = lat2wy(p.lat,z) - top;
+    // E mbajmë brenda kornizës: horizontalisht e ngjeshim, dhe po qe pika lart
+    // e hedhim kutinë poshtë saj që të mos pritet.
+    const px = Math.max(6, Math.min(x - 105, w - 216));
+    const below = y < 150;
+    pinsEl.insertAdjacentHTML('beforeend', `
+      <div class="map-pop ${below?'below':''}" style="left:${px}px;top:${y}px">
+        <span class="x" onclick="mapPin(null)">✕</span>
+        <b>${esc(p.volunteer_name)}</b>
+        <div class="meta">${esc(p.unit_code||'')}${p.unit_name?' · '+esc(p.unit_name):''}</div>
+        ${p.location_name?`<div class="meta">${esc(p.location_name)}</div>`:''}
+        <div class="meta">Në terren prej ${dur(p.started_at)}</div>
+      </div>`);
+  }
+}
+
+function mapPin(i){
+  if(!MAP) return;
+  MAP.open = (MAP.open === i) ? null : i;
+  drawMap();
+}
+
+/* ============================================================================
+   ORARI — turnet e planifikuara dhe regjistrimi në to
+   ============================================================================ */
+const DAYS = ['e diel','e hënë','e martë','e mërkurë','e enjte','e premte','e shtunë'];
+
+/* "e martë, 14 tetor" */
+function dayLabel(d){
+  d = new Date(d);
+  return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS_L[d.getMonth()]}`;
+}
+/* "e martë, 14 tetor · 18:00–20:00" */
+function shiftWhen(s){
+  return `${dayLabel(s.starts_at)} · ${fmtTime(s.starts_at)}–${fmtTime(s.ends_at)}`;
+}
+
+/* Njësitë ku ky përdorues ka të drejtë të planifikojë turne:
+   qendra kudo, koordinatori vetëm te zonat e veta. */
+function plannableUnits(units){
+  if(isAdmin() || ME.role === 'jurist') return units;
+  return units.filter(u => u.coordinator_id === ME.id);
+}
+/* Mbushet te vShifts, lexohet te shiftRow për të vendosur nëse del butoni ✕. */
+let CAN_PLAN_UNITS = new Set();
+
+async function vShifts(){
+  loading();
+  const [shifts, units] = await Promise.all([ sb.rpc('shift_list'), sb.rpc('unit_totals') ]);
+  if(shifts.error) return fail(shifts.error);
+  const rows  = shifts.data || [];
+  const uAll  = units.data || [];
+  const canPlan = plannableUnits(uAll);
+  CAN_PLAN_UNITS = new Set(canPlan.map(u => u.id));
+  const now = Date.now();
+
+  const upcoming = rows.filter(s => new Date(s.ends_at).getTime() >= now);
+  const running  = rows.filter(s => new Date(s.starts_at).getTime() <= now
+                                 && new Date(s.ends_at).getTime() >= now);
+  const mineCnt  = upcoming.filter(s => s.i_am_in).length;
+
+  // Grupimi sipas ditës — orari lexohet ditë pas dite.
+  const byDay = {};
+  upcoming.forEach(s => {
+    const k = new Date(s.starts_at).toDateString();
+    (byDay[k] = byDay[k] || []).push(s);
+  });
+
+  $('view').innerHTML = `
+    <h2 class="sec">Orari i turneve</h2>
+    <p class="sub">Turnet i planifikojnë koordinatorët dhe qendra. Regjistrohuni te ato
+      që ju përshtaten — kështu dihet paraprakisht kush e mbulon çdo njësi.</p>
+
+    <div class="grid g4" style="margin-bottom:18px">
+      ${statCard('var(--teal)', nf(upcoming.length), 'Turne të ardhshme')}
+      ${statCard('var(--green)', nf(mineCnt), 'Ku jam regjistruar')}
+      ${statCard('var(--cyan)', nf(running.length), 'Në vazhdim tani')}
+      ${statCard('var(--aqua)', nf(canPlan.length), isStaff()?'Njësi që planifikoni':'Njësi gjithsej')}
+    </div>
+
+    ${isStaff() ? (canPlan.length ? `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Planifiko një turn</h3>
+        <div class="meta">P.sh. e martë 14, nga 18:00 deri 20:00, njësia A1.</div>
+        <div class="row" style="align-items:flex-end;margin-top:8px">
+          <div style="flex:2;min-width:160px"><label>Njësia</label>
+            <select id="sh_unit">${canPlan.map(u=>`<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}</select></div>
+          <div style="flex:1.4;min-width:150px"><label>Data</label>
+            <input id="sh_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+          <div style="flex:1;min-width:105px"><label>Nga</label>
+            <input id="sh_from" type="time" value="18:00"></div>
+          <div style="flex:1;min-width:105px"><label>Deri</label>
+            <input id="sh_to" type="time" value="20:00"></div>
+          <div style="flex:1;min-width:105px"><label>Sa veta</label>
+            <input id="sh_cap" type="number" min="0" step="1" placeholder="0 = pa kufi" value="0"></div>
+          <div style="flex:2;min-width:170px"><label>Shënim</label>
+            <input id="sh_notes" placeholder="p.sh. te tavolina para bashkisë"></div>
+          <button class="btn" id="sh_btn" onclick="addShift()">+ Turn</button>
+        </div>
+      </div>` : `
+      <div class="notice warn">Nuk keni ende asnjë njësi në ngarkim, ndaj nuk planifikoni dot turne.
+        Qendra ju cakton si koordinator të një zone te <b>Paneli</b>.</div>`) : ''}
+
+    ${Object.keys(byDay).length ? Object.entries(byDay).map(([day, list])=>`
+      <div class="card" style="margin-bottom:14px">
+        <h3 style="text-transform:capitalize">${esc(dayLabel(day))}</h3>
+        <div style="margin-top:8px">
+          ${list.map(shiftRow).join('')}
+        </div>
+      </div>`).join('')
+      : '<div class="empty">Ende pa turne të planifikuara.</div>'}`;
+}
+
+function shiftRow(s){
+  const full  = s.capacity > 0 && s.signed_count >= s.capacity;
+  const names = (s.signed_names || []).filter(Boolean);
+  const canDel = CAN_PLAN_UNITS.has(s.unit_id);
+  return `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div class="row" style="gap:8px">
+          <b>${fmtTime(s.starts_at)}–${fmtTime(s.ends_at)}</b>
+          <span class="pill blue">${esc(s.unit_code||'')}</span>
+          ${s.i_am_in ? '<span class="pill ok">jeni brenda</span>' : ''}
+          ${full && !s.i_am_in ? '<span class="pill amber">plot</span>' : ''}
+        </div>
+        <div class="meta" style="margin-top:3px">
+          ${esc(s.unit_name||'')}${s.notes?' · '+esc(s.notes):''}
+        </div>
+        <div class="meta" style="margin-top:3px">
+          ${s.signed_count} ${s.capacity>0?'nga '+s.capacity:''} të regjistruar${
+            names.length ? ': '+esc(truncate(names.join(', '), 90)) : ''}
+        </div>
+      </div>
+      <div class="row" style="gap:6px">
+        ${s.i_am_in
+          ? `<button class="btn ghost sm" onclick="leaveShift('${s.id}')">Hiqem</button>`
+          : `<button class="btn ${full?'sec':'green'} sm" ${full?'disabled':''}
+               onclick="joinShift('${s.id}')">${full?'Plot':'Regjistrohu'}</button>`}
+        ${canDel ? `<button class="btn ghost sm" onclick="delShift('${s.id}')" title="Fshi turnin">✕</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function addShift(){
+  const unit_id = $('sh_unit').value;
+  const date = $('sh_date').value, from = $('sh_from').value, to = $('sh_to').value;
+  if(!unit_id) return fail('Zgjidhni njësinë.');
+  if(!date || !from || !to) return fail('Plotësoni datën dhe orët.');
+  const starts = new Date(`${date}T${from}`), ends = new Date(`${date}T${to}`);
+  if(!(ends > starts)) return fail('Ora e mbarimit duhet të jetë pas asaj të fillimit.');
+
+  const btn = $('sh_btn'); btn.disabled = true;
+  const { error } = await sb.from('shifts').insert({
+    unit_id, starts_at: starts.toISOString(), ends_at: ends.toISOString(),
+    capacity: parseInt($('sh_cap').value,10) || 0,
+    notes: $('sh_notes').value.trim() || null,
+    created_by: ME.id, created_by_name: ME.full_name
+  });
+  btn.disabled = false;
+  if(error) return fail(error);
+  toast('Turni u planifikua.');
+  vShifts();
+}
+
+async function joinShift(id){
+  const { error } = await sb.rpc('shift_join', { p_shift: id });
+  if(error) return fail(error);
+  toast('U regjistruat në turn.');
+  vShifts();
+}
+async function leaveShift(id){
+  const { error } = await sb.rpc('shift_leave', { p_shift: id });
+  if(error) return fail(error);
+  toast('U hoqët nga turni.');
+  vShifts();
+}
+async function delShift(id){
+  if(!confirm('Të fshihet ky turn? Bien edhe regjistrimet e tij.')) return;
+  const { error } = await sb.from('shifts').delete().eq('id', id);
+  if(error) return fail(error);
+  vShifts();
+}
+
+/* ============================================================================
+   MATERIALET
+   ============================================================================ */
+async function vMaterials(){
+  loading();
+  const { data } = await sb.from('materials').select('*').order('created_at',{ascending:false});
+  const rows = data || [];
+  const byCat = {};
+  rows.forEach(m => { (byCat[m.category] = byCat[m.category] || []).push(m); });
+
+  $('view').innerHTML = `
+    <h2 class="sec">Materiale</h2>
+    <p class="sub">Guide-book, fletë-palosje, formularë dhe dokumente ligjore — gjithçka që i duhet njësisë në terren.</p>
+
+    ${isStaff() ? `
+      <div class="card no-print" style="margin-bottom:18px">
+        <h3>Shto material</h3>
+        <label>Titulli</label><input id="mt_title" placeholder="p.sh. Guide-book për mbledhësit">
+        <label>Përshkrimi (opsional)</label><input id="mt_desc" placeholder="çfarë përmban, për kë është">
+        <div class="row">
+          <div style="flex:1;min-width:170px"><label>Kategoria</label>
+            <select id="mt_cat">${Object.entries(CATS).map(([k,v])=>
+              `<option value="${k}">${v[0]} ${v[1]}</option>`).join('')}</select></div>
+          <div style="flex:2;min-width:200px"><label>Skedari (PDF / foto)</label>
+            <input id="mt_file" type="file" accept="application/pdf,image/*,.doc,.docx"></div>
+        </div>
+        <label>ose thjesht një link</label>
+        <input id="mt_url" placeholder="https://…">
+        <div style="margin-top:13px"><button class="btn" id="mt_btn" onclick="addMaterial()">Shto materialin</button></div>
+      </div>` : ''}
+
+    ${rows.length ? Object.entries(CATS).filter(([k])=>byCat[k]).map(([k,v])=>`
+      <div class="card" style="margin-bottom:14px">
+        <h3>${v[0]} ${v[1]} <span class="meta">(${byCat[k].length})</span></h3>
+        <div style="margin-top:6px">
+          ${byCat[k].map(m=>{
+            const href = m.file_path ? matUrl(m.file_path) : m.external_url;
+            const isPdf = (m.mime||'').includes('pdf');
+            return `<div class="file-item">
+              <div class="file-ic">${m.file_path ? (isPdf?'📕':'🖼️') : '🔗'}</div>
+              <div style="flex:1;min-width:0">
+                <a class="link" href="${esc(href||'#')}" target="_blank" rel="noopener">${esc(m.title)}</a>
+                ${m.description?`<div class="meta">${esc(m.description)}</div>`:''}
+                <div class="meta">${m.file_name?esc(truncate(m.file_name,34))+' · ':''}${m.size?fmtSize(m.size)+' · ':''}${fmtDate(m.created_at)}</div>
+              </div>
+              ${href?`<a class="btn sec sm" href="${esc(href)}" target="_blank" rel="noopener"
+                 ${m.file_path?`download="${esc(m.file_name||m.title)}"`:''}>Hap</a>`:''}
+              ${isStaff()?`<button class="btn ghost sm" onclick="delMaterial('${m.id}','${esc(m.file_path||'')}')">✕</button>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`).join('')
+    : '<div class="empty">Ende pa materiale. Qendra i ngarkon këtu.</div>'}`;
+}
+
+async function addMaterial(){
+  const title = $('mt_title').value.trim();
+  if(!title) return fail('Shkruani titullin.');
+  const f = $('mt_file').files[0];
+  const url = $('mt_url').value.trim();
+  if(!f && !url) return fail('Zgjidhni një skedar ose vendosni një link.');
+
+  const btn = $('mt_btn'); btn.disabled = true; btn.textContent = 'Po ngarkohet…';
+  let row = { title, description:$('mt_desc').value.trim()||null, category:$('mt_cat').value,
+              external_url:url||null, uploader_name:ME.full_name };
+  if(f){
+    const file = await shrinkImage(f, 1600, 0.85);
+    const safe = file.name.replace(/[^\w.\-]+/g,'_');
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2,7)}-${safe}`;
+    const { error } = await sb.storage.from('vol-materials').upload(path, file,
+      { contentType: file.type || 'application/octet-stream' });
+    if(error){ btn.disabled=false; btn.textContent='Shto materialin'; return fail(error); }
+    row = { ...row, file_path:path, file_name:file.name, mime:file.type, size:file.size };
+  }
+  const { error } = await sb.from('materials').insert(row);
+  btn.disabled = false; btn.textContent = 'Shto materialin';
+  if(error) return fail(error);
+  toast('Materiali u shtua.');
+  vMaterials();
+}
+
+async function delMaterial(id, path){
+  if(!confirm('Të fshihet ky material?')) return;
+  if(path) await sb.storage.from('vol-materials').remove([path]);
+  const { error } = await sb.from('materials').delete().eq('id', id);
+  if(error) return fail(error);
+  vMaterials();
+}
+
+/* ============================================================================
+   RAPORTIMET — modali + lista
+   ============================================================================ */
+let repKind = 'incident';
+
+function openReport(kind){
+  repKind = kind || 'incident';
+  const m = document.createElement('div');
+  m.className = 'modal-bg'; m.id = 'modal';
+  m.onclick = e => { if(e.target === m) closeModal(); };
+  m.innerHTML = `<div class="modal">
+    <button class="modal-x" onclick="closeModal()">✕</button>
+    <h3>Raporto</h3>
+    <p class="meta">Çdo raportim shkon te qendra dhe juristët. Për rrezik të menjëhershëm, telefononi së pari.</p>
+
+    <label>Lloji</label>
+    <div class="kinds" id="rp_kinds">
+      ${Object.entries(KINDS).map(([k,v])=>`
+        <div class="kind ${k===repKind?'on':''}" data-k="${k}" onclick="pickKind('${k}')">
+          <div class="ic">${v.ic}</div><div><div class="lb">${v.lb}</div></div></div>`).join('')}
+    </div>
+    <div class="hint" id="rp_hint">${KINDS[repKind].d}</div>
+
+    <label>Titulli *</label>
+    <input id="rp_title" placeholder="përmbledhje me pak fjalë">
+    <label>Çfarë ndodhi? *</label>
+    <textarea id="rp_body" placeholder="kur, ku, kush ishte i pranishëm, çfarë u tha…"></textarea>
+
+    <div class="row">
+      <div style="flex:2;min-width:180px"><label>Vendi</label>
+        <input id="rp_loc" placeholder="p.sh. Rruga e Durrësit, para postës"></div>
+      <div style="flex:1;min-width:130px"><label>Sa serioze</label>
+        <select id="rp_sev">
+          <option value="low">E ulët</option>
+          <option value="medium" selected>Mesatare</option>
+          <option value="high">E lartë — urgjente</option>
+        </select></div>
+    </div>
+
+    <label>Foto (opsionale)</label>
+    <input id="rp_photo" type="file" accept="image/*" capture="environment">
+    <div class="hint">Fotot e raportimeve janë private — i sheh vetëm qendra dhe ju.</div>
+
+    <div class="row" style="margin-top:16px">
+      <button class="btn red" id="rp_btn" onclick="sendReport()">Dërgo raportimin</button>
+      <button class="btn sec" onclick="closeModal()">Anulo</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+function pickKind(k){
+  repKind = k;
+  document.querySelectorAll('#rp_kinds .kind').forEach(el =>
+    el.classList.toggle('on', el.dataset.k === k));
+  $('rp_hint').textContent = KINDS[k].d;
+}
+function closeModal(){ $('modal')?.remove(); }
+
+async function sendReport(){
+  const title = $('rp_title').value.trim();
+  const body  = $('rp_body').value.trim();
+  if(!title) return fail('Shkruani një titull.');
+  if(!body)  return fail('Përshkruani shkurt çfarë ndodhi.');
+
+  const btn = $('rp_btn'); btn.disabled = true; btn.textContent = 'Po dërgohet…';
+  const pos = await getLocation();
+
+  let photo_path = null;
+  const f = $('rp_photo').files[0];
+  if(f){
+    const file = await shrinkImage(f, 1400, 0.82);
+    const safe = file.name.replace(/[^\w.\-]+/g,'_');
+    const path = `${ME.id}/${Date.now()}-${safe}`;
+    const { error } = await sb.storage.from('vol-reports').upload(path, file,
+      { contentType: file.type || 'image/jpeg' });
+    if(error){ btn.disabled=false; btn.textContent='Dërgo raportimin'; return fail(error); }
+    photo_path = path;
+  }
+
+  const { error } = await sb.from('reports').insert({
+    reporter_id: ME.id, reporter_name: ME.full_name,
+    kind: repKind, severity: $('rp_sev').value,
+    title, body, location_text: $('rp_loc').value.trim() || null,
+    lat: pos?.lat ?? null, lng: pos?.lng ?? null, photo_path
+  });
+  btn.disabled = false; btn.textContent = 'Dërgo raportimin';
+  if(error) return fail(error);
+  closeModal();
+  toast('Raportimi u dërgua te qendra.');
+  if(active === 'reports') vReports();
+}
+
+async function vReports(){
+  loading();
+  const { data, error } = await sb.from('reports').select('*').order('created_at',{ascending:false});
+  if(error) return fail(error);
+  const rows = data || [];
+  await loadStats(); buildTabs();
+
+  $('view').innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><h2 class="sec">Raportimet</h2>
+        <p class="sub">${isStaff() ? 'Të gjitha raportimet e fushatës.' : 'Raportimet që keni dërguar ju.'}</p></div>
+      <button class="btn red" onclick="openReport()">⚠️ Raporto diçka</button>
+    </div>
+
+    <div class="grid g3" style="margin-bottom:16px">
+      ${Object.entries(KINDS).map(([k,v])=>`
+        <div class="card" style="cursor:pointer" onclick="openReport('${k}')">
+          <div style="font-size:23px">${v.ic}</div>
+          <div style="font-weight:700;margin-top:3px">${v.lb}</div>
+          <div class="meta">${v.d}</div></div>`).join('')}
+    </div>
+
+    ${rows.length ? rows.map(reportCard).join('') : '<div class="empty">Ende pa raportime.</div>'}`;
+}
+
+function reportCard(r){
+  const k = KINDS[r.kind] || { ic:'📌', lb:r.kind };
+  const st = REPORT_STATUS[r.status] || ['—','gray'];
+  const sev = { low:['gray','e ulët'], medium:['amber','mesatare'], high:['red','e lartë'] }[r.severity] || ['gray',''];
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div class="row" style="gap:8px">
+        <span style="font-size:19px">${k.ic}</span>
+        <div><b>${esc(r.title)}</b>
+          <div class="meta">${k.lb} · ${esc(r.reporter_name||'—')} · ${fmtDateTime(r.created_at)}</div></div>
+      </div>
+      <div class="row" style="gap:6px">
+        <span class="pill ${sev[0]}">${sev[1]}</span>
+        <span class="pill ${st[1]}">${st[0]}</span></div>
+    </div>
+    ${r.body?`<div style="white-space:pre-wrap;margin-top:9px">${esc(r.body)}</div>`:''}
+    <div class="meta" style="margin-top:8px">
+      ${r.location_text?'📍 '+esc(r.location_text):''}
+      ${r.lat?` · <a class="link" target="_blank" rel="noopener"
+        href="https://www.google.com/maps?q=${r.lat},${r.lng}">hape në hartë</a>`:''}
+      ${r.photo_path?` · <a class="link" onclick="openReportPhoto('${esc(r.photo_path)}')">shiko foton</a>`:''}
+    </div>
+    ${r.handled_note?`<div class="notice" style="margin:10px 0 0">
+      <b>Përgjigja e qendrës${r.handled_name?' ('+esc(r.handled_name)+')':''}:</b> ${esc(r.handled_note)}</div>`:''}
+    ${isStaff()?`
+      <div class="row no-print" style="margin-top:12px;gap:7px">
+        ${r.status!=='review'?`<button class="btn sec sm" onclick="setReport('${r.id}','review')">Në shqyrtim</button>`:''}
+        ${r.status!=='resolved'?`<button class="btn green sm" onclick="setReport('${r.id}','resolved')">E zgjidhur</button>`:''}
+        ${r.status!=='open'?`<button class="btn ghost sm" onclick="setReport('${r.id}','open')">Rihape</button>`:''}
+        <button class="btn sec sm" onclick="noteReport('${r.id}')">Shkruaj përgjigje</button>
+      </div>`:''}
+  </div>`;
+}
+
+async function openReportPhoto(path){
+  const { data, error } = await sb.storage.from('vol-reports').createSignedUrl(path, 300);
+  if(error) return fail(error);
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+async function setReport(id, status){
+  const { error } = await sb.from('reports').update({
+    status, handled_by:ME.id, handled_name:ME.full_name, updated_at:new Date().toISOString()
+  }).eq('id', id);
+  if(error) return fail(error);
+  vReports();
+}
+async function noteReport(id){
+  const note = prompt('Përgjigja për raportuesin:');
+  if(note === null) return;
+  const { error } = await sb.from('reports').update({
+    handled_note: note.trim(), handled_by:ME.id, handled_name:ME.full_name,
+    updated_at:new Date().toISOString()
+  }).eq('id', id);
+  if(error) return fail(error);
+  vReports();
+}
+
+/* ============================================================================
+   KARTA IME — foto-ID me QR verifikimi
+   ============================================================================ */
+async function vBadge(){
+  loading();
+  const [{ data:priv }, { data:camp }] = await Promise.all([
+    sb.from('volunteer_private').select('*').eq('id', ME.id).maybeSingle(),
+    sb.from('campaign').select('*').eq('id',1).maybeSingle()
+  ]);
+  const verifyUrl = location.origin + location.pathname + '?v=' + encodeURIComponent(ME.volunteer_code);
+  const photo = photoUrl(ME.photo_path);
+
+  $('view').innerHTML = `
+    <h2 class="sec">Karta ime</h2>
+    <p class="sub">Kjo është foto-ID-ja juaj. Mbajeni të dukshme kur mblidhni nënshkrime — qytetari
+      skanon QR-in dhe verifikon menjëherë se jeni vullnetar i vërtetë i fushatës.</p>
+
+    <div class="grid g2">
+      <div>
+        <div class="badge" id="badgeCard">
+          <div class="badge-top">
+            <div class="t1">Vullnetar i fushatës</div>
+            <div class="t2">${esc(camp?.title || 'Referendum')}</div>
+          </div>
+          <div class="badge-body">
+            ${photo ? `<img class="badge-photo" src="${esc(photo)}" alt="">`
+                    : `<div class="badge-photo ph">pa foto —<br>ngarkoni një</div>`}
+            <div style="min-width:0">
+              <div class="badge-name">${esc(ME.full_name || '—')}</div>
+              <div class="badge-line">${esc(ROLES[ME.role]||ME.role)}</div>
+              ${ME.units?`<div class="badge-line">${esc(ME.units.name)}${ME.units.region?' · '+esc(ME.units.region):''}</div>`:''}
+              ${ME.city?`<div class="badge-line">${esc(ME.city)}</div>`:''}
+              <div class="badge-code">${esc(ME.volunteer_code)}</div>
+            </div>
+          </div>
+          <div class="badge-foot">
+            <div class="qr" id="qrBox"></div>
+            <div class="vf">Skanoni për të verifikuar<br>
+              ${camp?.deadline?`E vlefshme deri ${fmtDate(camp.deadline)}`:'Verifikim online'}</div>
+          </div>
+        </div>
+        <div class="row no-print" style="margin-top:14px">
+          <button class="btn sec" onclick="window.print()">🖨️ Printo kartën</button>
+          <a class="btn sec" href="${esc(verifyUrl)}" target="_blank" rel="noopener">Provo verifikimin</a>
+        </div>
+      </div>
+
+      <div class="no-print">
+        <div class="card" style="margin-bottom:14px">
+          <h3>Fotoja</h3>
+          <div class="meta">Portret i qartë i fytyrës, si në dokument. Zvogëlohet automatikisht.</div>
+          <input id="ph_file" type="file" accept="image/*" capture="user" style="margin-top:9px">
+          <div class="row" style="margin-top:11px">
+            <button class="btn" id="ph_btn" onclick="uploadPhoto()">Ngarko foton</button>
+            ${ME.photo_path?`<button class="btn ghost sm" onclick="removePhoto()">Hiq foton</button>`:''}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Të dhënat e mia</h3>
+          <label>Emri dhe mbiemri</label>
+          <input id="pf_name" value="${esc(ME.full_name||'')}">
+          <label>Qyteti / zona</label>
+          <input id="pf_city" value="${esc(ME.city||'')}">
+          <label>Telefoni <span class="meta">(e sheh vetëm qendra)</span></label>
+          <input id="pf_phone" type="tel" value="${esc(priv?.phone||'')}">
+          <label>Kontakt urgjence <span class="meta">(e sheh vetëm qendra)</span></label>
+          <input id="pf_emerg" value="${esc(priv?.emergency_contact||'')}" placeholder="emër dhe numër">
+          <div style="margin-top:13px"><button class="btn" id="pf_btn" onclick="saveProfile()">Ruaj</button></div>
+          <p class="hint">Rolin dhe njësinë i cakton koordinatori.</p>
+        </div>
+      </div>
+    </div>`;
+
+  if(window.QRCode && $('qrBox')){
+    new QRCode($('qrBox'), { text:verifyUrl, width:150, height:150,
+      colorDark:'#0f766e', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
+  } else if($('qrBox')){
+    $('qrBox').innerHTML = `<div class="meta" style="font-size:10px;word-break:break-all">${esc(verifyUrl)}</div>`;
+  }
+}
+
+async function uploadPhoto(){
+  const f = $('ph_file').files[0];
+  if(!f) return fail('Zgjidhni një foto.');
+  const btn = $('ph_btn'); btn.disabled = true; btn.textContent = 'Po ngarkohet…';
+  const file = await shrinkImage(f, 900, 0.88);
+  const path = `${ME.id}/id-${Date.now()}.jpg`;
+  const { error } = await sb.storage.from('vol-photos').upload(path, file, { contentType:'image/jpeg' });
+  if(error){ btn.disabled=false; btn.textContent='Ngarko foton'; return fail(error); }
+  const old = ME.photo_path;
+  const { error:e2 } = await sb.from('volunteers').update({ photo_path:path }).eq('id', ME.id);
+  btn.disabled = false; btn.textContent = 'Ngarko foton';
+  if(e2) return fail(e2);
+  if(old) await sb.storage.from('vol-photos').remove([old]);
+  ME.photo_path = path;
+  toast('Fotoja u përditësua.');
+  renderApp();   // rifreskon edhe foton te koka e faqes; `active` mbetet 'badge'
+}
+
+async function removePhoto(){
+  if(!confirm('Të hiqet fotoja nga karta?')) return;
+  const old = ME.photo_path;
+  const { error } = await sb.from('volunteers').update({ photo_path:null }).eq('id', ME.id);
+  if(error) return fail(error);
+  if(old) await sb.storage.from('vol-photos').remove([old]);
+  ME.photo_path = null;
+  renderApp();
+}
+
+async function saveProfile(){
+  const full_name = $('pf_name').value.trim();
+  if(!full_name) return fail('Emri nuk mund të jetë bosh.');
+  const city = $('pf_city').value.trim() || null;
+  $('pf_btn').disabled = true;
+  const { error } = await sb.from('volunteers').update({ full_name, city }).eq('id', ME.id);
+  if(error){ $('pf_btn').disabled = false; return fail(error); }
+  const { error:e2 } = await sb.from('volunteer_private').upsert({
+    id: ME.id, phone: $('pf_phone').value.trim() || null,
+    emergency_contact: $('pf_emerg').value.trim() || null
+  });
+  $('pf_btn').disabled = false;
+  if(e2) return fail(e2);
+  ME.full_name = full_name; ME.city = city;
+  toast('U ruajt.');
+  renderApp();
+}
+
+/* ============================================================================
+   PANELI — vetëm koordinatorë / jurist / admin
+   ============================================================================ */
+async function vPanel(){
+  if(!isStaff()) return go('home');
+  loading();
+  const [vols, units, stats] = await Promise.all([
+    // Pa embed: njësia e çdo vullnetari merret nga `unit_totals()` më poshtë,
+    // ndaj kjo lidhje ishte e panevojshme (dhe tani e dykuptimtë).
+    sb.from('volunteers').select('*').order('created_at',{ascending:false}),
+    sb.rpc('unit_totals'),
+    loadStats()
+  ]);
+  const rows = vols.data || [];
+  const pending = rows.filter(v => v.status === 'pending');
+  const others  = rows.filter(v => v.status !== 'pending');
+  const uRows = units.data || [];
+  // Koordinatori sheh vetëm zonat e veta; qendra i sheh të gjitha.
+  const myUnits = isAdmin() || ME.role === 'jurist'
+    ? uRows : uRows.filter(u => u.coordinator_id === ME.id);
+  const coords = rows.filter(v => v.role === 'koordinator' && v.status !== 'suspended');
+  buildTabs();
+
+  $('view').innerHTML = `
+    <h2 class="sec">Paneli</h2>
+    <p class="sub">Miratimi i vullnetarëve, njësitë dhe parametrat e fushatës.</p>
+
+    <div class="grid g4" style="margin-bottom:18px">
+      ${statCard('var(--amber)', nf(pending.length), 'Në pritje')}
+      ${statCard('var(--teal)', nf(stats.volunteers||0), 'Të miratuar')}
+      ${statCard('var(--green)', nf(stats.open_units||0), 'Njësi të hapura')}
+      ${statCard('var(--red)', nf(stats.open_reports||0), 'Raportime të hapura')}
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Në pritje të miratimit <span class="pill ${pending.length?'amber':'gray'}">${pending.length}</span></h3>
+      <div class="meta">Miratoni vetëm ata që i njeh koordinatori i njësisë.</div>
+      <div style="margin-top:10px">
+        ${pending.length ? pending.map(v=>`
+          <div class="file-item">
+            ${avatarHtml(v.photo_path, v.full_name)}
+            <div style="flex:1;min-width:0">
+              <b>${esc(v.full_name||'(pa emër)')}</b> <span class="meta">${esc(v.volunteer_code)}</span>
+              <div class="meta">${esc(v.city||'—')} · regjistruar ${ago(v.created_at)}</div></div>
+            <button class="btn green sm" onclick="setStatus('${v.id}','approved')">Mirato</button>
+            <button class="btn ghost sm" onclick="setStatus('${v.id}','suspended')">Refuzo</button>
+          </div>`).join('') : '<div class="empty">Asnjë kërkesë në pritje.</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Vullnetarët (${others.length})</h3>
+      <div class="scroll-x" style="margin-top:10px">
+        <table class="tbl"><thead><tr>
+          <th>Vullnetari</th><th>Kodi</th><th>Roli</th><th>Njësia</th><th>Statusi</th><th></th>
+        </tr></thead><tbody>
+          ${others.map(v=>`<tr>
+            <td><div class="avrow">${avatarHtml(v.photo_path, v.full_name)}
+              <div><b>${esc(v.full_name||'(pa emër)')}</b><div class="meta">${esc(v.city||'')}</div></div></div></td>
+            <td class="meta">${esc(v.volunteer_code)}</td>
+            <td>${isAdmin() ? `<select onchange="setRole('${v.id}', this.value)" style="font-size:12.5px;padding:6px">
+                  ${Object.entries(ROLES).map(([k,l])=>
+                    `<option value="${k}" ${v.role===k?'selected':''}>${l}</option>`).join('')}
+                 </select>` : esc(ROLES[v.role]||v.role)}</td>
+            <td><select onchange="setUnit('${v.id}', this.value)" style="font-size:12.5px;padding:6px">
+                  <option value="">— pa njësi —</option>
+                  ${uRows.map(u=>`<option value="${u.id}" ${v.unit_id===u.id?'selected':''}>${esc(u.code)}</option>`).join('')}
+                </select></td>
+            <td><span class="pill ${v.status==='approved'?'ok':v.status==='pending'?'amber':'red'}">
+                  ${v.status==='approved'?'aktiv':v.status==='pending'?'në pritje':'pezulluar'}</span></td>
+            <td>${v.status==='approved'
+                  ? `<button class="btn ghost sm" onclick="setStatus('${v.id}','suspended')">Pezullo</button>`
+                  : `<button class="btn sec sm" onclick="setStatus('${v.id}','approved')">Aktivizo</button>`}</td>
+          </tr>`).join('') || '<tr><td colspan="6" class="meta">Ende pa vullnetarë.</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div><h3 style="margin:0">Struktura</h3>
+          <div class="meta">${isAdmin()
+            ? 'Koordinatori → zonat e tij → njerëzit e çdo zone.'
+            : 'Zonat tuaja dhe njerëzit që keni në ngarkim.'}</div></div>
+        ${isAdmin() ? `<span class="meta">${coords.length} koordinatorë · ${uRows.length} zona</span>` : ''}
+      </div>
+      <div style="margin-top:14px">${hierarchyHtml(coords, myUnits, rows)}</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Njësitë (zonat)</h3>
+      <div class="meta">Mbledhja bëhet <b>vetëm</b> te njësitë e hapura. Hapini kur nis puna
+        dhe mbyllini kur mbaron — kështu askush nuk regjistron firma jashtë territorit.</div>
+      ${isAdmin() ? `
+      <div class="row" style="margin-top:12px;align-items:flex-end">
+        <div style="flex:1;min-width:90px"><label>Kodi</label><input id="un_code" placeholder="A1"></div>
+        <div style="flex:2;min-width:150px"><label>Emri</label><input id="un_name" placeholder="Njësia A1"></div>
+        <div style="flex:1;min-width:120px"><label>Rajoni</label><input id="un_region" placeholder="Rajoni A"></div>
+        <div style="flex:2;min-width:150px"><label>Territori</label><input id="un_terr" placeholder="Tiranë, njësia 5"></div>
+        <div style="flex:1;min-width:100px"><label>Objektivi</label><input id="un_target" type="number" min="0" placeholder="2000"></div>
+        <button class="btn" onclick="addUnit()">+ Njësi</button>
+      </div>` : ''}
+      <div class="scroll-x" style="margin-top:14px">
+        ${myUnits.length ? `<table class="tbl"><thead><tr>
+          <th>Kodi</th><th>Emri</th><th>Koordinatori</th><th>Territori</th><th>Anëtarë</th>
+          <th style="text-align:right">Firma / objektiv</th><th>Gjendja</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>
+          ${myUnits.map(u=>`<tr>
+            <td><b>${esc(u.code)}</b></td><td>${esc(u.name)}</td>
+            <td>${isAdmin() ? `<select onchange="setUnitCoord('${u.id}', this.value)" style="font-size:12.5px;padding:6px">
+                    <option value="">— pa koordinator —</option>
+                    ${coords.map(c=>`<option value="${c.id}" ${u.coordinator_id===c.id?'selected':''}>
+                      ${esc(c.full_name||c.volunteer_code)}</option>`).join('')}
+                  </select>` : `<span class="meta">${esc(u.coordinator_name||'—')}</span>`}</td>
+            <td class="meta">${esc(truncate(u.territory||'—',24))}</td><td>${u.members}</td>
+            <td style="text-align:right"><b>${nf(u.signatures)}</b>
+              <span class="meta">${u.target?' / '+nf(u.target):''}</span></td>
+            <td>${isAdmin()
+                  ? `<button class="btn ${u.is_open?'green':'sec'} sm" onclick="setUnitOpen('${u.id}', ${!u.is_open})">
+                       ${u.is_open?'● E hapur':'○ E mbyllur'}</button>`
+                  : `<span class="pill ${u.is_open?'ok':'gray'}">${u.is_open?'e hapur':'e mbyllur'}</span>`}</td>
+            ${isAdmin()?`<td><button class="btn ghost sm" onclick="delUnit('${u.id}')">✕</button></td>`:''}
+          </tr>`).join('')}
+        </tbody></table>` : `<div class="empty">${isAdmin()?'Ende pa njësi.':'Nuk keni ende asnjë zonë në ngarkim.'}</div>`}
+      </div>
+    </div>
+
+    ${isAdmin() ? `
+      <div class="card">
+        <h3>Parametrat e fushatës</h3>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:3;min-width:220px"><label>Titulli</label>
+            <input id="cp_title" value="${esc(stats.title||'')}"></div>
+          <div style="flex:1;min-width:120px"><label>Objektivi</label>
+            <input id="cp_goal" type="number" min="1" value="${stats.goal||DEFAULT_GOAL}"></div>
+          <div style="flex:1;min-width:150px"><label>Afati</label>
+            <input id="cp_deadline" type="date" value="${stats.deadline||''}"></div>
+          <button class="btn" onclick="saveCampaign()">Ruaj</button>
+        </div>
+      </div>` : ''}`;
+}
+
+/* ============================================================================
+   HISTORIKU — vetëm qendra. Sa firma mblodhi çdo njësi, turn pas turni,
+   me mundësi korrigjimi kur dikush gabon numrin ose harron të mbyllë turnin.
+   ============================================================================ */
+let HIST = { rows:[], unit:'', from:'', to:'' };
+
+async function vHistory(){
+  if(!isAdmin()) return go('home');
+  loading();
+  const [hist, units] = await Promise.all([ sb.rpc('unit_history'), sb.rpc('unit_totals') ]);
+  if(hist.error) return fail(hist.error);
+  HIST.rows  = hist.data || [];
+  HIST.units = units.data || [];
+  renderHistory();
+}
+
+/* Dita kalendarike LOKALE e një turni, si "2026-10-14".
+   Jo `started_at.slice(0,10)`: ai është UTC, dhe një turn i mbrëmjes — pikërisht
+   ora kur mblidhen firmat — ruhet me datën e nesërme. Filtri do ta nxirrte
+   turnin një ditë më tutje nga dita kur ndodhi vërtet. */
+function localDay(ts){
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+}
+
+function histFiltered(){
+  return HIST.rows.filter(r => {
+    if(HIST.unit && r.unit_id !== HIST.unit) return false;
+    const d = r.started_at ? localDay(r.started_at) : '';
+    if(HIST.from && d < HIST.from) return false;
+    if(HIST.to   && d > HIST.to)   return false;
+    return true;
+  });
+}
+
+function renderHistory(){
+  const rows = histFiltered();
+  const total = rows.reduce((a,r)=>a+(r.signatures||0), 0);
+  const open  = rows.filter(r => !r.ended_at).length;
+
+  // Përmbledhja sipas njësisë.
+  const per = {};
+  rows.forEach(r => {
+    const k = r.unit_id || 'none';
+    per[k] = per[k] || { code:r.unit_code||'—', name:r.unit_name||'Pa njësi', sig:0, shifts:0, people:new Set() };
+    per[k].sig += r.signatures || 0;
+    per[k].shifts++;
+    if(r.volunteer_id) per[k].people.add(r.volunteer_id);
+  });
+  const perRows = Object.entries(per).sort((a,b)=>b[1].sig - a[1].sig);
+  const uTarget = id => (HIST.units||[]).find(u=>u.id===id)?.target || 0;
+
+  $('view').innerHTML = `
+    <h2 class="sec">Historiku i njësive</h2>
+    <p class="sub">Çdo turn i regjistruar, sipas njësisë. Numrat këtu janë burimi i
+      shifrës së përgjithshme të fushatës — korrigjoni këtu kur dikush ka gabuar.</p>
+
+    <div class="grid g4" style="margin-bottom:18px">
+      ${statCard('var(--teal)', nf(total), 'Firma (në filtër)')}
+      ${statCard('var(--cyan)', nf(rows.length), 'Turne')}
+      ${statCard('var(--amber)', nf(open), 'Turne pa mbyllur')}
+      ${statCard('var(--green)', nf(perRows.length), 'Njësi me aktivitet')}
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:2;min-width:170px"><label>Njësia</label>
+          <select id="h_unit" onchange="histSet('unit', this.value)">
+            <option value="">— të gjitha —</option>
+            ${(HIST.units||[]).map(u=>`<option value="${u.id}" ${HIST.unit===u.id?'selected':''}>
+              ${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+          </select></div>
+        <div style="flex:1;min-width:145px"><label>Nga data</label>
+          <input id="h_from" type="date" value="${HIST.from}" onchange="histSet('from', this.value)"></div>
+        <div style="flex:1;min-width:145px"><label>Deri më</label>
+          <input id="h_to" type="date" value="${HIST.to}" onchange="histSet('to', this.value)"></div>
+        <button class="btn sec" onclick="histClear()">Pastro filtrat</button>
+        <button class="btn sec" onclick="histCsv()">⬇ CSV</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Përmbledhje sipas njësisë</h3>
+      <div class="scroll-x" style="margin-top:10px">
+        ${perRows.length ? `<table class="tbl"><thead><tr>
+          <th>Njësia</th><th>Turne</th><th>Mbledhës</th>
+          <th style="text-align:right">Firma</th><th style="width:160px">Ndaj objektivit</th>
+        </tr></thead><tbody>
+          ${perRows.map(([id,p])=>{
+            const t = uTarget(id), pc = t ? Math.min(100, p.sig/t*100) : 0;
+            return `<tr>
+              <td><b>${esc(p.code)}</b> <span class="meta">${esc(p.name)}</span></td>
+              <td>${p.shifts}</td><td>${p.people.size}</td>
+              <td style="text-align:right"><b>${nf(p.sig)}</b>${t?`<span class="meta"> / ${nf(t)}</span>`:''}</td>
+              <td>${t ? `<div class="bar" style="margin:0"><span style="width:${pc}%"></span></div>` : '<span class="meta">—</span>'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody></table>` : '<div class="empty">Asnjë turn për këtë filtër.</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Turnet një nga një (${rows.length})</h3>
+      <div class="meta">Klikoni <b>Ndrysho</b> për të korrigjuar numrin e firmave ose orët.</div>
+      <div class="scroll-x" style="margin-top:10px">
+        ${rows.length ? `<table class="tbl"><thead><tr>
+          <th>Data</th><th>Njësia</th><th>Mbledhësi</th><th>Vendi</th>
+          <th>Kohëzgjatja</th><th style="text-align:right">Firma</th><th></th>
+        </tr></thead><tbody>
+          ${rows.slice(0,400).map(r=>`<tr>
+            <td>${fmtDate(r.started_at)}<div class="meta">${fmtTime(r.started_at)}</div></td>
+            <td><b>${esc(r.unit_code||'—')}</b></td>
+            <td>${esc(truncate(r.volunteer_name||'—',22))}</td>
+            <td class="meta">${esc(truncate(r.location_name||'—',22))}${r.city?'<div class="meta">'+esc(r.city)+'</div>':''}</td>
+            <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill amber">pa mbyllur</span>'}</td>
+            <td style="text-align:right"><b>${nf(r.signatures)}</b></td>
+            <td class="row" style="gap:4px;flex-wrap:nowrap">
+              <button class="btn ghost sm" onclick="editCheckin('${r.id}')">Ndrysho</button>
+              <button class="btn ghost sm" onclick="delCheckin('${r.id}')" title="Fshi">✕</button></td>
+          </tr>`).join('')}
+        </tbody></table>
+        ${rows.length > 400 ? `<div class="hint">Po shfaqen 400 turnet e fundit nga ${rows.length}. Ngushtoni filtrin ose shkarkoni CSV-në.</div>` : ''}`
+        : '<div class="empty">Asnjë turn për këtë filtër.</div>'}
+      </div>
+    </div>`;
+}
+
+function histSet(k, v){ HIST[k] = v; renderHistory(); }
+function histClear(){ HIST.unit = HIST.from = HIST.to = ''; renderHistory(); }
+
+/* Shkarkim për arkiv ose për t'u përpunuar në Excel. */
+function histCsv(){
+  const rows = histFiltered();
+  const head = ['Njesia','Emri i njesise','Mbledhesi','Vendi','Qyteti','Dita','Filloi','Mbaroi','Firma','Shenime'];
+  const q = s => '"' + String(s ?? '').replace(/"/g,'""') + '"';
+  // Orët shkruhen si ora lokale, njësoj si në ekran — jo ISO/UTC, që tabela
+  // në Excel të mos tregojë një ditë tjetër nga ajo që panë njerëzit.
+  const stamp = ts => ts ? `${localDay(ts)} ${fmtTime(ts)}` : '';
+  const body = rows.map(r => [r.unit_code, r.unit_name, r.volunteer_name, r.location_name,
+    r.city, localDay(r.started_at), stamp(r.started_at), stamp(r.ended_at),
+    r.signatures, r.notes].map(q).join(','));
+  const csv = '﻿' + [head.map(q).join(','), ...body].join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = `historiku-njesive-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+/* Vlera për <input type="datetime-local"> në orën lokale. */
+function toLocalInput(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+
+function editCheckin(id){
+  const r = HIST.rows.find(x => x.id === id);
+  if(!r) return;
+  closeModal();
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="modal"><div class="modal">
+    <button class="modal-x" onclick="closeModal()">✕</button>
+    <h3>Korrigjo turnin</h3>
+    <div class="meta">${esc(r.volunteer_name||'')} · ${fmtDate(r.started_at)}</div>
+    <label>Njësia</label>
+    <select id="ec_unit">
+      ${(HIST.units||[]).map(u=>`<option value="${u.id}" ${r.unit_id===u.id?'selected':''}>
+        ${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+    </select>
+    <label>Nënshkrime</label>
+    <input id="ec_sig" type="number" min="0" step="1" value="${r.signatures||0}">
+    <label>Filloi</label>
+    <input id="ec_start" type="datetime-local" value="${toLocalInput(r.started_at)}">
+    <label>Mbaroi <span class="meta">(lëreni bosh nëse turni është ende i hapur)</span></label>
+    <input id="ec_end" type="datetime-local" value="${toLocalInput(r.ended_at)}">
+    <label>Shënime</label>
+    <textarea id="ec_notes">${esc(r.notes||'')}</textarea>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="ec_btn" onclick="saveCheckin('${r.id}')">Ruaj</button>
+      <button class="btn ghost" onclick="closeModal()">Anulo</button>
+    </div>
+  </div></div>`);
+}
+
+async function saveCheckin(id){
+  const sig = parseInt($('ec_sig').value, 10);
+  if(isNaN(sig) || sig < 0) return fail('Numri i firmave duhet të jetë 0 ose më shumë.');
+  const st = $('ec_start').value, en = $('ec_end').value;
+  if(!st) return fail('Vendosni kur filloi turni.');
+  if(en && new Date(en) < new Date(st)) return fail('Mbarimi nuk mund të jetë para fillimit.');
+
+  $('ec_btn').disabled = true;
+  const { error } = await sb.rpc('checkin_edit', {
+    p_id: id, p_signatures: sig,
+    p_started: new Date(st).toISOString(),
+    p_ended:   en ? new Date(en).toISOString() : null,
+    p_unit:    $('ec_unit').value || null,
+    p_notes:   $('ec_notes').value.trim() || null
+  });
+  if(error){ $('ec_btn').disabled = false; return fail(error); }
+  closeModal();
+  toast('Turni u korrigjua.');
+  vHistory();
+}
+
+async function delCheckin(id){
+  if(!confirm('Të fshihet ky turn nga historiku? Firmat e tij nuk do të numërohen më.')) return;
+  const { error } = await sb.from('checkins').delete().eq('id', id);
+  if(error) return fail(error);
+  toast('Turni u fshi.');
+  vHistory();
+}
+
+/* Hierarkia: koordinator → zonat e tij → njerëzit e zonës.
+   Qendra i sheh të gjithë koordinatorët; koordinatori vetëm veten dhe të vetët. */
+function hierarchyHtml(coords, units, vols){
+  const block = (co, list) => {
+    const people = u => vols.filter(v => v.unit_id === u.id && v.status !== 'suspended');
+    const totalPeople = list.reduce((a,u)=>a+people(u).length, 0);
+    return `<div class="tree-co">
+      <div class="hd">
+        ${avatarHtml(co?.photo_path, co?.full_name)}
+        <div style="flex:1;min-width:0">
+          <div class="nm">${co ? esc(co.full_name || co.volunteer_code) : 'Pa koordinator'}</div>
+          <div class="meta">${co ? 'Koordinator' : 'Zona ende të pacaktuara'} ·
+            ${list.length} ${list.length===1?'zonë':'zona'} ·
+            ${totalPeople} ${totalPeople===1?'person':'veta'}</div>
+        </div>
+      </div>
+      ${list.length ? list.map(u=>{
+        const p = people(u);
+        return `<div class="tree-zone">
+          <div class="zh">
+            <span class="dot ${u.is_open?'open':'shut'}" title="${u.is_open?'e hapur':'e mbyllur'}"></span>
+            <b>${esc(u.code)}</b>
+            <span class="meta">${esc(u.name)}${u.territory?' · '+esc(truncate(u.territory,30)):''}</span>
+            <span class="pill ${u.is_open?'ok':'gray'}">${u.is_open?'e hapur':'e mbyllur'}</span>
+            <span class="meta">${nf(u.signatures)}${u.target?' / '+nf(u.target):''} firma</span>
+          </div>
+          <div class="tree-people">
+            ${p.length ? p.map(v=>`<span class="tree-p">
+              ${avatarHtml(v.photo_path, v.full_name)}
+              <span>${esc(truncate(v.full_name || v.volunteer_code, 22))}</span>
+              <span class="meta">${esc((ROLES[v.role]||v.role).split(' ')[0])}</span>
+            </span>`).join('') : '<span class="meta">Ende pa njerëz në këtë zonë.</span>'}
+          </div>
+        </div>`;
+      }).join('') : '<div class="tree-zone"><span class="meta">Ende pa zona.</span></div>'}
+    </div>`;
+  };
+
+  const out = [];
+  coords.forEach(co => {
+    const own = units.filter(u => u.coordinator_id === co.id);
+    // Qendra i sheh edhe koordinatorët pa zona (që t'u caktojë); të tjerët jo.
+    if(!own.length && !isAdmin() && co.id !== ME.id) return;
+    out.push(block(co, own));
+  });
+
+  // Zonat pa koordinator — vetëm qendra i sheh, që t'i caktojë.
+  const orphanUnits = units.filter(u => !u.coordinator_id
+    || !coords.some(c => c.id === u.coordinator_id));
+  if(orphanUnits.length) out.push(block(null, orphanUnits));
+
+  // Njerëzit pa zonë: dalin veçmas, që të mos humbasin nga sytë. Koordinatorët
+  // nuk hyjnë këtu — ata mbajnë zona, nuk rrinë brenda njërës.
+  const noUnit = vols.filter(v => !v.unit_id && v.status === 'approved'
+                                  && !coords.some(c => c.id === v.id));
+  if(noUnit.length) out.push(`<div class="tree-co">
+    <div class="hd"><div style="flex:1"><div class="nm">Pa zonë</div>
+      <div class="meta">${noUnit.length} ${noUnit.length===1?'i miratuar që nuk është':'të miratuar që nuk janë'}
+        caktuar ende askund</div></div></div>
+    <div class="tree-zone"><div class="tree-people">
+      ${noUnit.map(v=>`<span class="tree-p">${avatarHtml(v.photo_path, v.full_name)}
+        <span>${esc(truncate(v.full_name || v.volunteer_code, 22))}</span>
+        <span class="meta">${esc((ROLES[v.role]||v.role).split(' ')[0])}</span></span>`).join('')}
+    </div></div></div>`);
+
+  return out.length ? out.join('')
+    : '<div class="empty">Ende pa strukturë. Krijoni njësi dhe caktojuni një koordinator.</div>';
+}
+
+async function setUnitOpen(id, open){
+  const { error } = await sb.rpc('unit_set_open', { p_unit:id, p_open:open });
+  if(error) return fail(error);
+  toast(open ? 'Njësia u hap për mbledhje.' : 'Njësia u mbyll.');
+  vPanel();
+}
+async function setUnitCoord(id, coord){
+  const { error } = await sb.rpc('unit_set_coordinator', { p_unit:id, p_coord: coord || null });
+  if(error) return fail(error);
+  toast('Koordinatori u caktua.');
+  vPanel();
+}
+
+async function setStatus(id, status){
+  const { error } = await sb.rpc('vol_set_status', { p_id:id, p_status:status });
+  if(error) return fail(error);
+  toast(status==='approved' ? 'Vullnetari u aktivizua.' : 'Statusi u ndryshua.');
+  vPanel();
+}
+async function setRole(id, role){
+  const { error } = await sb.rpc('vol_set_role', { p_id:id, p_role:role });
+  if(error) return fail(error);
+  toast('Roli u ndryshua.');
+}
+async function setUnit(id, unit){
+  const { error } = await sb.rpc('vol_set_unit', { p_id:id, p_unit: unit || null });
+  if(error) return fail(error);
+  toast('Njësia u caktua.');
+}
+async function addUnit(){
+  const code = $('un_code').value.trim();
+  const name = $('un_name').value.trim() || ('Njësia ' + code);
+  if(!code) return fail('Vendosni kodin e njësisë (p.sh. A1).');
+  const { error } = await sb.from('units').insert({
+    code, name, region:$('un_region').value.trim()||null,
+    territory:$('un_terr').value.trim()||null,
+    target: parseInt($('un_target').value,10) || 0
+  });
+  if(error) return fail(error.code === '23505' ? 'Ky kod njësie ekziston tashmë.' : error);
+  toast('Njësia u krijua.');
+  vPanel();
+}
+async function delUnit(id){
+  if(!confirm('Të fshihet kjo njësi? Vullnetarët e saj mbeten pa njësi.')) return;
+  const { error } = await sb.from('units').delete().eq('id', id);
+  if(error) return fail(error);
+  vPanel();
+}
+async function saveCampaign(){
+  const { error } = await sb.from('campaign').update({
+    title: $('cp_title').value.trim(),
+    goal: parseInt($('cp_goal').value,10) || DEFAULT_GOAL,
+    deadline: $('cp_deadline').value || null,
+    updated_at: new Date().toISOString()
+  }).eq('id', 1);
+  if(error) return fail(error);
+  toast('Parametrat u ruajtën.');
+  vPanel();
+}
+
+/* ---- nisja ---- */
+boot();
+</script>
+</body>
+</html>
