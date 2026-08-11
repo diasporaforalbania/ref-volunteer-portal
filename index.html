@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ndum — Portali i vullnetarëve</title>
+<title>Referendumi — Portali i vullnetarëve</title>
 <style>
   :root{
     --teal:#0d9488; --teal-d:#0f766e; --teal-l:#2dd4bf; --cyan:#0891b2; --aqua:#22d3ee;
@@ -742,7 +742,7 @@ async function vNews(){
     .order('pinned',{ascending:false}).order('created_at',{ascending:false});
   const rows = data || [];
   $('view').innerHTML = `
-    <h2 class="sec">Njoftime</h2>
+    <h2 class="sec">ftime</h2>
     <p class="sub">Njoftimet e rëndësishme nga qendra dhe koordinatorët.</p>
     ${isStaff() ? `
       <div class="card no-print" style="margin-bottom:18px">
