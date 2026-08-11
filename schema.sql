@@ -59,6 +59,10 @@ create table if not exists public.volunteers (
   status        text not null default 'pending'
                 check (status in ('pending','approved','suspended')),
   unit_id       uuid references public.units on delete set null,
+  -- Struktura Koordinator → Mbledhës → Ndihmës (e ndarë nga zona/njësia):
+  -- një mbledhës i përgjigjet një koordinatori, një ndihmës i përgjigjet
+  -- një mbledhësi. Vetëm përmes `vol_set_supervisor` më poshtë.
+  supervisor_id uuid references public.volunteers on delete set null,
   city          text,
   photo_path    text,                             -- foto e ID-së në storage
   created_at    timestamptz not null default now(),
@@ -268,6 +272,18 @@ begin
     check (role in ('ndihmes','mbledhes','koordinator','jurist','admin',
                      'logjistike','burime_njerezore','pr_edukim','it'));
 end $$;
+
+-- Struktura Koordinator → Mbledhës → Ndihmës, për bazat ekzistuese.
+alter table public.volunteers add column if not exists supervisor_id uuid;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'volunteers_supervisor_fk') then
+    alter table public.volunteers
+      add constraint volunteers_supervisor_fk foreign key (supervisor_id)
+      references public.volunteers on delete set null;
+  end if;
+end $$;
+create index if not exists volunteers_supervisor_idx on public.volunteers (supervisor_id);
 
 
 -- ============================ NDIHMËSIT E ROLEVE ============================
@@ -658,6 +674,39 @@ begin
   update public.volunteers set unit_id = p_unit where id = p_id;
 end $$;
 
+-- Struktura Koordinator → Mbledhës → Ndihmës. E ndarë nga njësia/zona
+-- (`unit_id`): kjo është zinxhiri i raportimit, jo territori. Vetëm mbledhësi
+-- ka supervizor koordinator, dhe vetëm ndihmësi ka supervizor mbledhës —
+-- çdo kombinim tjetër refuzohet, që pema të mos prishet me role të papërshtatshme.
+create or replace function public.vol_set_supervisor(p_id uuid, p_supervisor uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_role text; v_sup_role text;
+begin
+  if not public.vol_is_staff() then
+    raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
+  end if;
+  if not public.vol_is_center() and not public.vol_can_see_volunteer(p_id) then
+    raise exception 'Ky vullnetar nuk është në hierarkinë tuaj.';
+  end if;
+
+  select role into v_role from public.volunteers where id = p_id;
+  if v_role not in ('mbledhes','ndihmes') then
+    raise exception 'Vetëm mbledhësit dhe ndihmësit kanë supervizor në këtë strukturë.';
+  end if;
+
+  if p_supervisor is not null then
+    select role into v_sup_role from public.volunteers where id = p_supervisor;
+    if v_role = 'mbledhes' and v_sup_role <> 'koordinator' then
+      raise exception 'Mbledhësi mund të ketë supervizor vetëm një koordinator.';
+    end if;
+    if v_role = 'ndihmes' and v_sup_role <> 'mbledhes' then
+      raise exception 'Ndihmësi mund të ketë supervizor vetëm një mbledhës.';
+    end if;
+  end if;
+
+  update public.volunteers set supervisor_id = p_supervisor where id = p_id;
+end $$;
+
 
 -- ============================ KËRKESAT PËR NDRYSHIM =========================
 -- Foto, të dhëna profili dhe zona nuk ndryshohen më drejtpërdrejt nga
@@ -857,6 +906,51 @@ language sql stable security definer set search_path = public as $$
    where public.vol_is_approved()
    order by u.code;
 $$;
+
+
+-- ============================ STRUKTURA =====================================
+-- Diagrami i raportimit: Koordinator → Mbledhës → Ndihmës (i ndarë nga
+-- njësia/zona, shih `supervisor_id`). Secili sheh vetëm degën e vet:
+--   • Qendra (admin/jurist/logjistikë/burime njerëzore/PR & edukim/IT) → gjithçka
+--   • Koordinatori   → veten, mbledhësit e vet, ndihmësit e atyre mbledhësve
+--   • Mbledhësi      → koordinatorin e vet, veten, ndihmësit e vet
+--   • Ndihmësi       → mbledhësin e vet, koordinatorin e atij mbledhësi, veten
+-- `security definer` sepse kjo pamje shkon PËRTEJ politikës bazë të
+-- `volunteers` (ndihmësi/mbledhësi tani mund të shohin pjesë të hierarkisë
+-- që RLS-ja normalisht s'ua lejon) — njësoj si `field_active()`.
+create or replace function public.struktura_tree()
+returns table (id uuid, full_name text, role text, photo_path text,
+               volunteer_code text, supervisor_id uuid)
+language sql stable security definer set search_path = public as $$
+  with me as (select id, role from public.volunteers where id = auth.uid())
+  select v.id, v.full_name, v.role, v.photo_path, v.volunteer_code, v.supervisor_id
+    from public.volunteers v, me
+   where v.status = 'approved'
+     and v.role in ('koordinator','mbledhes','ndihmes')
+     and (
+       me.role in ('admin','jurist','logjistike','burime_njerezore','pr_edukim','it')
+       or (me.role = 'koordinator' and (
+             v.id = me.id
+             or (v.role = 'mbledhes' and v.supervisor_id = me.id)
+             or (v.role = 'ndihmes' and v.supervisor_id in
+                   (select id from public.volunteers where supervisor_id = me.id and role = 'mbledhes'))
+       ))
+       or (me.role = 'mbledhes' and (
+             v.id = me.id
+             or v.id = (select supervisor_id from public.volunteers where id = me.id)
+             or (v.role = 'ndihmes' and v.supervisor_id = me.id)
+       ))
+       or (me.role = 'ndihmes' and (
+             v.id = me.id
+             or v.id = (select supervisor_id from public.volunteers where id = me.id)
+             or v.id = (select supervisor_id from public.volunteers
+                         where id = (select supervisor_id from public.volunteers where id = me.id))
+       ))
+     )
+   order by v.full_name;
+$$;
+
+grant execute on function public.struktura_tree() to authenticated;
 
 
 -- ============================ TERRENI DHE HARTA =============================
