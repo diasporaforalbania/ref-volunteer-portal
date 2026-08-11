@@ -88,7 +88,15 @@
      dalin me fytyrën e tyre, vendet e lira rrinë bosh me vijë të ndërprerë —
      sa veta mungojnë shihet me një vështrim, pa u dashur të lexohet numri.
      Klikimi mbi një fytyrë hap emrin dhe rolin. */
+  /* Kodi i njësisë. Në terren kjo është e para që dikush kërkon në ekran —
+     "ku jam, ku janë të tjerët" — ndaj rri sa një titull, jo sa një etiketë. */
+  .unit-tag{display:inline-flex;align-items:center;justify-content:center;flex:none;
+    min-width:58px;padding:6px 13px;border-radius:12px;background:#cdeef5;color:#0e6b86;
+    font-size:19px;font-weight:800;letter-spacing:.4px;line-height:1.2;white-space:nowrap}
+  .unit-tag.ok{background:#ccfbf1;color:#0f766e}
+
   .slots{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center}
+  .slots.flush{margin-top:0}
   .slot-p{position:relative;display:inline-flex;flex:none;cursor:pointer}
   .slot-av{width:32px;height:32px;border-radius:50%;object-fit:cover;flex:none;
     background:#eef7f6;border:2px solid var(--teal-l)}
@@ -942,17 +950,20 @@ async function vField(){
     <div class="grid g2">
       <div class="card">
         <h3>Në terren tani <span class="pill blue">${now.length}</span></h3>
-        <div class="meta">Kush po mbledh nënshkrime në këtë moment.</div>
+        <div class="meta">Sipas njësisë. Koha numërohet nga check-in-i i parë i njësisë.
+          Klikoni një fytyrë për emrin dhe rolin.</div>
         <div style="margin-top:10px">
-          ${now.length ? now.map(c=>`
-            <div class="file-item">
-              ${avatarHtml(c.photo_path, c.volunteer_name)}
+          ${nowByUnit(now).map((u,i)=>`
+            <div class="file-item" style="gap:12px">
+              <span class="unit-tag">${esc(u.code)}</span>
               <div style="flex:1;min-width:0">
-                <b>${esc(c.volunteer_name)}</b>
-                <div class="meta">${esc(c.unit_code||'—')}${c.location_name?' · '+esc(c.location_name):''}
-                  ${c.city?' · '+esc(c.city):''}</div></div>
-              <span class="meta">${dur(c.started_at)}</span>
-            </div>`).join('') : '<div class="empty">Askush në terren tani.</div>'}
+                ${slotsHtml('nt'+i, u.people, 0, '', 'flush')}
+              </div>
+              <div style="text-align:right;flex:none">
+                <div class="meta"><b>${dur(u.first)}</b></div>
+                <div class="meta">nga ${fmtTime(u.first)}</div>
+              </div>
+            </div>`).join('') || '<div class="empty">Askush në terren tani.</div>'}
         </div>
       </div>
 
@@ -1006,17 +1017,20 @@ const SLOTS_MAX = 14;
 const SLOTS = {};
 let SLOT_POP = null;              // "<id i turnit>:<indeksi>" i hapur, ose null
 
-function slotsHtml(sid, signed, capacity){
+/* `label`: lëreje bosh që teksti të llogaritet vetë nga kapaciteti; jepi '' kur
+   duhen vetëm fytyrat (p.sh. te lista "Në terren tani", ku nuk ka vende). */
+function slotsHtml(sid, signed, capacity, label, cls){
   SLOTS[sid] = { signed: Array.isArray(signed) ? signed : [],
-                 capacity: Math.max(0, Number(capacity) || 0) };
-  return `<div class="slots" id="slots_${sid}">${slotsInner(sid)}</div>`;
+                 capacity: Math.max(0, Number(capacity) || 0),
+                 label: label == null ? null : label };
+  return `<div class="slots ${cls||''}" id="slots_${sid}">${slotsInner(sid)}</div>`;
 }
 
 function slotsInner(sid){
-  const { signed, capacity } = SLOTS[sid] || { signed:[], capacity:0 };
-  const shown = signed.slice(0, SLOTS_MAX);
-  const holes = Math.max(0, Math.min(capacity - signed.length, SLOTS_MAX - shown.length));
-  const hidden = signed.length - shown.length;
+  const s = SLOTS[sid] || { signed:[], capacity:0, label:null };
+  const shown  = s.signed.slice(0, SLOTS_MAX);
+  const holes  = Math.max(0, Math.min(s.capacity - s.signed.length, SLOTS_MAX - shown.length));
+  const hidden = s.signed.length - shown.length;
 
   const faces = shown.map((p,i)=>{
     const open = SLOT_POP === sid+':'+i;
@@ -1028,15 +1042,17 @@ function slotsInner(sid){
     </span>`;
   }).join('');
 
-  const label = capacity > 0
-    ? `${signed.length} nga ${capacity} vende të zëna`
-      + (signed.length >= capacity ? ' · plot'
-         : ` · edhe ${capacity-signed.length} ${capacity-signed.length===1?'vend':'vende'}`)
-    : `${signed.length} të regjistruar · pa kufi vendesh`;
+  const auto = s.capacity > 0
+    ? `${s.signed.length} nga ${s.capacity} vende të zëna`
+      + (s.signed.length >= s.capacity ? ' · plot'
+         : ` · edhe ${s.capacity-s.signed.length} ${s.capacity-s.signed.length===1?'vend':'vende'}`)
+    : `${s.signed.length} të regjistruar · pa kufi vendesh`;
+  const text = [hidden ? `+${hidden}` : '', s.label == null ? auto : s.label]
+                 .filter(Boolean).join(' · ');
 
   return faces
     + Array.from({length:holes}, ()=>`<span class="slot-e" title="vend i lirë"></span>`).join('')
-    + `<span class="meta" style="margin-left:3px">${hidden?`+${hidden} · `:''}${label}</span>`;
+    + (text ? `<span class="meta" style="margin-left:3px">${text}</span>` : '');
 }
 
 function slotPop(sid, i){
@@ -1052,6 +1068,22 @@ function redrawSlots(){
 document.addEventListener('click', e => {
   if(SLOT_POP && !e.target?.closest?.('.slot-p')){ SLOT_POP = null; redrawSlots(); }
 });
+
+/* "Në terren tani" i grumbullon njerëzit nën njësinë e tyre: në terren pyetja e
+   parë është "sa veta ka njësia A1", jo "kush quhet si". Ora e rreshtit është
+   check-in-i më i hershëm i njësisë — pra prej sa kohësh është e mbuluar ajo. */
+function nowByUnit(rows){
+  const by = {};
+  (rows||[]).forEach(c => {
+    const code = c.unit_code || '—';
+    const u = by[code] || (by[code] = { code, name:c.unit_name||'', people:[], first:c.started_at });
+    u.people.push({ name:c.volunteer_name, role:c.role, photo:c.photo_path });
+    if(new Date(c.started_at) < new Date(u.first)) u.first = c.started_at;
+  });
+  // Njësitë sipas kodit; ata pa njësi mbeten të fundit, jo në krye të listës.
+  return Object.values(by).sort((a,b)=>
+    (a.code === '—') - (b.code === '—') || a.code.localeCompare(b.code, 'sq'));
+}
 
 /* Karta e sipërme e Terrenit. Tri gjendje, sipas asaj që i duhet personit tani:
    jam brenda një turni · kam një turn të radhës · s'kam asgjë të planifikuar. */
@@ -1130,7 +1162,7 @@ function fieldTopCard(cur, sh, qendra){
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><h3 style="margin:0">Turni i radhës</h3>
           <div class="meta" style="text-transform:capitalize">${esc(shiftWhen(sh))}</div></div>
-        <span class="pill ${open?'ok':'blue'}">${esc(sh.unit_code||'')}</span>
+        <span class="unit-tag ${open?'ok':''}">${esc(sh.unit_code||'—')}</span>
       </div>
       <div class="meta" style="margin-top:5px">${esc(sh.unit_name||'')}${sh.notes?' · '+esc(sh.notes):''}
         · e hapi ${esc(sh.created_by_name||'—')}</div>
@@ -1152,7 +1184,7 @@ function fieldTopCard(cur, sh, qendra){
           <button class="btn green" id="ci_btn" ${open && sh.unit_is_open ? '' : 'disabled'}
                   onclick="checkIn('${sh.id}')">📍 Bëj check-in</button>
           ${sh.i_am_in
-            ? `<button class="btn ghost sm" onclick="leaveShift('${sh.id}')">Hiqem nga turni</button>`
+            ? `<button class="btn red sm" onclick="leaveShift('${sh.id}')">Hiqem nga turni</button>`
             : `<button class="btn sec sm" onclick="joinShift('${sh.id}')">Regjistrohu në turn</button>`}
         </div>`}
       <div class="hint">Turnet e tjera të ekipit i gjeni te
@@ -1540,7 +1572,7 @@ function shiftRow(s){
       </div>
       <div class="row" style="gap:6px">
         ${isTeamRole() && s.i_am_on_team && !s.closed_at && !over ? (s.i_am_in
-          ? `<button class="btn ghost sm" onclick="leaveShift('${s.id}')">Hiqem</button>`
+          ? `<button class="btn red sm" onclick="leaveShift('${s.id}')">Hiqem</button>`
           : `<button class="btn ${full?'sec':'green'} sm" ${full?'disabled':''}
                onclick="joinShift('${s.id}')">${full?'Plot':'Regjistrohu'}</button>`) : ''}
         ${s.i_can_manage && !s.closed_at

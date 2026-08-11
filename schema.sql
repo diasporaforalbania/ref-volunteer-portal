@@ -1052,15 +1052,19 @@ grant execute on function public.struktura_tree() to authenticated;
 -- `security definer` sepse vullnetarët nuk e lexojnë më njëri-tjetrin
 -- drejtpërdrejt: këtu dalin VETËM emri, fotoja, njësia dhe pika në hartë —
 -- pa telefon, pa email, pa asgjë tjetër personale.
+-- `role` u shtua që lista "Në terren tani", e cila tani i grupon njerëzit si
+-- fytyra nën njësinë e tyre, ta tregojë rolin kur klikohet një fytyrë.
+drop function if exists public.field_active();
 create or replace function public.field_active()
 returns table (checkin_id uuid, volunteer_name text, photo_path text,
-               volunteer_code text, unit_code text, unit_name text,
+               volunteer_code text, role text, unit_id uuid,
+               unit_code text, unit_name text,
                location_name text, city text,
                lat double precision, lng double precision, started_at timestamptz)
 language sql stable security definer set search_path = public as $$
   select c.id,
          coalesce(nullif(v.full_name,''), c.volunteer_name, 'Vullnetar'),
-         v.photo_path, v.volunteer_code, u.code, u.name,
+         v.photo_path, v.volunteer_code, v.role, c.unit_id, u.code, u.name,
          c.location_name, c.city, c.lat, c.lng, c.started_at
     from public.checkins c
     left join public.volunteers v on v.id = c.volunteer_id
