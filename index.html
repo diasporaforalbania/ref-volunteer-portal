@@ -390,6 +390,10 @@ let active = 'home';
 const isStaff = () => ME && ['koordinator','jurist','admin'].includes(ME.role);
 const isAdmin = () => ME && ME.role === 'admin';
 const isField = () => ME && ['ndihmes','mbledhes'].includes(ME.role);
+/* Qendra nuk i përket asnjë ekipi terreni: sheh gjithçka, por nuk planifikon
+   turne dhe nuk bën check-in. Udhëheqës = kush hap turne dhe raporton firmat. */
+const isQendra   = () => ME && QENDRA_ROLES.includes(ME.role);
+const isTeamLead = () => ME && ['koordinator','mbledhes'].includes(ME.role);
 
 // Gjendja e faqes "Karta ime": të dhënat private, njësitë (për zgjedhjen e
 // zonës së re) dhe kërkesat e mia në pritje, sipas llojit.
@@ -669,7 +673,7 @@ async function vHome(){
   loading();
   const [stats, mine, ann, units, openShift] = await Promise.all([
     loadStats(),
-    sb.from('checkins').select('signatures, started_at, ended_at').eq('volunteer_id', ME.id),
+    sb.rpc('my_checkins'),
     sb.from('announcements').select('*').order('pinned',{ascending:false})
       .order('created_at',{ascending:false}).limit(3),
     sb.rpc('unit_totals'),
@@ -681,7 +685,9 @@ async function vHome(){
   const total = stats.signatures || 0;
   const pct = Math.min(100, goal ? (total/goal*100) : 0);
   const myRows = mine.data || [];
-  const mySig = myRows.reduce((a,r)=>a+(r.signatures||0), 0);
+  // `credited`, jo `signatures`: te një turn ekipi numri i plotë i takon secilit
+  // që ishte brenda. Te totali i fushatës ai numërohet vetëm një herë.
+  const mySig = myRows.reduce((a,r)=>a+(r.credited||0), 0);
   const dl = daysLeft(stats.deadline);
   const uRows = (units.data||[]).slice().sort((a,b)=>b.signatures-a.signatures);
 
@@ -708,14 +714,17 @@ async function vHome(){
     </div>
 
     ${openShift.data ? `
-      <div class="notice"><b>Jeni në terren</b> te ${esc(openShift.data.location_name)} — filluat
+      <div class="notice"><b>Jeni në terren</b>${openShift.data.location_name
+          ? ' te '+esc(openShift.data.location_name) : ''} — check-in
         ${fmtTime(openShift.data.started_at)} (${dur(openShift.data.started_at)}).
-        <a class="link" onclick="go('field')">Mbyllni turnin →</a></div>` : `
+        <a class="link" onclick="go('field')">Shiko turnin →</a></div>`
+      : isQendra() ? '' : `
       <div class="card" style="margin-bottom:16px">
         <div class="row" style="justify-content:space-between">
-          <div><h3 style="margin:0">Jeni në terren?</h3>
-            <div class="meta">Bëni check-in kur filloni të mblidhni nënshkrime në një vend.</div></div>
-          <button class="btn green" onclick="go('field')">📍 Check-in</button>
+          <div><h3 style="margin:0">Turni juaj i radhës</h3>
+            <div class="meta">Check-in-i bëhet te turni që ka planifikuar koordinatori
+              ose mbledhësi juaj i autorizuar — kur t'i vijë ora.</div></div>
+          <button class="btn green" onclick="go('field')">📍 Terreni</button>
         </div></div>`}
 
     <div class="grid g2">
@@ -749,7 +758,7 @@ async function vHome(){
       ${quickCard('📘','Materialet','Guide-book, fletushka, formularë',"go('materials')")}
       ${quickCard('🪪','Karta ime','Foto-ID për identifikim në terren',"go('badge')")}
       ${quickCard('⚠️','Raporto','Incident, ligj, material i humbur',"openReport()")}
-      ${quickCard('📍','Terreni','Check-in dhe historiku i turneve',"go('field')")}
+      ${quickCard('📍','Terreni','Turni i radhës, check-in dhe harta',"go('field')")}
     </div>`;
 }
 function statCard(c,n,l){
@@ -846,76 +855,40 @@ async function delAnn(id){
 }
 
 /* ============================================================================
-   TERRENI — check-in / check-out
+   TERRENI — turni i radhës, check-in dhe check-out i ekipit
+
+   Check-in-i nuk nis më nga vullnetari: nis nga turni. Koordinatori ose
+   mbledhësi i autorizuar e planifikon turnin te "Orari"; kur i vjen ora, ekipi
+   i tij bën check-in këtu — dhe vetëm ai që e hapi e mbyll, duke raportuar sa
+   nënshkrime mblodhi ekipi. Qendra nuk ka ekip, ndaj nuk sheh asnjë turn këtu.
    ============================================================================ */
+/* Vetëm për tekstin në ekran — kufirin real e vendos `shift_grace()` te SQL. */
+const CHECKIN_GRACE_MIN = 15;
+
 async function vField(){
   loading();
-  const [openShift, myShifts, activeNow, units] = await Promise.all([
+  const qendra = isQendra();
+  const [openShift, myShifts, activeNow, nextShift] = await Promise.all([
     sb.from('checkins').select('*').eq('volunteer_id', ME.id).is('ended_at', null)
       .order('started_at',{ascending:false}).limit(1).maybeSingle(),
-    sb.from('checkins').select('*').eq('volunteer_id', ME.id)
-      .order('started_at',{ascending:false}).limit(25),
+    sb.rpc('my_checkins', { p_limit: 25 }),
     sb.rpc('field_active'),
-    sb.rpc('unit_totals')
+    qendra ? Promise.resolve({data:null}) : sb.rpc('my_next_shift')
   ]);
   const cur   = openShift.data;
   const mine  = myShifts.data || [];
   const now   = activeNow.data || [];
-  const uAll  = units.data || [];
-  const uOpen = uAll.filter(u => u.is_open);
-  const myTotal = mine.reduce((a,r)=>a+(r.signatures||0), 0);
-  const curUnit = cur ? uAll.find(u => u.id === cur.unit_id) : null;
-  // Njësia e vullnetarit del e para në listë — aty punon zakonisht.
-  const preferred = uOpen.some(u => u.id === ME.unit_id) ? ME.unit_id : (uOpen[0]?.id || '');
+  const sh    = Array.isArray(nextShift.data) ? nextShift.data[0] : nextShift.data;
+  const myTotal = mine.reduce((a,r)=>a+(r.credited||0), 0);
+  const shared  = mine.some(r => r.team_size > 1);
 
   $('view').innerHTML = `
     <h2 class="sec">Terreni</h2>
-    <p class="sub">Bëni check-in te një nga njësitë e hapura dhe mbyllni turnin kur largoheni.
-      Kështu dimë kush është ku, dhe numërohen nënshkrimet.</p>
+    <p class="sub">${qendra
+      ? 'Kush është në terren pikërisht tani dhe ku. Turnet planifikohen dhe shihen te Orari.'
+      : 'Turni i radhës i ekipit tuaj. Check-in-i hapet kur i vjen ora turnit, dhe turni mbyllet nga koordinatori ose mbledhësi që e hapi.'}</p>
 
-    ${cur ? `
-      <div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
-        <div class="row" style="justify-content:space-between;align-items:flex-start">
-          <div><h3 style="margin:0">📍 Në terren: ${esc(curUnit ? curUnit.code+' · '+curUnit.name : cur.location_name)}</h3>
-            <div class="meta">${cur.location_name && curUnit ? esc(cur.location_name)+' · ' : ''}${esc(cur.city||'')}
-              · filloi ${fmtTime(cur.started_at)} · ${dur(cur.started_at)}
-              ${cur.lat?` · <a class="link" target="_blank" rel="noopener"
-                href="https://www.google.com/maps?q=${cur.lat},${cur.lng}">harta</a>`:''}</div></div>
-          <span class="pill ok">turn i hapur</span>
-        </div>
-        <label>Sa nënshkrime u mblodhën? *</label>
-        <input id="co_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
-               value="${cur.signatures||''}">
-        <label>Shënime (opsionale)</label>
-        <textarea id="co_notes" placeholder="si shkoi, çfarë duhet ditur…">${esc(cur.notes||'')}</textarea>
-        <div class="row" style="margin-top:13px">
-          <button class="btn" id="co_btn" onclick="checkOut('${cur.id}')">Mbyll turnin</button>
-          <button class="btn ghost sm" onclick="cancelShift('${cur.id}')">Anulo turnin</button>
-        </div>
-      </div>` : uOpen.length ? `
-      <div class="card" style="margin-bottom:18px">
-        <h3>Fillo një turn</h3>
-        <div class="meta">Zgjidhni njësinë ku po mblidhni. Vendndodhja ndihmon koordinatorët
-          të shohin mbulimin e territorit në hartë.</div>
-        <label>Njësia e hapur *</label>
-        <select id="ci_unit">
-          ${uOpen.map(u=>`<option value="${u.id}" ${u.id===preferred?'selected':''}>
-            ${esc(u.code)} · ${esc(u.name)}${u.territory?' — '+esc(truncate(u.territory,34)):''}</option>`).join('')}
-        </select>
-        <label>Pika e saktë brenda njësisë (opsionale)</label>
-        <input id="ci_loc" placeholder="p.sh. para bashkisë, te hyrja e pazarit">
-        <label>Qyteti / zona</label>
-        <input id="ci_city" value="${esc(ME.city||'')}" placeholder="p.sh. Tiranë">
-        <div class="row" style="margin-top:13px">
-          <button class="btn green" id="ci_btn" onclick="checkIn()">📍 Bëj check-in</button>
-          <span class="hint" id="ci_geo">Do të kërkohet leje për vendndodhjen (mund ta refuzoni).</span>
-        </div>
-      </div>` : `
-      <div class="card" style="margin-bottom:18px">
-        <h3>Asnjë njësi e hapur</h3>
-        <div class="meta">Mbledhja bëhet vetëm te njësitë që i ka hapur qendra. Sapo të hapet
-          një njësi, do të mund të bëni check-in këtu. Pyetni koordinatorin tuaj.</div>
-      </div>`}
+    ${fieldTopCard(cur, sh, qendra)}
 
     <div class="grid g2">
       <div class="card">
@@ -940,16 +913,16 @@ async function vField(){
         <div class="scroll-x" style="margin-top:10px">
           ${mine.length ? `<table class="tbl"><thead><tr>
             <th>Data</th><th>Njësia</th><th>Kohëzgjatja</th><th style="text-align:right">Firma</th></tr></thead><tbody>
-            ${mine.map(r=>{
-              const u = uAll.find(x=>x.id===r.unit_id);
-              return `<tr>
+            ${mine.map(r=>`<tr>
               <td>${fmtDate(r.started_at)}</td>
-              <td>${esc(u ? u.code : truncate(r.location_name,20))}</td>
+              <td>${esc(r.unit_code || truncate(r.location_name,20) || '—')}</td>
               <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill ok">hapur</span>'}</td>
-              <td style="text-align:right"><b>${nf(r.signatures)}</b></td></tr>`;
-            }).join('')}
+              <td style="text-align:right"><b>${nf(r.credited)}</b>
+                ${r.team_size>1?`<div class="meta">ekip · ${r.team_size} veta</div>`:''}</td></tr>`).join('')}
           </tbody></table>` : '<div class="empty">Ende pa turne.</div>'}
         </div>
+        ${shared ? `<div class="hint">Te turnet në ekip shfaqet sa mblodhi i gjithë turni —
+          ky është rezultati juaj bashkë me të tjerët. Te totali i fushatës numërohet një herë të vetme.</div>` : ''}
       </div>
     </div>
 
@@ -976,45 +949,176 @@ async function vField(){
   initMap(now.filter(c => c.lat != null && c.lng != null));
 }
 
-async function checkIn(){
-  const unit_id = $('ci_unit').value;
-  if(!unit_id) return fail('Zgjidhni njësinë ku po mblidhni nënshkrime.');
+/* Karta e sipërme e Terrenit. Tri gjendje, sipas asaj që i duhet personit tani:
+   jam brenda një turni · kam një turn të radhës · s'kam asgjë të planifikuar. */
+function fieldTopCard(cur, sh, qendra){
+  if(qendra){
+    return `<div class="notice">Roli juaj është në qendër: nuk i përkisni asnjë ekipi terreni,
+      ndaj nuk bëni check-in te turnet. Turnet e planifikuara — të gjitha, nga të gjithë
+      koordinatorët — i shihni te <a class="link" onclick="go('shifts')">Orari</a>.</div>`;
+  }
+
+  /* ---- 1. Jam brenda një turni ---- */
+  if(cur){
+    const linked = !!cur.shift_id;
+    const lead   = !linked || (sh && sh.id === cur.shift_id && sh.i_am_lead);
+    const head = `
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><h3 style="margin:0">📍 Në terren${sh && sh.id === cur.shift_id
+              ? ': '+esc(sh.unit_code+' · '+sh.unit_name)
+              : (cur.location_name ? ': '+esc(cur.location_name) : '')}</h3>
+          <div class="meta">${sh && sh.id === cur.shift_id ? esc(shiftWhen(sh))+' · ' : ''}check-in
+            ${fmtTime(cur.started_at)} · ${dur(cur.started_at)}
+            ${sh && sh.id === cur.shift_id ? ' · '+sh.checked_in_count+' nga ekipi brenda' : ''}
+            ${cur.lat?` · <a class="link" target="_blank" rel="noopener"
+              href="https://www.google.com/maps?q=${cur.lat},${cur.lng}">harta</a>`:''}</div></div>
+        <span class="pill ok">turn i hapur</span>
+      </div>`;
+
+    if(lead){
+      return `<div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
+        ${head}
+        <label>Sa nënshkrime mblodhi ekipi gjithsej? *</label>
+        <input id="co_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
+               value="${cur.signatures||''}">
+        <label>Shënime (opsionale)</label>
+        <textarea id="co_notes" placeholder="si shkoi, çfarë duhet ditur…">${esc(cur.notes||'')}</textarea>
+        <div class="row" style="margin-top:13px">
+          <button class="btn" id="co_btn" onclick="${linked
+            ? `closeTeamShift('${cur.shift_id}')` : `closeOwnShift('${cur.id}')`}">Mbyll turnin</button>
+        </div>
+        <div class="hint">${linked
+          ? 'Me mbylljen e turnit dalin nga terreni edhe të gjithë ata të ekipit që bënë check-in, dhe numri u shfaqet secilit te "Turnet e mia".'
+          : 'Turn i vjetër, pa planifikim — mbyllet vetëm për ju.'}</div>
+      </div>`;
+    }
+
+    return `<div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
+      ${head}
+      <div class="notice" style="margin:12px 0 0">Turnin e mbyll
+        <b>${esc(sh?.created_by_name || 'koordinatori ose mbledhësi që e hapi')}</b> —
+        atëherë dilni automatikisht nga terreni dhe numri i nënshkrimeve ju shfaqet
+        te <b>Turnet e mia</b>.</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ghost sm" onclick="cancelShift('${cur.id}')">Anulo check-in-in</button>
+      </div>
+    </div>`;
+  }
+
+  /* ---- 2. Ka një turn të radhës ---- */
+  if(sh){
+    const t0 = new Date(sh.starts_at).getTime(), t1 = new Date(sh.ends_at).getTime();
+    const opensAt = t0 - CHECKIN_GRACE_MIN*60000;
+    const over = Date.now() > t1;
+    const open = Date.now() >= opensAt && !over;
+    const state = !sh.unit_is_open
+      ? `<div class="notice warn" style="margin-top:12px">Njësia e këtij turni është e mbyllur
+           nga qendra — check-in-i nuk bëhet dot derisa ta hapë.</div>`
+      : over
+      ? `<div class="notice warn" style="margin-top:12px">Ora e turnit kaloi${sh.i_am_lead
+           ? ' — mbylleni që nënshkrimet të numërohen.' : ' dhe turni nuk u mbyll ende.'}</div>`
+      : open
+      ? `<div class="notice" style="margin-top:12px">Turni ka nisur — bëni check-in kur të mbërrini në vend.</div>`
+      : `<div class="notice" style="margin-top:12px">Check-in-i hapet në
+           <b>${fmtTime(new Date(opensAt))}</b>, ${CHECKIN_GRACE_MIN} minuta para fillimit.</div>`;
+
+    return `<div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><h3 style="margin:0">Turni i radhës</h3>
+          <div class="meta" style="text-transform:capitalize">${esc(shiftWhen(sh))}</div></div>
+        <span class="pill ${open?'ok':'blue'}">${esc(sh.unit_code||'')}</span>
+      </div>
+      <div class="meta" style="margin-top:5px">${esc(sh.unit_name||'')}${sh.notes?' · '+esc(sh.notes):''}
+        · e hapi ${esc(sh.created_by_name||'—')} · ${sh.signed_count} të regjistruar</div>
+      ${state}
+
+      ${over && sh.i_am_lead ? `
+        <label>Sa nënshkrime mblodhi ekipi gjithsej? *</label>
+        <input id="co_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0">
+        <label>Shënime (opsionale)</label>
+        <textarea id="co_notes" placeholder="si shkoi, çfarë duhet ditur…"></textarea>
+        <div class="row" style="margin-top:13px">
+          <button class="btn" id="co_btn" onclick="closeTeamShift('${sh.id}')">Mbyll turnin</button>
+        </div>`
+      : over ? '' : `
+        <label>Pika e saktë (opsionale)</label>
+        <input id="ci_loc" placeholder="p.sh. para bashkisë, te hyrja e pazarit">
+        <div class="row" style="margin-top:13px">
+          <button class="btn green" id="ci_btn" ${open && sh.unit_is_open ? '' : 'disabled'}
+                  onclick="checkIn('${sh.id}')">📍 Bëj check-in</button>
+          ${sh.i_am_in
+            ? `<button class="btn ghost sm" onclick="leaveShift('${sh.id}')">Hiqem nga turni</button>`
+            : `<button class="btn sec sm" onclick="joinShift('${sh.id}')">Regjistrohu në turn</button>`}
+          <span class="hint">Do të kërkohet leje për vendndodhjen (mund ta refuzoni).</span>
+        </div>`}
+      <div class="hint">Turnet e tjera të ekipit i gjeni te
+        <a class="link" onclick="go('shifts')">Orari</a>.</div>
+    </div>`;
+  }
+
+  /* ---- 3. Asgjë e planifikuar ---- */
+  return `<div class="card" style="margin-bottom:18px">
+    <h3>Ende pa turn të planifikuar</h3>
+    <div class="meta">Check-in-i bëhet vetëm brenda një turni që e hap koordinatori
+      ose mbledhësi juaj i autorizuar. Sapo të planifikohet një, do të shfaqet këtu.</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ${isTeamLead()?'':'sec'}" onclick="go('shifts')">
+        ${isTeamLead() ? 'Planifiko një turn' : 'Shiko Orarin'}</button>
+    </div>
+  </div>`;
+}
+
+async function checkIn(shiftId){
   const btn = $('ci_btn'); btn.disabled = true; btn.textContent = 'Po merret vendndodhja…';
   const pos = await getLocation();
   btn.textContent = 'Po ruhet…';
-  const detail = $('ci_loc').value.trim();
-  const { error } = await sb.from('checkins').insert({
-    volunteer_id: ME.id, volunteer_name: ME.full_name, unit_id,
-    location_name: detail, city: $('ci_city').value.trim() || null,
-    lat: pos?.lat ?? null, lng: pos?.lng ?? null
+  const { error } = await sb.rpc('shift_check_in', {
+    p_shift: shiftId,
+    p_lat: pos?.lat ?? null, p_lng: pos?.lng ?? null,
+    p_location: ($('ci_loc')?.value || '').trim() || null,
+    p_city: ME.city || null
   });
-  btn.disabled = false;
-  if(error){
-    // Njësia mund të jetë mbyllur pikërisht ndërkohë — RLS e ndalon insertin.
-    return fail(error.code === '42501'
-      ? 'Kjo njësi nuk është më e hapur. Rifreskoni faqen dhe zgjidhni një tjetër.'
-      : error);
-  }
-  if(!pos) toast('Check-in u regjistrua, por pa vendndodhje — nuk dilni në hartë.');
-  else toast('Check-in u regjistrua. Punë të mbarë!');
+  btn.disabled = false; btn.textContent = '📍 Bëj check-in';
+  if(error) return fail(error);
+  toast(pos ? 'Check-in u regjistrua. Punë të mbarë!'
+            : 'Check-in u regjistrua, por pa vendndodhje — nuk dilni në hartë.');
   vField();
 }
 
-async function checkOut(id){
+/* Mbyllja e turnit të ekipit — vetëm ai që e hapi. Numri raportohet një herë
+   për gjithë turnin; të tjerët dalin bashkë me të. */
+async function closeTeamShift(shiftId){
+  const sig = parseInt($('co_sig').value, 10);
+  if(isNaN(sig) || sig < 0) return fail('Shkruani sa nënshkrime u mblodhën (0 nëse asnjë).');
+  if(!confirm(`Të mbyllet turni me ${nf(sig)} nënshkrime? Dalin nga terreni të gjithë `
+            + `ata të ekipit që bënë check-in.`)) return;
+  $('co_btn').disabled = true;
+  const { error } = await sb.rpc('shift_check_out', {
+    p_shift: shiftId, p_signatures: sig, p_notes: $('co_notes').value.trim() || null
+  });
+  $('co_btn').disabled = false;
+  if(error) return fail(error);
+  toast(`Turni u mbyll · ${nf(sig)} nënshkrime. Faleminderit!`);
+  vField();
+}
+
+/* Turnet e vjetra, pa planifikim, që mbetën të hapura nga koha kur secili
+   bënte check-in vetë. Ekziston vetëm që ato të mos ngelin përgjithmonë hapur. */
+async function closeOwnShift(id){
   const sig = parseInt($('co_sig').value, 10);
   if(isNaN(sig) || sig < 0) return fail('Shkruani sa nënshkrime u mblodhën (0 nëse asnjë).');
   $('co_btn').disabled = true;
-  const { error } = await sb.from('checkins')
-    .update({ ended_at:new Date().toISOString(), signatures:sig, notes:$('co_notes').value.trim()||null })
-    .eq('id', id);
+  const { error } = await sb.rpc('checkin_close_own', {
+    p_id: id, p_signatures: sig, p_notes: $('co_notes').value.trim() || null
+  });
   $('co_btn').disabled = false;
   if(error) return fail(error);
-  toast(`Turni u mbyll · ${sig} nënshkrime. Faleminderit!`);
+  toast(`Turni u mbyll · ${nf(sig)} nënshkrime. Faleminderit!`);
   vField();
 }
 
 async function cancelShift(id){
-  if(!confirm('Të anulohet ky turn? Nuk do të numërohet.')) return;
+  if(!confirm('Të anulohet ky check-in? Turni nuk do të numërohet për ju.')) return;
   const { error } = await sb.from('checkins').delete().eq('id', id);
   if(error) return fail(error);
   vField();
@@ -1212,14 +1316,14 @@ function shiftWhen(s){
   return `${dayLabel(s.starts_at)} · ${fmtTime(s.starts_at)}–${fmtTime(s.ends_at)}`;
 }
 
-/* Njësitë ku ky përdorues ka të drejtë të planifikojë turne:
-   qendra kudo, koordinatori vetëm te zonat e veta. */
+/* Njësitë ku ky përdorues planifikon turne. Vetëm koordinatori dhe mbledhësi i
+   autorizuar planifikojnë: koordinatori te zonat që mban, mbledhësi te zona e
+   vet. Qendra nuk planifikon — nuk udhëheq ekip në terren. */
 function plannableUnits(units){
-  if(isAdmin() || ME.role === 'jurist') return units;
-  return units.filter(u => u.coordinator_id === ME.id);
+  if(ME.role === 'koordinator') return units.filter(u => u.coordinator_id === ME.id);
+  if(ME.role === 'mbledhes')    return ME.unit_id ? units.filter(u => u.id === ME.unit_id) : [];
+  return [];
 }
-/* Mbushet te vShifts, lexohet te shiftRow për të vendosur nëse del butoni ✕. */
-let CAN_PLAN_UNITS = new Set();
 
 async function vShifts(){
   loading();
@@ -1228,12 +1332,11 @@ async function vShifts(){
   const rows  = shifts.data || [];
   const uAll  = units.data || [];
   const canPlan = plannableUnits(uAll);
-  CAN_PLAN_UNITS = new Set(canPlan.map(u => u.id));
   const now = Date.now();
 
-  const upcoming = rows.filter(s => new Date(s.ends_at).getTime() >= now);
-  const running  = rows.filter(s => new Date(s.starts_at).getTime() <= now
-                                 && new Date(s.ends_at).getTime() >= now);
+  const upcoming = rows.filter(s => !s.closed_at && new Date(s.ends_at).getTime() >= now);
+  const running  = upcoming.filter(s => new Date(s.starts_at).getTime() <= now);
+  const done     = rows.filter(s => s.closed_at || new Date(s.ends_at).getTime() < now);
   const mineCnt  = upcoming.filter(s => s.i_am_in).length;
 
   // Grupimi sipas ditës — orari lexohet ditë pas dite.
@@ -1245,20 +1348,24 @@ async function vShifts(){
 
   $('view').innerHTML = `
     <h2 class="sec">Orari i turneve</h2>
-    <p class="sub">Turnet i planifikojnë koordinatorët dhe qendra. Regjistrohuni te ato
-      që ju përshtaten — kështu dihet paraprakisht kush e mbulon çdo njësi.</p>
+    <p class="sub">${isQendra()
+      ? 'Të gjitha turnet e fushatës, nga të gjithë koordinatorët dhe mbledhësit e autorizuar. Turnet i planifikon vetëm ai që udhëheq ekipin në terren.'
+      : 'Turnet e ekipit tuaj. I planifikon koordinatori ose mbledhësi i autorizuar; ju regjistrohuni te ato që ju përshtaten dhe bëni check-in te Terreni kur t\'u vijë ora.'}</p>
 
     <div class="grid g4" style="margin-bottom:18px">
       ${statCard('var(--teal)', nf(upcoming.length), 'Turne të ardhshme')}
       ${statCard('var(--green)', nf(mineCnt), 'Ku jam regjistruar')}
       ${statCard('var(--cyan)', nf(running.length), 'Në vazhdim tani')}
-      ${statCard('var(--aqua)', nf(canPlan.length), isStaff()?'Njësi që planifikoni':'Njësi gjithsej')}
+      ${isTeamLead()
+        ? statCard('var(--aqua)', nf(canPlan.length), 'Njësi që planifikoni')
+        : statCard('var(--aqua)', nf(done.length), 'Të mbyllura së fundmi')}
     </div>
 
-    ${isStaff() ? (canPlan.length ? `
+    ${isTeamLead() ? (canPlan.length ? `
       <div class="card" style="margin-bottom:16px">
         <h3>Planifiko një turn</h3>
-        <div class="meta">P.sh. e martë 14, nga 18:00 deri 20:00, njësia A1.</div>
+        <div class="meta">P.sh. e martë 14, nga 18:00 deri 20:00, njësia A1. Ekipi juaj e sheh
+          te Terreni dhe bën check-in kur t'i vijë ora — turnin e mbyllni ju.</div>
         <div class="row" style="align-items:flex-end;margin-top:8px">
           <div style="flex:2;min-width:160px"><label>Njësia</label>
             <select id="sh_unit">${canPlan.map(u=>`<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}</select></div>
@@ -1275,8 +1382,10 @@ async function vShifts(){
           <button class="btn" id="sh_btn" onclick="addShift()">+ Turn</button>
         </div>
       </div>` : `
-      <div class="notice warn">Nuk keni ende asnjë njësi në ngarkim, ndaj nuk planifikoni dot turne.
-        Qendra ju cakton si koordinator të një zone te <b>Paneli</b>.</div>`) : ''}
+      <div class="notice warn">Ende s'keni asnjë zonë, ndaj nuk planifikoni dot turne.
+        ${ME.role === 'koordinator'
+          ? 'Qendra ju cakton si koordinator të një zone te <b>Paneli</b>.'
+          : 'Qendra ju cakton në një zonë te <b>Paneli</b>.'}</div>`) : ''}
 
     ${Object.keys(byDay).length ? Object.entries(byDay).map(([day, list])=>`
       <div class="card" style="margin-bottom:14px">
@@ -1285,36 +1394,55 @@ async function vShifts(){
           ${list.map(shiftRow).join('')}
         </div>
       </div>`).join('')
-      : '<div class="empty">Ende pa turne të planifikuara.</div>'}`;
+      : `<div class="empty">${isQendra()
+          ? 'Ende pa turne të planifikuara.'
+          : 'Ekipi juaj ende s\'ka turne të planifikuara.'}</div>`}
+
+    ${done.length ? `
+      <div class="card" style="margin-top:14px">
+        <h3>Turnet e fundit të mbyllura</h3>
+        <div style="margin-top:8px">${done.slice(0,10).map(shiftRow).join('')}</div>
+      </div>` : ''}`;
 }
 
 function shiftRow(s){
   const full  = s.capacity > 0 && s.signed_count >= s.capacity;
   const names = (s.signed_names || []).filter(Boolean);
-  const canDel = CAN_PLAN_UNITS.has(s.unit_id);
+  const t0 = new Date(s.starts_at).getTime(), t1 = new Date(s.ends_at).getTime();
+  const running = !s.closed_at && t0 <= Date.now() && Date.now() <= t1;
+  const over    = !s.closed_at && Date.now() > t1;
   return `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
     <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
       <div style="flex:1;min-width:0">
         <div class="row" style="gap:8px">
           <b>${fmtTime(s.starts_at)}–${fmtTime(s.ends_at)}</b>
           <span class="pill blue">${esc(s.unit_code||'')}</span>
+          ${s.closed_at ? '<span class="pill gray">i mbyllur</span>'
+            : running ? '<span class="pill ok">në vazhdim</span>'
+            : over ? '<span class="pill amber">pa mbyllur</span>' : ''}
           ${s.i_am_in ? '<span class="pill ok">jeni brenda</span>' : ''}
-          ${full && !s.i_am_in ? '<span class="pill amber">plot</span>' : ''}
+          ${full && !s.i_am_in && !s.closed_at ? '<span class="pill amber">plot</span>' : ''}
         </div>
         <div class="meta" style="margin-top:3px">
           ${esc(s.unit_name||'')}${s.notes?' · '+esc(s.notes):''}
         </div>
         <div class="meta" style="margin-top:3px">
-          ${s.signed_count} ${s.capacity>0?'nga '+s.capacity:''} të regjistruar${
+          E hapi ${esc(s.created_by_name||'—')}${s.created_by_role
+            ? ' · '+esc(ROLES[s.created_by_role]||s.created_by_role) : ''}
+          · ${s.signed_count} ${s.capacity>0?'nga '+s.capacity:''} të regjistruar${
             names.length ? ': '+esc(truncate(names.join(', '), 90)) : ''}
         </div>
+        ${s.checked_in_count ? `<div class="meta" style="margin-top:3px">
+          ${s.checked_in_count} check-in${s.closed_at
+            ? ` · <b>${nf(s.signatures)}</b> nënshkrime` : ''}</div>` : ''}
       </div>
       <div class="row" style="gap:6px">
-        ${s.i_am_in
+        ${s.i_am_on_team && !s.closed_at && !over ? (s.i_am_in
           ? `<button class="btn ghost sm" onclick="leaveShift('${s.id}')">Hiqem</button>`
           : `<button class="btn ${full?'sec':'green'} sm" ${full?'disabled':''}
-               onclick="joinShift('${s.id}')">${full?'Plot':'Regjistrohu'}</button>`}
-        ${canDel ? `<button class="btn ghost sm" onclick="delShift('${s.id}')" title="Fshi turnin">✕</button>` : ''}
+               onclick="joinShift('${s.id}')">${full?'Plot':'Regjistrohu'}</button>`) : ''}
+        ${s.i_can_manage && !s.closed_at
+          ? `<button class="btn ghost sm" onclick="delShift('${s.id}')" title="Fshi turnin">✕</button>` : ''}
       </div>
     </div>
   </div>`;
@@ -1341,23 +1469,25 @@ async function addShift(){
   vShifts();
 }
 
+/* Regjistrimi thirret nga të dyja faqet (Orari dhe karta e turnit te Terreni),
+   ndaj rifreskohet ajo ku ndodhet përdoruesi, jo gjithmonë Orari. */
 async function joinShift(id){
   const { error } = await sb.rpc('shift_join', { p_shift: id });
   if(error) return fail(error);
   toast('U regjistruat në turn.');
-  vShifts();
+  go(active);
 }
 async function leaveShift(id){
   const { error } = await sb.rpc('shift_leave', { p_shift: id });
   if(error) return fail(error);
   toast('U hoqët nga turni.');
-  vShifts();
+  go(active);
 }
 async function delShift(id){
   if(!confirm('Të fshihet ky turn? Bien edhe regjistrimet e tij.')) return;
   const { error } = await sb.from('shifts').delete().eq('id', id);
   if(error) return fail(error);
-  vShifts();
+  go(active);
 }
 
 /* ============================================================================
@@ -1894,11 +2024,11 @@ async function vPanel(){
     <div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;align-items:baseline">
         <div><h3 style="margin:0">Struktura</h3>
-          <div class="meta">${QENDRA_ROLES.includes(ME.role)
-            ? 'Koordinator → Mbledhës i autorizuar → Ndihmës, gjithë fushata.'
+          <div class="meta">${isQendra()
+            ? 'Koordinator → Mbledhës i autorizuar → Ndihmës. Zgjidhni një koordinator më poshtë.'
             : 'Koordinator → Mbledhës i autorizuar → Ndihmës, dega juaj.'}</div></div>
       </div>
-      <div style="margin-top:14px">${structuraHtml(treeRows)}</div>
+      <div id="org_box" style="margin-top:14px">${structuraHtml(treeRows)}</div>
     </div>
 
     ${staff ? `
@@ -2204,7 +2334,9 @@ function renderHistory(){
 
     <div class="card">
       <h3>Turnet një nga një (${rows.length})</h3>
-      <div class="meta">Klikoni <b>Ndrysho</b> për të korrigjuar numrin e firmave ose orët.</div>
+      <div class="meta">Klikoni <b>Ndrysho</b> për të korrigjuar numrin e firmave ose orët.
+        Te turnet në ekip firmat i mban vetëm rreshti i udhëheqësit — të tjerët rrinë me 0
+        me qëllim, që totali të mos numërohet dy herë.</div>
       <div class="scroll-x" style="margin-top:10px">
         ${rows.length ? `<table class="tbl"><thead><tr>
           <th>Data</th><th>Njësia</th><th>Mbledhësi</th><th>Vendi</th>
@@ -2213,7 +2345,8 @@ function renderHistory(){
           ${rows.slice(0,400).map(r=>`<tr>
             <td>${fmtDate(r.started_at)}<div class="meta">${fmtTime(r.started_at)}</div></td>
             <td><b>${esc(r.unit_code||'—')}</b></td>
-            <td>${esc(truncate(r.volunteer_name||'—',22))}</td>
+            <td>${esc(truncate(r.volunteer_name||'—',22))}
+              ${r.shift_id ? `<div class="meta">${r.is_lead?'udhëheqës i turnit':'ekip'}</div>` : ''}</td>
             <td class="meta">${esc(truncate(r.location_name||'—',22))}${r.city?'<div class="meta">'+esc(r.city)+'</div>':''}</td>
             <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill amber">pa mbyllur</span>'}</td>
             <td style="text-align:right"><b>${nf(r.signatures)}</b></td>
@@ -2317,7 +2450,13 @@ async function delCheckin(id){
 
 /* Diagrami i strukturës: Koordinator → Mbledhës → Ndihmës. `rows` vjen nga
    `struktura_tree()`, e cila tashmë e ka filtruar sipas rolit të shikuesit —
-   këtu thjesht rindërtohet pema dhe vizatohet. */
+   këtu thjesht rindërtohet pema dhe vizatohet.
+
+   Për qendrën pema e plotë do të ishte një mur i palexueshëm: aty del një buton
+   për çdo koordinator, dhe klikimi hap strukturën e tij. Koordinatori dhe kushdo
+   nën të e sheh vetëm degën e vet, si më parë — s'ka çfarë të zgjedhë. */
+let ORG = { groups:[], kidsOf:{}, sel:null };
+
 function orgCard(v, meId){
   return `<div class="org-card${v.id===meId?' me':''}">
     ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
@@ -2334,17 +2473,59 @@ function orgBranch(v, kidsOf, meId){
     </div>` : ''}
   </div>`;
 }
+function orgCount(v, kidsOf){
+  return 1 + (kidsOf[v.id] || []).reduce((a,k)=>a+orgCount(k, kidsOf), 0);
+}
+function orgWrapHtml(roots){
+  return `<div class="org-wrap">${roots.map(r=>
+    `<div class="org-root">${orgBranch(r, ORG.kidsOf, ME.id)}</div>`).join('')}</div>`;
+}
+
 function structuraHtml(rows){
   if(!rows.length) return '<div class="empty">Ende pa strukturë të caktuar.</div>';
   const byId = Object.fromEntries(rows.map(v=>[v.id,v]));
-  const kidsOf = {};
+  ORG.kidsOf = {};
   rows.forEach(v => { if(v.supervisor_id && byId[v.supervisor_id])
-    (kidsOf[v.supervisor_id] ??= []).push(v); });
+    (ORG.kidsOf[v.supervisor_id] ??= []).push(v); });
   // "Rrënjë" = kushdo pa supervizor të njohur këtu — koordinatorët gjithmonë,
   // por edhe një mbledhës/ndihmës të cilit ende s'i është caktuar dikush sipër.
   const roots = rows.filter(v => !v.supervisor_id || !byId[v.supervisor_id]);
-  return `<div class="org-wrap">${roots.map(r=>
-    `<div class="org-root">${orgBranch(r, kidsOf, ME.id)}</div>`).join('')}</div>`;
+
+  if(!isQendra()){ ORG.groups = []; ORG.sel = null; return orgWrapHtml(roots); }
+
+  ORG.groups = roots.filter(r => r.role === 'koordinator')
+    .map(c => ({ id:c.id, label:c.full_name || c.volunteer_code, roots:[c] }));
+  // Ata që s'varen ende nga asnjë koordinator mblidhen në një grup të vetin —
+  // ndryshe do të zhdukeshin nga ekrani pikërisht kur duhen parë.
+  const loose = roots.filter(r => r.role !== 'koordinator');
+  if(loose.length) ORG.groups.push({ id:'__loose', label:'Pa koordinator', roots:loose });
+
+  if(!ORG.groups.length) return '<div class="empty">Ende pa koordinatorë në strukturë.</div>';
+  if(!ORG.groups.some(g => g.id === ORG.sel)) ORG.sel = null;
+  return structuraBody();
+}
+
+function structuraBody(){
+  const sel = ORG.groups.find(g => g.id === ORG.sel);
+  return `
+    <div class="row" style="gap:8px">
+      ${ORG.groups.map(g=>{
+        const on = g.id === ORG.sel;
+        return `<button class="btn ${on?'':'sec'} sm" onclick="pickOrg('${g.id}')">
+          ${esc(truncate(g.label, 26))}
+          <span class="pill ${on?'blue':'gray'}">${g.roots.reduce((a,r)=>a+orgCount(r, ORG.kidsOf), 0)}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    ${sel ? orgWrapHtml(sel.roots)
+          : `<div class="hint" style="margin-top:12px">Zgjidhni një koordinator për të parë
+              strukturën e tij: mbledhësit e autorizuar dhe ndihmësit nën secilin prej tyre.</div>`}`;
+}
+
+function pickOrg(id){
+  ORG.sel = (ORG.sel === id) ? null : id;
+  const box = $('org_box');
+  if(box) box.innerHTML = structuraBody();
 }
 
 async function setUnitOpen(id, open){

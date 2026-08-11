@@ -183,6 +183,9 @@ create table if not exists public.shifts (
   notes           text,
   created_by      uuid references public.volunteers on delete set null,
   created_by_name text,
+  -- Mbushet kur udhëheqësi (koordinatori/mbledhësi që e hapi) bën check-out:
+  -- turni mbaron për të gjithë ekipin njëherësh, shih `shift_check_out`.
+  closed_at       timestamptz,
   created_at      timestamptz not null default now(),
   constraint shifts_time_ck check (ends_at > starts_at)
 );
@@ -285,6 +288,22 @@ begin
 end $$;
 create index if not exists volunteers_supervisor_idx on public.volunteers (supervisor_id);
 
+-- Turni i planifikuar ↔ check-in-i. Deri tani check-in-i bëhej kur t'i tekej
+-- kujtdo, te çdo njësi e hapur. Tani ai i përket GJITHMONË një turni që e ka
+-- hapur koordinatori ose mbledhësi i autorizuar: `shift_id` e lidh, dhe
+-- `shifts.closed_at` shënon çastin kur udhëheqësi e mbylli turnin për gjithë ekipin.
+alter table public.shifts   add column if not exists closed_at timestamptz;
+alter table public.checkins add column if not exists shift_id  uuid;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'checkins_shift_fk') then
+    alter table public.checkins
+      add constraint checkins_shift_fk foreign key (shift_id)
+      references public.shifts on delete set null;
+  end if;
+end $$;
+create index if not exists checkins_shift_idx on public.checkins (shift_id);
+
 
 -- ============================ NDIHMËSIT E ROLEVE ============================
 -- `security definer` → lexojnë volunteers pa u bllokuar nga RLS (pa rekursion).
@@ -343,6 +362,64 @@ $$;
 create or replace function public.vol_unit_is_open(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((select is_open from public.units where id = p_unit), false);
+$$;
+
+-- "Qendra" e plotë — të gjitha rolet që NUK janë në terren (admin, jurist,
+-- logjistikë, burime njerëzore, PR & edukim, IT). Ndryshe nga `vol_is_center()`
+-- (vetëm admin + jurist, që kanë të drejta shkrimi), kjo përgjigjet pyetjes
+-- "a i përket ky person ndonjë ekipi terreni?" — dhe përgjigjja është jo:
+-- qendra i sheh turnet, por nuk planifikon dhe nuk bën check-in.
+create or replace function public.vol_is_qendra() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.vol_role() in
+           ('admin','jurist','logjistike','burime_njerezore','pr_edukim','it'), false)
+     and public.vol_is_approved();
+$$;
+
+-- Zinxhiri im LART: unë, supervizori im, dhe supervizori i tij. Këta janë
+-- udhëheqësit e mi — turnet që hapin ata janë turnet ku bëj pjesë. Struktura
+-- ka vetëm tri shtresa (Koordinator → Mbledhës → Ndihmës), ndaj dy hapa mjaftojnë.
+create or replace function public.vol_my_lead_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select v.id from public.volunteers v where v.id = auth.uid()
+  union
+  select v.supervisor_id from public.volunteers v
+   where v.id = auth.uid() and v.supervisor_id is not null
+  union
+  select s.supervisor_id from public.volunteers v
+   join public.volunteers s on s.id = v.supervisor_id
+   where v.id = auth.uid() and s.supervisor_id is not null;
+$$;
+
+-- E gjithë dega ime: zinxhiri lart PLUS kush varet nga unë (mbledhësit e mi dhe
+-- ndihmësit e tyre). Përdoret vetëm te Orari — koordinatori që "organizon
+-- turnet" duhet të shohë edhe ç'kanë planifikuar mbledhësit e vet. Për
+-- check-in-in mbetet `vol_my_lead_ids()`: hyn vetëm te turni i dikujt mbi ty.
+create or replace function public.vol_my_team_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select t.id from public.vol_my_lead_ids() t(id)
+  union
+  select v.id from public.volunteers v where v.supervisor_id = auth.uid()
+  union
+  select w.id from public.volunteers w
+   join public.volunteers v on v.id = w.supervisor_id
+   where v.supervisor_id = auth.uid();
+$$;
+
+-- Kush planifikon turne, dhe ku: koordinatori VETËM te zonat që mban, mbledhësi
+-- i autorizuar VETËM te zona e vet. Askush tjetër — as qendra. Ndarja sipas
+-- rolit mbahet e rreptë me qëllim: ndryshe një koordinator i caktuar rastësisht
+-- në një zonë do të planifikonte turne në territorin e një kolegu.
+create or replace function public.vol_can_plan_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_approved()
+     and coalesce(
+           case public.vol_role()
+             when 'koordinator' then public.vol_coordinates_unit(p_unit)
+             when 'mbledhes'    then exists (select 1 from public.volunteers
+                                              where id = auth.uid() and unit_id = p_unit)
+             else false
+           end, false);
 $$;
 
 
@@ -529,49 +606,66 @@ drop policy if exists chk_read on public.checkins;
 create policy chk_read on public.checkins for select to authenticated
   using (public.vol_is_approved());
 
--- Check-in VETËM në një njësi TË HAPUR. Askush nuk regjistrohet dot "kudo t'i
--- teket": njësia është e detyrueshme dhe duhet ta ketë hapur qendra.
--- Kontrolli rri këtu (jo si `not null`) që skema të mbetet e sigurt për rilexim
--- dhe të mos prishë turnet e vjetra pa njësi.
+-- Check-in-i dhe check-out-i NUK bëhen më drejtpërdrejt nga aplikacioni: kalojnë
+-- nga `shift_check_in` / `shift_check_out` / `checkin_close_own` (security
+-- definer), të cilat kontrollojnë turnin, ekipin dhe orën. Pa këtë heqje
+-- privilegjesh, kushdo do të mund të shkruante vetë numrin e nënshkrimeve nga
+-- konsola — pikërisht ajo që rregulli "vetëm udhëheqësi raporton" ndalon.
+revoke all on public.checkins from anon, authenticated;
+grant select, delete on public.checkins to authenticated;
 drop policy if exists chk_insert on public.checkins;
-create policy chk_insert on public.checkins for insert to authenticated
-  with check ( volunteer_id = auth.uid()
-               and public.vol_is_approved()
-               and unit_id is not null
-               and public.vol_unit_is_open(unit_id) );
-
--- Korrigjimin e një turni e bën vetë personi, koordinatori i asaj zone, ose qendra.
 drop policy if exists chk_update on public.checkins;
-create policy chk_update on public.checkins for update to authenticated
-  using      (volunteer_id = auth.uid() or public.vol_is_center() or public.vol_coordinates_unit(unit_id))
-  with check (volunteer_id = auth.uid() or public.vol_is_center() or public.vol_coordinates_unit(unit_id));
+
+-- Fshirja mbetet: dikush që bëri check-in gabimisht e heq të vetin, dhe
+-- koordinatori/qendra pastron historikun.
 drop policy if exists chk_delete on public.checkins;
 create policy chk_delete on public.checkins for delete to authenticated
   using (volunteer_id = auth.uid() or public.vol_is_center() or public.vol_coordinates_unit(unit_id));
 
 -- ---- shifts / shift_signups -----------------------------------------------
--- Turnet i planifikon koordinatori i zonës ose qendra; i sheh kushdo i miratuar
--- (që të mund të regjistrohet). Regjistrimin e bën secili për vete.
+-- Turnet i planifikojnë VETËM koordinatori dhe mbledhësi i autorizuar — ata
+-- udhëheqin ekipe në terren dhe ata mbajnë përgjegjësinë për turnin. Qendra i
+-- sheh të gjitha por nuk planifikon: nuk i përket asnjë ekipi. Vullnetari i
+-- terrenit sheh vetëm turnet e degës së vet (`vol_my_team_ids`).
+revoke all on public.shifts from anon, authenticated;
+grant select, delete on public.shifts to authenticated;
+grant insert (unit_id, starts_at, ends_at, capacity, notes, created_by, created_by_name)
+  on public.shifts to authenticated;
+
 drop policy if exists sh_read on public.shifts;
 create policy sh_read on public.shifts for select to authenticated
-  using (public.vol_is_approved());
+  using ( public.vol_is_qendra()
+          or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = created_by) );
+
+-- `created_by = auth.uid()` te inserti: turni i mbetet gjithmonë atij që e hapi,
+-- sepse më vonë vetëm ai e mbyll dhe raporton nënshkrimet.
 drop policy if exists sh_write on public.shifts;
-create policy sh_write on public.shifts for all to authenticated
-  using      (public.vol_is_center() or public.vol_coordinates_unit(unit_id))
-  with check (public.vol_is_center() or public.vol_coordinates_unit(unit_id));
+drop policy if exists sh_insert on public.shifts;
+drop policy if exists sh_delete on public.shifts;
+create policy sh_insert on public.shifts for insert to authenticated
+  with check (created_by = auth.uid() and public.vol_can_plan_unit(unit_id));
+create policy sh_delete on public.shifts for delete to authenticated
+  using (created_by = auth.uid() or public.vol_is_admin());
+
+-- Regjistrimi në turn kalon nga `shift_join` (kontrollon ekipin dhe kapacitetin).
+revoke all on public.shift_signups from anon, authenticated;
+grant select, delete on public.shift_signups to authenticated;
 
 drop policy if exists su_read on public.shift_signups;
 create policy su_read on public.shift_signups for select to authenticated
-  using (public.vol_is_approved());
+  using ( public.vol_is_qendra()
+          or volunteer_id = auth.uid()
+          or exists (select 1 from public.shifts s
+                      where s.id = shift_id
+                        and exists (select 1 from public.vol_my_team_ids() t(id)
+                                     where t.id = s.created_by)) );
 drop policy if exists su_insert on public.shift_signups;
-create policy su_insert on public.shift_signups for insert to authenticated
-  with check (volunteer_id = auth.uid() and public.vol_is_approved());
 drop policy if exists su_delete on public.shift_signups;
 create policy su_delete on public.shift_signups for delete to authenticated
   using ( volunteer_id = auth.uid()
           or public.vol_is_center()
           or exists (select 1 from public.shifts s
-                      where s.id = shift_id and public.vol_coordinates_unit(s.unit_id)) );
+                      where s.id = shift_id and s.created_by = auth.uid()) );
 
 -- ---- campaign -------------------------------------------------------------
 revoke all on public.campaign from anon, authenticated;
@@ -977,34 +1071,86 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Historiku i turneve sipas njësisë — faqja e qendrës.
+-- `shift_id` dhe `is_lead` dalin këtu që admini të mos hutohet kur sheh disa
+-- rreshta të të njëjtit turn ekipi: nënshkrimet i mban VETËM rreshti i
+-- udhëheqësit, të tjerët rrinë me 0 që totali të mos dyfishohet.
+drop function if exists public.unit_history();
 create or replace function public.unit_history()
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
                volunteer_id uuid, volunteer_name text, location_name text, city text,
                started_at timestamptz, ended_at timestamptz,
-               signatures integer, notes text)
+               signatures integer, notes text, shift_id uuid, is_lead boolean)
 language sql stable security definer set search_path = public as $$
   select c.id, c.unit_id, u.code, u.name, c.volunteer_id,
          coalesce(nullif(v.full_name,''), c.volunteer_name, 'Vullnetar'),
-         c.location_name, c.city, c.started_at, c.ended_at, c.signatures, c.notes
+         c.location_name, c.city, c.started_at, c.ended_at, c.signatures, c.notes,
+         c.shift_id, (c.shift_id is null or s.created_by = c.volunteer_id)
     from public.checkins c
     left join public.units      u on u.id = c.unit_id
     left join public.volunteers v on v.id = c.volunteer_id
+    left join public.shifts     s on s.id = c.shift_id
    where public.vol_is_admin()
    order by c.started_at desc;
 $$;
 
+-- Turnet e MIA, me nënshkrimet e "kredituara". Te një turn ekipi numri real
+-- rri vetëm te rreshti i udhëheqësit; këtu secilit i shfaqet totali i turnit
+-- (`credited`), sepse ai është rezultati i punës së tij. Totali i fushatës
+-- vazhdon të mblidhet nga `checkins.signatures` — pra numërohet një herë të vetme.
+create or replace function public.my_checkins(p_limit integer default null)
+returns table (id uuid, unit_id uuid, unit_code text, unit_name text, shift_id uuid,
+               location_name text, city text,
+               started_at timestamptz, ended_at timestamptz,
+               signatures integer, credited integer, team_size integer,
+               i_am_lead boolean, notes text)
+language sql stable security definer set search_path = public as $$
+  select c.id, c.unit_id, u.code, u.name, c.shift_id,
+         c.location_name, c.city, c.started_at, c.ended_at, c.signatures,
+         case when c.shift_id is null then c.signatures
+              else coalesce((select sum(x.signatures)::integer from public.checkins x
+                              where x.shift_id = c.shift_id), 0) end,
+         case when c.shift_id is null then 1
+              else (select count(*)::integer from public.checkins x
+                     where x.shift_id = c.shift_id) end,
+         (c.shift_id is null or s.created_by = auth.uid()),
+         c.notes
+    from public.checkins c
+    left join public.units  u on u.id = c.unit_id
+    left join public.shifts s on s.id = c.shift_id
+   where c.volunteer_id = auth.uid()
+     and public.vol_is_approved()
+   order by c.started_at desc
+   -- Pa argument kthehen TË GJITHA: ballina mbledh mbi këtë listë numrin
+   -- "Nënshkrimet e mia", dhe një kufi i heshtur do ta tregonte të vogël.
+   limit (case when coalesce(p_limit, 0) > 0 then p_limit end);
+$$;
+
+grant execute on function public.my_checkins(integer) to authenticated;
+
 
 -- ============================ TURNET E PLANIFIKUARA =========================
+-- Sa para fillimit të turnit hapet check-in-i. Njerëzit mbërrijnë pak më herët;
+-- pa këtë hapësirë do të rrinin duke pritur orën e saktë. E njëjta vlerë
+-- përsëritet te `index.html` (CHECKIN_GRACE_MIN) vetëm për tekstin në ekran —
+-- vendimi merret KËTU, te `shift_check_in`.
+create or replace function public.shift_grace() returns interval
+language sql immutable as $$ select interval '15 minutes' $$;
+
 -- Lista e turneve me numrin e të regjistruarve dhe emrat e tyre. Përsëri
 -- `security definer`, që emrat të dalin pa hapur tabelën e vullnetarëve.
+-- Kolonat u shtuan (udhëheqësi, gjendja, ekipi), ndaj funksioni hidhet e rikrijohet.
+drop function if exists public.shift_list(timestamptz);
 create or replace function public.shift_list(p_from timestamptz default null)
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
                starts_at timestamptz, ends_at timestamptz, capacity integer,
-               notes text, created_by_name text,
-               signed_count bigint, signed_names text[], i_am_in boolean)
+               notes text, created_by uuid, created_by_name text, created_by_role text,
+               closed_at timestamptz, unit_is_open boolean,
+               signed_count bigint, signed_names text[], i_am_in boolean,
+               i_am_on_team boolean, i_can_manage boolean,
+               checked_in_count bigint, signatures integer)
 language sql stable security definer set search_path = public as $$
   select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.capacity,
-         s.notes, s.created_by_name,
+         s.notes, s.created_by, s.created_by_name, k.role, s.closed_at, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = s.id),
          (select coalesce(array_agg(coalesce(nullif(v.full_name,''), g.volunteer_name)
                                     order by g.created_at), '{}'::text[])
@@ -1012,35 +1158,242 @@ language sql stable security definer set search_path = public as $$
             left join public.volunteers v on v.id = g.volunteer_id
            where g.shift_id = s.id),
          exists (select 1 from public.shift_signups g
-                  where g.shift_id = s.id and g.volunteer_id = auth.uid())
+                  where g.shift_id = s.id and g.volunteer_id = auth.uid()),
+         -- "Në ekip" = turni u hap nga unë ose nga dikush MBI mua; vetëm atëherë
+         -- regjistrohem dhe bëj check-in.
+         exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by),
+         (s.created_by = auth.uid() or public.vol_is_admin()),
+         (select count(*) from public.checkins c where c.shift_id = s.id),
+         coalesce((select sum(c.signatures)::integer from public.checkins c
+                    where c.shift_id = s.id), 0)
     from public.shifts s
     join public.units u on u.id = s.unit_id
+    left join public.volunteers k on k.id = s.created_by
    where public.vol_is_approved()
+     and ( public.vol_is_qendra()
+           or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = s.created_by) )
      and s.ends_at >= coalesce(p_from, now() - interval '12 hours')
    order by s.starts_at;
 $$;
 
--- Regjistrimi në turn. Kapaciteti kontrollohet këtu, brenda një transaksioni,
--- që dy veta të mos zënë njëkohësisht vendin e fundit.
+grant execute on function public.shift_list(timestamptz) to authenticated;
+
+-- NJË turn i vetëm për faqen "Terreni": ai që më intereson tani.
+-- Radha e zgjedhjes:
+--   1. turni ku kam një check-in TË HAPUR (jam në terren pikërisht tani);
+--   2. turni i ardhshëm i paMbyllur i ekipit tim.
+-- Udhëheqësi i sheh edhe turnet e veta që kaluan pa u mbyllur (deri 7 ditë):
+-- pa këtë, një turn i harruar do të zhdukej nga ekrani dhe nënshkrimet e tij
+-- nuk do të regjistroheshin kurrë.
+create or replace function public.my_next_shift()
+returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
+               starts_at timestamptz, ends_at timestamptz, capacity integer,
+               notes text, created_by uuid, created_by_name text,
+               unit_is_open boolean, signed_count bigint, checked_in_count bigint,
+               i_am_in boolean, i_am_checked_in boolean, i_am_lead boolean)
+language sql stable security definer set search_path = public as $$
+  with vis as (
+    select s.* from public.shifts s
+     where public.vol_is_approved()
+       and exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by)
+  ),
+  pick as (
+    select v.*, 0 as pri from vis v
+     where exists (select 1 from public.checkins c
+                    where c.shift_id = v.id and c.volunteer_id = auth.uid()
+                      and c.ended_at is null)
+    union all
+    select v.*, 1 as pri from vis v
+     where v.closed_at is null
+       and ( v.ends_at >= now()
+             or (v.created_by = auth.uid() and v.ends_at >= now() - interval '7 days') )
+  )
+  select p.id, p.unit_id, u.code, u.name, p.starts_at, p.ends_at, p.capacity,
+         p.notes, p.created_by, p.created_by_name, u.is_open,
+         (select count(*) from public.shift_signups g where g.shift_id = p.id),
+         (select count(*) from public.checkins c
+           where c.shift_id = p.id and c.ended_at is null),
+         exists (select 1 from public.shift_signups g
+                  where g.shift_id = p.id and g.volunteer_id = auth.uid()),
+         exists (select 1 from public.checkins c
+                  where c.shift_id = p.id and c.volunteer_id = auth.uid() and c.ended_at is null),
+         (p.created_by = auth.uid())
+    from pick p
+    join public.units u on u.id = p.unit_id
+   order by p.pri, p.starts_at
+   limit 1;
+$$;
+
+grant execute on function public.my_next_shift() to authenticated;
+
+-- Check-in brenda një turni. Këtu mblidhen të gjitha rregullat që dikur nuk
+-- ekzistonin: turni duhet të jetë i ekipit tim, ora duhet të ketë ardhur, dhe
+-- njësia duhet të jetë e hapur nga qendra. Vendndodhja ruhet si më parë —
+-- ndryshimi i vetëm është se nuk bëhet check-in kur t'i teket kujt.
+create or replace function public.shift_check_in(
+  p_shift uuid,
+  p_lat double precision default null,
+  p_lng double precision default null,
+  p_location text default null,
+  p_city text default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare s public.shifts; v public.volunteers; v_id uuid;
+begin
+  select * into v from public.volunteers where id = auth.uid();
+  if v.id is null or v.status <> 'approved' then
+    raise exception 'Vetëm vullnetarët e miratuar bëjnë check-in.';
+  end if;
+  if v.role not in ('ndihmes','mbledhes','koordinator') then
+    raise exception 'Check-in bëjnë vetëm ndihmësit, mbledhësit dhe koordinatorët e terrenit.';
+  end if;
+
+  select * into s from public.shifts where id = p_shift;
+  if not found then raise exception 'Ky turn nuk ekziston.'; end if;
+  if s.closed_at is not null then raise exception 'Ky turn është mbyllur tashmë.'; end if;
+  if not exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by) then
+    raise exception 'Ky turn nuk është i ekipit tuaj.';
+  end if;
+  if now() < s.starts_at - public.shift_grace() then
+    raise exception 'Check-in-i hapet pak para fillimit të turnit.';
+  end if;
+  if now() > s.ends_at then
+    raise exception 'Ky turn ka mbaruar — check-in-i nuk bëhet më.';
+  end if;
+  if not public.vol_unit_is_open(s.unit_id) then
+    raise exception 'Njësia e këtij turni është e mbyllur nga qendra.';
+  end if;
+  if exists (select 1 from public.checkins c
+              where c.volunteer_id = auth.uid() and c.ended_at is null) then
+    raise exception 'Keni tashmë një turn të hapur.';
+  end if;
+
+  insert into public.checkins (volunteer_id, volunteer_name, unit_id, shift_id,
+                               location_name, city, lat, lng)
+  values (auth.uid(), v.full_name, s.unit_id, s.id,
+          coalesce(nullif(trim(p_location),''), nullif(s.notes,''), ''),
+          coalesce(nullif(trim(p_city),''), v.city),
+          p_lat, p_lng)
+  returning id into v_id;
+  return v_id;
+end $$;
+
+grant execute on function public.shift_check_in(uuid, double precision, double precision, text, text)
+  to authenticated;
+
+-- Mbyllja e turnit — vetëm koordinatori/mbledhësi që e hapi. Ai raporton sa
+-- nënshkrime mblodhi EKIPI, dhe në atë çast turni mbaron për të gjithë.
+--
+-- Numri rri i tëri te rreshti i tij; rreshtat e ekipit mbyllen me 0. Kështu
+-- "Turnet e mia" i tregon secilit totalin e turnit (shih `my_checkins`), ndërsa
+-- "Progresi i fushatës" — që mbledh `checkins.signatures` — e numëron një herë.
+create or replace function public.shift_check_out(
+  p_shift uuid, p_signatures integer, p_notes text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare s public.shifts; v public.volunteers; v_open uuid;
+begin
+  select * into v from public.volunteers where id = auth.uid();
+  if v.id is null or v.status <> 'approved' then
+    raise exception 'Vetëm vullnetarët e miratuar mbyllin turne.';
+  end if;
+  if v.role not in ('koordinator','mbledhes') then
+    raise exception 'Turnin e mbyllin vetëm koordinatorët dhe mbledhësit e autorizuar.';
+  end if;
+  if p_signatures is null or p_signatures < 0 then
+    raise exception 'Numri i nënshkrimeve nuk mund të jetë negativ.';
+  end if;
+
+  select * into s from public.shifts where id = p_shift for update;
+  if not found then raise exception 'Ky turn nuk ekziston.'; end if;
+  if s.created_by is distinct from auth.uid() then
+    raise exception 'Turnin e mbyll vetëm ai që e hapi.';
+  end if;
+  if s.closed_at is not null then raise exception 'Ky turn është mbyllur tashmë.'; end if;
+
+  select id into v_open from public.checkins
+   where shift_id = p_shift and volunteer_id = auth.uid() and ended_at is null
+   order by started_at limit 1;
+
+  if v_open is null then
+    -- Udhëheqësi mund ta ketë harruar check-in-in e vet. Turni ndodhi
+    -- gjithsesi, ndaj nënshkrimet duhet të kenë ku të shkojnë.
+    insert into public.checkins (volunteer_id, volunteer_name, unit_id, shift_id,
+                                 location_name, started_at, ended_at, signatures, notes)
+    values (auth.uid(), v.full_name, s.unit_id, s.id,
+            coalesce(nullif(s.notes,''), ''), s.starts_at, now(), p_signatures,
+            nullif(trim(p_notes),''));
+  else
+    update public.checkins
+       set ended_at = now(), signatures = p_signatures, notes = nullif(trim(p_notes),'')
+     where id = v_open;
+  end if;
+
+  update public.checkins
+     set ended_at = now(), signatures = 0
+   where shift_id = p_shift and ended_at is null;
+
+  update public.shifts set closed_at = now() where id = p_shift;
+end $$;
+
+grant execute on function public.shift_check_out(uuid, integer, text) to authenticated;
+
+-- Mbyllja e një turni TË VJETËR, pa planifikim (`shift_id is null`) — nga
+-- koha kur secili bënte check-in vetë. Ekziston që ata turne të mos mbeten
+-- përgjithmonë të hapur dhe nënshkrimet e tyre të mos humbasin. Për turnet e
+-- reja të ekipit nuk vlen: aty raporton vetëm udhëheqësi.
+create or replace function public.checkin_close_own(
+  p_id uuid, p_signatures integer, p_notes text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare c public.checkins;
+begin
+  if p_signatures is null or p_signatures < 0 then
+    raise exception 'Numri i nënshkrimeve nuk mund të jetë negativ.';
+  end if;
+  select * into c from public.checkins where id = p_id for update;
+  if not found then raise exception 'Ky turn nuk ekziston.'; end if;
+  if c.volunteer_id <> auth.uid() then
+    raise exception 'Ky turn nuk është i juaji.';
+  end if;
+  if c.shift_id is not null then
+    raise exception 'Këtë turn e mbyll koordinatori ose mbledhësi që e hapi.';
+  end if;
+  if c.ended_at is not null then raise exception 'Ky turn është mbyllur tashmë.'; end if;
+
+  update public.checkins
+     set ended_at = now(), signatures = p_signatures, notes = nullif(trim(p_notes),'')
+   where id = p_id;
+end $$;
+
+grant execute on function public.checkin_close_own(uuid, integer, text) to authenticated;
+
+-- Regjistrimi në turn ("do të vij"). Kapaciteti kontrollohet këtu, brenda një
+-- transaksioni, që dy veta të mos zënë njëkohësisht vendin e fundit.
 create or replace function public.shift_join(p_shift uuid)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_cap integer; v_taken integer; v_ends timestamptz; v_name text;
+declare v_cap integer; v_taken integer; v_ends timestamptz; v_closed timestamptz;
+        v_by uuid; v_name text; v_role text;
 begin
   if not public.vol_is_approved() then
     raise exception 'Vetëm vullnetarët e miratuar regjistrohen në turne.';
   end if;
+  select full_name, role into v_name, v_role from public.volunteers where id = auth.uid();
+  if v_role not in ('ndihmes','mbledhes','koordinator') then
+    raise exception 'Në turne regjistrohen vetëm vullnetarët e terrenit.';
+  end if;
 
-  select capacity, ends_at into v_cap, v_ends
+  select capacity, ends_at, closed_at, created_by into v_cap, v_ends, v_closed, v_by
     from public.shifts where id = p_shift for update;
   if not found then raise exception 'Ky turn nuk ekziston.'; end if;
+  if v_closed is not null then raise exception 'Ky turn është mbyllur.'; end if;
   if v_ends < now() then raise exception 'Ky turn ka mbaruar.'; end if;
+  if not exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = v_by) then
+    raise exception 'Ky turn nuk është i ekipit tuaj.';
+  end if;
 
   select count(*) into v_taken from public.shift_signups where shift_id = p_shift;
   if v_cap > 0 and v_taken >= v_cap then
     raise exception 'Ky turn është plot.';
   end if;
 
-  select full_name into v_name from public.volunteers where id = auth.uid();
   insert into public.shift_signups (shift_id, volunteer_id, volunteer_name)
   values (p_shift, auth.uid(), v_name)
   on conflict (shift_id, volunteer_id) do nothing;
@@ -1117,5 +1470,12 @@ create policy volrep_write on storage.objects for insert to authenticated
 create policy volrep_delete on storage.objects for delete to authenticated
   using (bucket_id = 'vol-reports'
          and ((storage.foldername(name))[1] = auth.uid()::text or public.vol_is_staff()));
+
+
+-- ============================ NË FUND =======================================
+-- PostgREST e mban skemën në kujtesë. Pa këtë sinjal, funksionet e reja
+-- (`shift_check_in`, `my_next_shift`, …) kthejnë 404 derisa ai të rifreskohet
+-- vetë — dhe portali del i prishur pikërisht pasi skema u ngarkua me sukses.
+notify pgrst, 'reload schema';
 
 

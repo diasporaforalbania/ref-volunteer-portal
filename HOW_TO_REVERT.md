@@ -112,6 +112,29 @@ Swap `index.html` for `schema.sql`, or any other file.
 
 ---
 
+## ⚠️ One extra step when reverting the team-shift change
+
+The change that moved check-in inside planned shifts (August 2026) also
+**removed** database privileges — `revoke all on public.checkins` and
+`revoke all on public.shifts`. Reverting `schema.sql` in git and re-running it
+does **not** put those privileges back, because the old file never granted
+them explicitly. Check-in would stay broken.
+
+So after reverting `schema.sql`, also run this once in Supabase → SQL Editor:
+
+```sql
+grant select, insert, update, delete on public.checkins      to authenticated;
+grant select, insert, update, delete on public.shifts        to authenticated;
+grant select, insert, update, delete on public.shift_signups to authenticated;
+notify pgrst, 'reload schema';
+```
+
+Nothing is lost either way — the `shift_id` column on `checkins` and
+`closed_at` on `shifts` simply sit unused, and every signature total keeps
+working.
+
+---
+
 ## Quick decision guide
 
 | Situation | What to do |
