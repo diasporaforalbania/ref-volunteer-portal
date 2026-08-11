@@ -181,18 +181,26 @@
   .map-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     text-align:center;padding:20px;color:var(--muted);font-size:14px;z-index:2}
 
-  /* ---- hierarkia koordinator → zona → vullnetarë ---- */
-  .tree-co{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
-  .tree-co>.hd{background:#eef7f6;padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .tree-co>.hd .nm{font-weight:700}
-  .tree-zone{border-top:1px solid var(--line);padding:11px 14px 11px 26px}
-  .tree-zone .zh{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
-  .tree-people{display:flex;flex-wrap:wrap;gap:7px;padding-left:4px}
-  .tree-p{display:flex;align-items:center;gap:7px;background:#f6fbfa;border:1px solid var(--line);
-    border-radius:20px;padding:3px 11px 3px 3px;font-size:12.5px}
-  .tree-p .mini-av{width:24px;height:24px}
-  .dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
-  .dot.open{background:var(--green)} .dot.shut{background:#c3d2d4}
+  /* ---- struktura: diagrami Koordinator → Mbledhës → Ndihmës ---- */
+  .org-wrap{overflow-x:auto;padding:4px 4px 16px}
+  .org-root{display:inline-flex;flex-direction:column;align-items:center;min-width:100%}
+  .org-root + .org-root{margin-top:22px;padding-top:22px;border-top:1px dashed var(--line)}
+  .org-branch{display:flex;flex-direction:column;align-items:center;position:relative}
+  .org-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 13px;
+    min-width:112px;text-align:center;box-shadow:var(--shadow)}
+  .org-card .mini-av{margin:0 auto 4px}
+  .org-card .nm{font-weight:700;font-size:12.5px;line-height:1.25;white-space:nowrap}
+  .org-card .rl{font-size:10.5px;color:var(--muted);margin-top:1px;white-space:nowrap}
+  .org-card.me{border-color:var(--teal);box-shadow:0 0 0 3px #d5f2ee}
+  /* rreshti i fëmijëve: vijë nga prindi te shiriti horizontal, që lidh gjithë rreshtin */
+  .org-kids{display:flex;justify-content:center;gap:22px;position:relative;padding-top:26px}
+  .org-kids::before{content:'';position:absolute;top:0;left:50%;width:1px;height:14px;
+    background:var(--line);transform:translateX(-.5px)}
+  .org-kids::after{content:'';position:absolute;top:14px;left:0;right:0;height:1px;background:var(--line)}
+  /* çdo fëmijë: vijë e shkurtër nga shiriti horizontal deri te karta e tij */
+  .org-kids > .org-branch{padding-top:12px}
+  .org-kids > .org-branch::before{content:'';position:absolute;top:0;left:50%;width:1px;height:12px;
+    background:var(--line);transform:translateX(-.5px)}
 
   @media (max-width:560px){
     .brand h1{font-size:19px}
@@ -244,13 +252,16 @@ const ROLES = {
   ndihmes:          'Ndihmës',
   mbledhes:         'Mbledhës i autorizuar',
   koordinator:      'Koordinator',
-  jurist:           'Jurist',
-  logjistike:       'Logjistikë',
-  burime_njerezore: 'Burime Njerëzore',
-  pr_edukim:        'PR & Edukim',
-  it:               'IT',
-  admin:            'Qendra (admin)'
+  jurist:           'Jurist (qendra)',
+  logjistike:       'Logjistikë (qendra)',
+  burime_njerezore: 'BNj (qendra)',
+  pr_edukim:        'PR & Edukim (qendra)',
+  it:               'IT (qendra)',
+  admin:            'Admin (qendra)'
 };
+/* Rolet e "qendrës" — shohin gjithçka (të gjithë vullnetarët, gjithë
+   diagramin e strukturës), pa u kufizuar nga hierarkia e terrenit. */
+const QENDRA_ROLES = ['admin','jurist','logjistike','burime_njerezore','pr_edukim','it'];
 /* Përshkrimi i shkurtër i çdo roli — del te dropdown-i i regjistrimit, që
    dikush që nuk e njeh strukturën e fushatës të dijë çfarë të zgjedhë.
    'admin' qëllimisht nuk është këtu: s'zgjidhet kurrë vetë, e cakton admini. */
@@ -598,9 +609,9 @@ async function renderVerify(code){
 function tabList(){
   const t = [
     ['home','Hyrje'], ['news','Njoftime'], ['field','Terreni'], ['shifts','Orari'],
-    ['materials','Materiale'], ['reports','Raportimet'], ['badge','Karta ime']
+    ['materials','Materiale'], ['reports','Raportimet'], ['badge','Karta ime'],
+    ['panel','Paneli']
   ];
-  if(isStaff()) t.push(['panel','Paneli']);
   if(isAdmin()) t.push(['admin','Admin'], ['history','Historiku']);
   return t;
 }
@@ -1798,16 +1809,34 @@ async function sendChangeRequest(kind){
 /* ============================================================================
    PANELI — vetëm koordinatorë / jurist / admin
    ============================================================================ */
+function supervisorSelectHtml(v, coordList, mbledhesList){
+  if(v.role === 'mbledhes'){
+    return `<select onchange="setSupervisor('${v.id}', this.value)" style="font-size:12.5px;padding:6px">
+      <option value="">— pa koordinator —</option>
+      ${coordList.map(c=>`<option value="${c.id}" ${v.supervisor_id===c.id?'selected':''}>
+        ${esc(c.full_name||c.volunteer_code)}</option>`).join('')}
+    </select>`;
+  }
+  if(v.role === 'ndihmes'){
+    return `<select onchange="setSupervisor('${v.id}', this.value)" style="font-size:12.5px;padding:6px">
+      <option value="">— pa mbledhës —</option>
+      ${mbledhesList.map(m=>`<option value="${m.id}" ${v.supervisor_id===m.id?'selected':''}>
+        ${esc(m.full_name||m.volunteer_code)}</option>`).join('')}
+    </select>`;
+  }
+  return '<span class="meta">—</span>';
+}
+
 async function vPanel(){
-  if(!isStaff()) return go('home');
   loading();
-  const [vols, units, stats] = await Promise.all([
-    // Pa embed: njësia e çdo vullnetari merret nga `unit_totals()` më poshtë,
-    // ndaj kjo lidhje ishte e panevojshme (dhe tani e dykuptimtë).
-    sb.from('volunteers').select('*').order('created_at',{ascending:false}),
-    sb.rpc('unit_totals'),
-    loadStats()
+  const staff = isStaff();
+  const [tree, vols, units, stats] = await Promise.all([
+    sb.rpc('struktura_tree'),
+    staff ? sb.from('volunteers').select('*').order('created_at',{ascending:false}) : Promise.resolve({data:[]}),
+    staff ? sb.rpc('unit_totals') : Promise.resolve({data:[]}),
+    staff ? loadStats() : Promise.resolve({})
   ]);
+  const treeRows = tree.data || [];
   const rows = vols.data || [];
   const pending = rows.filter(v => v.status === 'pending');
   const others  = rows.filter(v => v.status !== 'pending');
@@ -1816,13 +1845,16 @@ async function vPanel(){
   const myUnits = isAdmin() || ME.role === 'jurist'
     ? uRows : uRows.filter(u => u.coordinator_id === ME.id);
   const coords = rows.filter(v => v.role === 'koordinator' && v.status !== 'suspended');
-  buildTabs();
+  const coordList    = rows.filter(v => v.role === 'koordinator' && v.status === 'approved');
+  const mbledhesList = rows.filter(v => v.role === 'mbledhes'   && v.status === 'approved');
+  if(staff) buildTabs();
 
   $('view').innerHTML = `
     <h2 class="sec">Paneli</h2>
-    <p class="sub">Njësitë, struktura dhe parametrat e fushatës.
-      ${isAdmin() ? '' : ' Miratimi i vullnetarëve të rinj bëhet vetëm nga admini, te faqja "Admin".'}</p>
+    <p class="sub">${staff ? 'Njësitë, struktura dhe parametrat e fushatës.' : 'Struktura e fushatës.'}
+      ${staff && !isAdmin() ? ' Miratimi i vullnetarëve të rinj bëhet vetëm nga admini, te faqja "Admin".' : ''}</p>
 
+    ${staff ? `
     <div class="grid g4" style="margin-bottom:18px">
       ${statCard('var(--amber)', nf(pending.length), 'Në pritje (te Admin)')}
       ${statCard('var(--teal)', nf(stats.volunteers||0), 'Të miratuar')}
@@ -1834,7 +1866,7 @@ async function vPanel(){
       <h3>Vullnetarët (${others.length})</h3>
       <div class="scroll-x" style="margin-top:10px">
         <table class="tbl"><thead><tr>
-          <th>Vullnetari</th><th>Kodi</th><th>Roli</th><th>Njësia</th><th>Statusi</th><th></th>
+          <th>Vullnetari</th><th>Kodi</th><th>Roli</th><th>Njësia</th><th>Supervizori</th><th>Statusi</th><th></th>
         </tr></thead><tbody>
           ${others.map(v=>`<tr>
             <td><div class="avrow">${avatarHtml(v.photo_path, v.full_name)}
@@ -1848,27 +1880,28 @@ async function vPanel(){
                   <option value="">— pa njësi —</option>
                   ${uRows.map(u=>`<option value="${u.id}" ${v.unit_id===u.id?'selected':''}>${esc(u.code)}</option>`).join('')}
                 </select></td>
+            <td>${supervisorSelectHtml(v, coordList, mbledhesList)}</td>
             <td><span class="pill ${v.status==='approved'?'ok':v.status==='pending'?'amber':'red'}">
                   ${v.status==='approved'?'aktiv':v.status==='pending'?'në pritje':'pezulluar'}</span></td>
             <td>${v.status==='approved'
                   ? `<button class="btn ghost sm" onclick="setStatus('${v.id}','suspended')">Pezullo</button>`
                   : `<button class="btn sec sm" onclick="setStatus('${v.id}','approved')">Aktivizo</button>`}</td>
-          </tr>`).join('') || '<tr><td colspan="6" class="meta">Ende pa vullnetarë.</td></tr>'}
+          </tr>`).join('') || '<tr><td colspan="7" class="meta">Ende pa vullnetarë.</td></tr>'}
         </tbody></table>
       </div>
-    </div>
+    </div>` : ''}
 
     <div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;align-items:baseline">
         <div><h3 style="margin:0">Struktura</h3>
-          <div class="meta">${isAdmin()
-            ? 'Koordinatori → zonat e tij → njerëzit e çdo zone.'
-            : 'Zonat tuaja dhe njerëzit që keni në ngarkim.'}</div></div>
-        ${isAdmin() ? `<span class="meta">${coords.length} koordinatorë · ${uRows.length} zona</span>` : ''}
+          <div class="meta">${QENDRA_ROLES.includes(ME.role)
+            ? 'Koordinator → Mbledhës i autorizuar → Ndihmës, gjithë fushata.'
+            : 'Koordinator → Mbledhës i autorizuar → Ndihmës, dega juaj.'}</div></div>
       </div>
-      <div style="margin-top:14px">${hierarchyHtml(coords, myUnits, rows)}</div>
+      <div style="margin-top:14px">${structuraHtml(treeRows)}</div>
     </div>
 
+    ${staff ? `
     <div class="card" style="margin-bottom:16px">
       <h3>Njësitë (zonat)</h3>
       <div class="meta">Mbledhja bëhet <b>vetëm</b> te njësitë e hapura. Hapini kur nis puna
@@ -1918,7 +1951,14 @@ async function vPanel(){
             <input id="cp_deadline" type="date" value="${stats.deadline||''}"></div>
           <button class="btn" onclick="saveCampaign()">Ruaj</button>
         </div>
-      </div>` : ''}`;
+      </div>` : ''}
+    ` : ''}`;
+}
+
+async function setSupervisor(id, supervisor){
+  const { error } = await sb.rpc('vol_set_supervisor', { p_id:id, p_supervisor: supervisor || null });
+  if(error) return fail(error);
+  toast('Supervizori u caktua.');
 }
 
 /* ============================================================================
@@ -2275,73 +2315,36 @@ async function delCheckin(id){
   vHistory();
 }
 
-/* Hierarkia: koordinator → zonat e tij → njerëzit e zonës.
-   Qendra i sheh të gjithë koordinatorët; koordinatori vetëm veten dhe të vetët. */
-function hierarchyHtml(coords, units, vols){
-  const block = (co, list) => {
-    const people = u => vols.filter(v => v.unit_id === u.id && v.status !== 'suspended');
-    const totalPeople = list.reduce((a,u)=>a+people(u).length, 0);
-    return `<div class="tree-co">
-      <div class="hd">
-        ${avatarHtml(co?.photo_path, co?.full_name)}
-        <div style="flex:1;min-width:0">
-          <div class="nm">${co ? esc(co.full_name || co.volunteer_code) : 'Pa koordinator'}</div>
-          <div class="meta">${co ? 'Koordinator' : 'Zona ende të pacaktuara'} ·
-            ${list.length} ${list.length===1?'zonë':'zona'} ·
-            ${totalPeople} ${totalPeople===1?'person':'veta'}</div>
-        </div>
-      </div>
-      ${list.length ? list.map(u=>{
-        const p = people(u);
-        return `<div class="tree-zone">
-          <div class="zh">
-            <span class="dot ${u.is_open?'open':'shut'}" title="${u.is_open?'e hapur':'e mbyllur'}"></span>
-            <b>${esc(u.code)}</b>
-            <span class="meta">${esc(u.name)}${u.territory?' · '+esc(truncate(u.territory,30)):''}</span>
-            <span class="pill ${u.is_open?'ok':'gray'}">${u.is_open?'e hapur':'e mbyllur'}</span>
-            <span class="meta">${nf(u.signatures)}${u.target?' / '+nf(u.target):''} firma</span>
-          </div>
-          <div class="tree-people">
-            ${p.length ? p.map(v=>`<span class="tree-p">
-              ${avatarHtml(v.photo_path, v.full_name)}
-              <span>${esc(truncate(v.full_name || v.volunteer_code, 22))}</span>
-              <span class="meta">${esc((ROLES[v.role]||v.role).split(' ')[0])}</span>
-            </span>`).join('') : '<span class="meta">Ende pa njerëz në këtë zonë.</span>'}
-          </div>
-        </div>`;
-      }).join('') : '<div class="tree-zone"><span class="meta">Ende pa zona.</span></div>'}
-    </div>`;
-  };
-
-  const out = [];
-  coords.forEach(co => {
-    const own = units.filter(u => u.coordinator_id === co.id);
-    // Qendra i sheh edhe koordinatorët pa zona (që t'u caktojë); të tjerët jo.
-    if(!own.length && !isAdmin() && co.id !== ME.id) return;
-    out.push(block(co, own));
-  });
-
-  // Zonat pa koordinator — vetëm qendra i sheh, që t'i caktojë.
-  const orphanUnits = units.filter(u => !u.coordinator_id
-    || !coords.some(c => c.id === u.coordinator_id));
-  if(orphanUnits.length) out.push(block(null, orphanUnits));
-
-  // Njerëzit pa zonë: dalin veçmas, që të mos humbasin nga sytë. Koordinatorët
-  // nuk hyjnë këtu — ata mbajnë zona, nuk rrinë brenda njërës.
-  const noUnit = vols.filter(v => !v.unit_id && v.status === 'approved'
-                                  && !coords.some(c => c.id === v.id));
-  if(noUnit.length) out.push(`<div class="tree-co">
-    <div class="hd"><div style="flex:1"><div class="nm">Pa zonë</div>
-      <div class="meta">${noUnit.length} ${noUnit.length===1?'i miratuar që nuk është':'të miratuar që nuk janë'}
-        caktuar ende askund</div></div></div>
-    <div class="tree-zone"><div class="tree-people">
-      ${noUnit.map(v=>`<span class="tree-p">${avatarHtml(v.photo_path, v.full_name)}
-        <span>${esc(truncate(v.full_name || v.volunteer_code, 22))}</span>
-        <span class="meta">${esc((ROLES[v.role]||v.role).split(' ')[0])}</span></span>`).join('')}
-    </div></div></div>`);
-
-  return out.length ? out.join('')
-    : '<div class="empty">Ende pa strukturë. Krijoni njësi dhe caktojuni një koordinator.</div>';
+/* Diagrami i strukturës: Koordinator → Mbledhës → Ndihmës. `rows` vjen nga
+   `struktura_tree()`, e cila tashmë e ka filtruar sipas rolit të shikuesit —
+   këtu thjesht rindërtohet pema dhe vizatohet. */
+function orgCard(v, meId){
+  return `<div class="org-card${v.id===meId?' me':''}">
+    ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
+    <div class="nm">${esc(truncate(v.full_name || v.volunteer_code, 20))}</div>
+    <div class="rl">${esc(ROLES[v.role]||v.role)}</div>
+  </div>`;
+}
+function orgBranch(v, kidsOf, meId){
+  const kids = kidsOf[v.id] || [];
+  return `<div class="org-branch">
+    ${orgCard(v, meId)}
+    ${kids.length ? `<div class="org-kids">
+      ${kids.map(k=>orgBranch(k, kidsOf, meId)).join('')}
+    </div>` : ''}
+  </div>`;
+}
+function structuraHtml(rows){
+  if(!rows.length) return '<div class="empty">Ende pa strukturë të caktuar.</div>';
+  const byId = Object.fromEntries(rows.map(v=>[v.id,v]));
+  const kidsOf = {};
+  rows.forEach(v => { if(v.supervisor_id && byId[v.supervisor_id])
+    (kidsOf[v.supervisor_id] ??= []).push(v); });
+  // "Rrënjë" = kushdo pa supervizor të njohur këtu — koordinatorët gjithmonë,
+  // por edhe një mbledhës/ndihmës të cilit ende s'i është caktuar dikush sipër.
+  const roots = rows.filter(v => !v.supervisor_id || !byId[v.supervisor_id]);
+  return `<div class="org-wrap">${roots.map(r=>
+    `<div class="org-root">${orgBranch(r, kidsOf, ME.id)}</div>`).join('')}</div>`;
 }
 
 async function setUnitOpen(id, open){
