@@ -46,7 +46,16 @@ create table if not exists public.volunteers (
   full_name     text not null default '',
   volunteer_code text unique not null default ('V-' || lpad(nextval('public.vol_code_seq')::text, 4, '0')),
   role          text not null default 'ndihmes'
-                check (role in ('ndihmes','mbledhes','koordinator','jurist','admin')),
+                check (role in ('ndihmes','mbledhes','koordinator','jurist','admin',
+                                 'logjistike','burime_njerezore','pr_edukim','it')),
+  -- Roli i kërkuar në regjistrim — thjesht preferenca e vullnetarit. NUK jep
+  -- të drejta vetë: `role` (më sipër) mbetet 'ndihmes' derisa admini ta
+  -- ndryshojë me dorë te miratimi. Kështu askush s'bëhet "admin" duke
+  -- zgjedhur thjesht një opsion në formularin e regjistrimit.
+  requested_role text
+                check (requested_role is null or requested_role in
+                       ('ndihmes','mbledhes','koordinator','jurist',
+                        'logjistike','burime_njerezore','pr_edukim','it')),
   status        text not null default 'pending'
                 check (status in ('pending','approved','suspended')),
   unit_id       uuid references public.units on delete set null,
@@ -65,6 +74,28 @@ create table if not exists public.volunteer_private (
   emergency_contact text,
   note              text
 );
+
+-- Kërkesa për ndryshim: foto, të dhëna profili, ose zonë. Vullnetari propozon,
+-- vetëm admini shqyrton (mirato/refuzo) — shih `submit_change_request` /
+-- `review_change_request` më poshtë. E dhëna e propozuar rri te `payload`
+-- deri sa admini të vendosë; nuk prek rreshtin e vullnetarit vetvetiu.
+create table if not exists public.change_requests (
+  id            uuid primary key default gen_random_uuid(),
+  volunteer_id  uuid not null references public.volunteers on delete cascade,
+  kind          text not null check (kind in ('profile','photo','zone')),
+  payload       jsonb not null default '{}'::jsonb,
+  note          text,
+  status        text not null default 'pending' check (status in ('pending','approved','rejected')),
+  reviewed_by   uuid references auth.users on delete set null,
+  reviewed_note text,
+  created_at    timestamptz not null default now(),
+  reviewed_at   timestamptz
+);
+-- Një kërkesë e vetme në pritje për person, për lloj — pa këtë dikush mund
+-- të mbushë radhën e adminit me kërkesa të përsëritura.
+create unique index if not exists change_req_one_pending_idx
+  on public.change_requests (volunteer_id, kind) where status = 'pending';
+create index if not exists change_req_status_idx on public.change_requests (status, created_at desc);
 
 -- Njoftimet.
 create table if not exists public.announcements (
@@ -215,6 +246,29 @@ end $$;
 
 create index if not exists units_coord_idx on public.units (coordinator_id);
 
+-- Rolet e reja (logjistikë, burime njerëzore, PR & edukim, IT) + roli i
+-- kërkuar në regjistrim. Kolona shtohet për bazat ekzistuese; kufizimi i
+-- `role` rikrijohet çdo herë (i lirë ta bësh disa herë, s'prek të dhëna).
+alter table public.volunteers add column if not exists requested_role text;
+
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'volunteers_requested_role_check') then
+    alter table public.volunteers drop constraint volunteers_requested_role_check;
+  end if;
+  alter table public.volunteers add constraint volunteers_requested_role_check
+    check (requested_role is null or requested_role in
+           ('ndihmes','mbledhes','koordinator','jurist',
+            'logjistike','burime_njerezore','pr_edukim','it'));
+
+  if exists (select 1 from pg_constraint where conname = 'volunteers_role_check') then
+    alter table public.volunteers drop constraint volunteers_role_check;
+  end if;
+  alter table public.volunteers add constraint volunteers_role_check
+    check (role in ('ndihmes','mbledhes','koordinator','jurist','admin',
+                     'logjistike','burime_njerezore','pr_edukim','it'));
+end $$;
+
 
 -- ============================ NDIHMËSIT E ROLEVE ============================
 -- `security definer` → lexojnë volunteers pa u bllokuar nga RLS (pa rekursion).
@@ -283,10 +337,11 @@ $$;
 create or replace function public.handle_new_volunteer()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.volunteers (id, full_name, city)
+  insert into public.volunteers (id, full_name, city, requested_role)
   values (new.id,
           coalesce(new.raw_user_meta_data->>'full_name', ''),
-          nullif(new.raw_user_meta_data->>'city', ''))
+          nullif(new.raw_user_meta_data->>'city', ''),
+          coalesce(nullif(new.raw_user_meta_data->>'requested_role',''), 'ndihmes'))
   on conflict (id) do nothing;
 
   insert into public.volunteer_private (id, phone, email)
@@ -314,14 +369,18 @@ alter table public.checkins          enable row level security;
 alter table public.campaign          enable row level security;
 alter table public.shifts            enable row level security;
 alter table public.shift_signups     enable row level security;
+alter table public.change_requests   enable row level security;
 
 -- ---- volunteers -----------------------------------------------------------
 -- Rolin dhe statusin NUK i ndryshon dot askush nga aplikacioni: vetëm përmes
--- funksioneve vol_set_* më poshtë. Prandaj heqim të drejtën e update-it mbi
--- ato kolona dhe e japim vetëm mbi ato që e redakton vetë personi.
+-- funksioneve vol_set_* më poshtë. Emri, qyteti dhe fotoja NUK redaktohen më
+-- direkt pas plotësimit të parë — ndryshimi kalon nga `submit_change_request`
+-- + miratimi i adminit (shih "KËRKESAT PËR NDRYSHIM"). E vetmja shkrirje e
+-- lejuar direkt është `photo_path` HERËN E PARË (sa kolona është bosh) —
+-- kufizuar te politika `vol_update_self` më poshtë, jo këtu.
 revoke all on public.volunteers from anon, authenticated;
 grant select on public.volunteers to authenticated;
-grant update (full_name, city, photo_path) on public.volunteers to authenticated;
+grant update (photo_path) on public.volunteers to authenticated;
 
 -- Kush sheh kë — sipas hierarkisë:
 --   • vetveten                         → gjithmonë
@@ -355,9 +414,13 @@ create policy vol_select on public.volunteers for select to authenticated
     )
   );
 
+-- `photo_path is null` te USING: rreshti është "i redaktueshëm" nga vetë
+-- personi VETËM sa kohë s'ka ende foto. Sapo kolona mbushet, e njëjta thirrje
+-- (p.sh. dikush që provon të thërrasë update-in direkt nga konsola) prek zero
+-- rreshta — mënyra reale për ta ndryshuar mbetet vetëm kërkesa te admini.
 drop policy if exists vol_update_self on public.volunteers;
 create policy vol_update_self on public.volunteers for update to authenticated
-  using (id = auth.uid()) with check (id = auth.uid());
+  using (id = auth.uid() and photo_path is null) with check (id = auth.uid());
 
 -- ---- volunteer_private ----------------------------------------------------
 -- Telefoni dhe kontakti i urgjencës ndjekin të njëjtin kufizim si hierarkia:
@@ -375,10 +438,16 @@ language sql stable security definer set search_path = public as $$
                                 or v.unit_id is null )) );
 $$;
 
+-- Vetëm lexim direkt (vetvetja + hierarkia, si më parë). Shkrimi (telefoni,
+-- kontakti i urgjencës) nuk bëhet më direkt nga vullnetari — kalon nga
+-- `submit_change_request` ('profile') + miratimi i adminit; rreshti fillestar
+-- krijohet nga trigger-i i regjistrimit, që e anashkalon RLS-në.
+revoke all on public.volunteer_private from anon, authenticated;
+grant select on public.volunteer_private to authenticated;
 drop policy if exists volp_all on public.volunteer_private;
-create policy volp_all on public.volunteer_private for all to authenticated
-  using (public.vol_can_see_volunteer(id))
-  with check (public.vol_can_see_volunteer(id));
+drop policy if exists volp_select on public.volunteer_private;
+create policy volp_select on public.volunteer_private for select to authenticated
+  using (public.vol_can_see_volunteer(id));
 
 -- ---- units ----------------------------------------------------------------
 -- Të gjithë të miratuarit i lexojnë njësitë (u duhen për check-in dhe për
@@ -498,6 +567,16 @@ drop policy if exists camp_write on public.campaign;
 create policy camp_write on public.campaign for update to authenticated
   using (public.vol_is_admin()) with check (public.vol_is_admin());
 
+-- ---- change_requests -------------------------------------------------------
+-- Vetë personi sheh kërkesat e veta; admini i sheh të gjitha. Askush s'shkruan
+-- drejtpërdrejt te tabela — vetëm përmes `submit_change_request` /
+-- `review_change_request` (security definer), që kështu validojnë çdo rast.
+revoke all on public.change_requests from anon, authenticated;
+grant select on public.change_requests to authenticated;
+drop policy if exists cr_select on public.change_requests;
+create policy cr_select on public.change_requests for select to authenticated
+  using (volunteer_id = auth.uid() or public.vol_is_admin());
+
 
 -- ============================ VEPRIMET E QENDRËS ============================
 -- Ndryshimi i statusit / rolit / njësisë bëhet vetëm këtu, me kontroll roli.
@@ -529,10 +608,35 @@ begin
   if not public.vol_is_admin() then
     raise exception 'Vetëm admini ndryshon rolet.';
   end if;
-  if p_role not in ('ndihmes','mbledhes','koordinator','jurist','admin') then
+  if p_role not in ('ndihmes','mbledhes','koordinator','jurist','admin',
+                     'logjistike','burime_njerezore','pr_edukim','it') then
     raise exception 'Rol i pavlefshëm: %', p_role;
   end if;
   update public.volunteers set role = p_role where id = p_id;
+end $$;
+
+-- Vendimi për një vullnetar TË RI (status 'pending') — vetëm admini, jo
+-- koordinatori/juristi. Miratimi i vullnetarëve të rinj rri tërësisht te
+-- faqja "Admin". Refuzimi thjesht e lë 'suspended', si më parë; nëse duhet
+-- pezulluar/riaktivizuar dikë të MIRATUAR tashmë, kjo bëhet ende nga
+-- `vol_set_status` te Paneli (staf, jo vetëm admin) — s'ka lidhje me këtë.
+create or replace function public.vol_decide_pending(p_id uuid, p_approve boolean, p_role text default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini vendos për vullnetarët e rinj.';
+  end if;
+  if p_approve and p_role is not null and p_role not in
+     ('ndihmes','mbledhes','koordinator','jurist','admin',
+      'logjistike','burime_njerezore','pr_edukim','it') then
+    raise exception 'Rol i pavlefshëm: %', p_role;
+  end if;
+  update public.volunteers
+     set status      = case when p_approve then 'approved' else 'suspended' end,
+         role         = case when p_approve then coalesce(p_role, role) else role end,
+         approved_at  = case when p_approve then now() else approved_at end,
+         approved_by  = case when p_approve then auth.uid() else approved_by end
+   where id = p_id and status = 'pending';
 end $$;
 
 -- Caktimi i njësisë. Koordinatori i shpërndan njerëzit VETËM brenda zonave
@@ -553,6 +657,86 @@ begin
   end if;
   update public.volunteers set unit_id = p_unit where id = p_id;
 end $$;
+
+
+-- ============================ KËRKESAT PËR NDRYSHIM =========================
+-- Foto, të dhëna profili dhe zona nuk ndryshohen më drejtpërdrejt nga
+-- vullnetari pas plotësimit të parë — propozohen këtu dhe shqyrtohen VETËM
+-- nga admini, te faqja "Admin".
+
+create or replace function public.submit_change_request(p_kind text, p_payload jsonb, p_note text default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid; v_me public.volunteers;
+begin
+  select * into v_me from public.volunteers where id = auth.uid();
+  if v_me.id is null or v_me.status <> 'approved' then
+    raise exception 'Vetëm vullnetarët e miratuar bëjnë kërkesa për ndryshim.';
+  end if;
+  if p_kind not in ('profile','photo','zone') then
+    raise exception 'Lloj kërkese i pavlefshëm: %', p_kind;
+  end if;
+  if p_kind = 'photo' and v_me.photo_path is null then
+    raise exception 'Ende s''keni foto — ngarkojeni direkt, s''ju duhet kërkesë.';
+  end if;
+  if p_kind = 'zone' then
+    if v_me.unit_id is null then
+      raise exception 'Ende s''keni zonë të caktuar.';
+    end if;
+    if v_me.role not in ('ndihmes','mbledhes') then
+      raise exception 'Ndryshimin e zonës e propozojnë vetëm vullnetarët e terrenit.';
+    end if;
+  end if;
+  if exists (select 1 from public.change_requests
+              where volunteer_id = auth.uid() and kind = p_kind and status = 'pending') then
+    raise exception 'Keni tashmë një kërkesë të këtij lloji në pritje.';
+  end if;
+
+  insert into public.change_requests (volunteer_id, kind, payload, note)
+  values (auth.uid(), p_kind, coalesce(p_payload, '{}'::jsonb), nullif(trim(p_note),''))
+  returning id into v_id;
+  return v_id;
+end $$;
+
+grant execute on function public.submit_change_request(text, jsonb, text) to authenticated;
+
+-- Admini vendos: mirato (dhe ndryshimi zbatohet vetë) ose refuzo. Fshirja e
+-- fotos së vjetër nga storage bëhet nga klienti PARA këtij thirrjeje (njësoj
+-- si `removePhoto` sot) — këtu thjesht zbrazet `photo_path`.
+create or replace function public.review_change_request(p_id uuid, p_approve boolean, p_note text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare r public.change_requests;
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini shqyrton kërkesat për ndryshim.';
+  end if;
+  select * into r from public.change_requests where id = p_id for update;
+  if not found then raise exception 'Kërkesa nuk ekziston.'; end if;
+  if r.status <> 'pending' then raise exception 'Kjo kërkesë është shqyrtuar tashmë.'; end if;
+
+  if p_approve then
+    if r.kind = 'profile' then
+      update public.volunteers
+         set full_name = coalesce(r.payload->>'full_name', full_name),
+             city       = nullif(r.payload->>'city', '')
+       where id = r.volunteer_id;
+      update public.volunteer_private
+         set phone             = nullif(r.payload->>'phone', ''),
+             emergency_contact = nullif(r.payload->>'emergency_contact', '')
+       where id = r.volunteer_id;
+    elsif r.kind = 'photo' then
+      update public.volunteers set photo_path = null where id = r.volunteer_id;
+    elsif r.kind = 'zone' then
+      update public.volunteers set unit_id = (r.payload->>'unit_id')::uuid where id = r.volunteer_id;
+    end if;
+  end if;
+
+  update public.change_requests
+     set status = case when p_approve then 'approved' else 'rejected' end,
+         reviewed_by = auth.uid(), reviewed_at = now(), reviewed_note = nullif(trim(p_note),'')
+   where id = p_id;
+end $$;
+
+grant execute on function public.review_change_request(uuid, boolean, text) to authenticated;
 
 
 -- ---- njësitë: hapja/mbyllja dhe koordinatori (vetëm qendra) ----------------
@@ -638,6 +822,7 @@ returns json language sql stable security definer set search_path = public as $$
     'active_shifts', (select count(*) from public.checkins where ended_at is null),
     'volunteers',    (select count(*) from public.volunteers where status = 'approved'),
     'pending',       (select count(*) from public.volunteers where status = 'pending'),
+    'pending_requests', (select count(*) from public.change_requests where status = 'pending'),
     'units',         (select count(*) from public.units),
     'open_reports',  (select count(*) from public.reports where status <> 'resolved'),
     'open_units',    (select count(*) from public.units where is_open),
