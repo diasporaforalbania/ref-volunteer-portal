@@ -39,6 +39,15 @@
   .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
   .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
   .g4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  /* Rreshti i ballinës: dy shifra të ngushta pastaj karta e turnit, dy herë më
+     e gjerë. Kur ngushtohet ekrani, karta e gjerë zë gjithë rreshtin e vet. */
+  .g-home{grid-template-columns:1fr 1fr 2fr}
+  .g-home.two{grid-template-columns:1fr 1fr}
+  @media (max-width:880px){
+    .g-home{grid-template-columns:1fr 1fr}
+    .g-home>.wide{grid-column:1/-1}
+  }
+  @media (max-width:430px){ .g-home,.g-home.two{grid-template-columns:1fr} }
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
   .card h3{margin:0 0 6px;font-size:17px}
   .card .meta{color:var(--muted);font-size:12.5px}
@@ -69,6 +78,12 @@
   .bar{background:#e6eef0;border-radius:8px;height:14px;overflow:hidden;position:relative;margin:8px 0}
   .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--aqua));transition:width .4s}
   .bar.big{height:30px;border-radius:10px}
+  /* Vendet e një turni: një shirit i vogël për çdo person të kërkuar. Sa më
+     shumë të regjistruar, aq më shumë shirita ngjyrosen — sa veta mungojnë
+     shihet me një vështrim, pa u dashur të lexohet numri. */
+  .slots{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+  .slot{width:30px;height:9px;border-radius:5px;background:#e6eef0;flex:none}
+  .slot.on{background:linear-gradient(90deg,var(--teal),var(--aqua))}
   .list{list-style:none;margin:0;padding:0}
   .list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
   .list li:last-child{border-bottom:none}
@@ -394,6 +409,9 @@ const isField = () => ME && ['ndihmes','mbledhes'].includes(ME.role);
    turne dhe nuk bën check-in. Udhëheqës = kush hap turne dhe raporton firmat. */
 const isQendra   = () => ME && QENDRA_ROLES.includes(ME.role);
 const isTeamLead = () => ME && ['koordinator','mbledhes'].includes(ME.role);
+/* Kush del në terren — vetëm këta regjistrohen në turne dhe bëjnë check-in.
+   Rolet e qendrës (IT, juristi, logjistika…) jo: ata nuk mbledhin nënshkrime. */
+const isTeamRole = () => ME && ['ndihmes','mbledhes','koordinator'].includes(ME.role);
 
 // Gjendja e faqes "Karta ime": të dhënat private, njësitë (për zgjedhjen e
 // zonës së re) dhe kërkesat e mia në pritje, sipas llojit.
@@ -612,7 +630,7 @@ async function renderVerify(code){
    ============================================================================ */
 function tabList(){
   const t = [
-    ['home','Hyrje'], ['news','Njoftime'], ['field','Terreni'], ['shifts','Orari'],
+    ['home','Hyrje'], ['news','Njoftime'], ['field','Terreni'], ['shifts','Turni'],
     ['materials','Materiale'], ['reports','Raportimet'], ['badge','Karta ime'],
     ['panel','Paneli']
   ];
@@ -691,6 +709,29 @@ async function vHome(){
   const dl = daysLeft(stats.deadline);
   const uRows = (units.data||[]).slice().sort((a,b)=>b.signatures-a.signatures);
 
+  // Kutia e gjerë e rreshtit të parë: turni ku jam tani, ose turni im i radhës.
+  // Qendra s'ka ekip terreni, ndaj rreshti i mbetet me dy shifra.
+  const wide = openShift.data ? `
+    <div class="card wide" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+         border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
+      <div style="flex:1;min-width:170px">
+        <h3 style="margin:0">📍 Jeni në terren</h3>
+        <div class="meta">${openShift.data.location_name
+            ? esc(openShift.data.location_name)+' · ' : ''}check-in
+          ${fmtTime(openShift.data.started_at)} · ${dur(openShift.data.started_at)}</div>
+      </div>
+      <button class="btn" onclick="go('field')">Shiko turnin →</button>
+    </div>`
+    : isQendra() ? '' : `
+    <div class="card wide" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:170px">
+        <h3 style="margin:0">Turni juaj i radhës</h3>
+        <div class="meta">Check-in-i bëhet te turni që ka planifikuar koordinatori
+          ose mbledhësi juaj i autorizuar — kur t'i vijë ora.</div>
+      </div>
+      <button class="btn green" onclick="go('field')">📍 Terreni</button>
+    </div>`;
+
   $('view').innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;align-items:baseline">
@@ -706,26 +747,11 @@ async function vHome(){
         ${stats.deadline ? ' · afati '+fmtDate(stats.deadline) : ''}</div>
     </div>
 
-    <div class="grid g4" style="margin-bottom:16px">
+    <div class="grid g-home ${wide?'':'two'}" style="margin-bottom:16px">
       ${statCard('var(--teal)', nf(mySig), 'Nënshkrimet e mia')}
-      ${statCard('var(--cyan)', nf(stats.volunteers||0), 'Vullnetarë aktivë')}
       ${statCard('var(--aqua)', nf(stats.active_shifts||0), 'Në terren tani')}
-      ${statCard('var(--green)', nf(stats.open_units||0), 'Njësi të hapura')}
+      ${wide}
     </div>
-
-    ${openShift.data ? `
-      <div class="notice"><b>Jeni në terren</b>${openShift.data.location_name
-          ? ' te '+esc(openShift.data.location_name) : ''} — check-in
-        ${fmtTime(openShift.data.started_at)} (${dur(openShift.data.started_at)}).
-        <a class="link" onclick="go('field')">Shiko turnin →</a></div>`
-      : isQendra() ? '' : `
-      <div class="card" style="margin-bottom:16px">
-        <div class="row" style="justify-content:space-between">
-          <div><h3 style="margin:0">Turni juaj i radhës</h3>
-            <div class="meta">Check-in-i bëhet te turni që ka planifikuar koordinatori
-              ose mbledhësi juaj i autorizuar — kur t'i vijë ora.</div></div>
-          <button class="btn green" onclick="go('field')">📍 Terreni</button>
-        </div></div>`}
 
     <div class="grid g2">
       <div class="card">
@@ -761,8 +787,11 @@ async function vHome(){
       ${quickCard('📍','Terreni','Turni i radhës, check-in dhe harta',"go('field')")}
     </div>`;
 }
+/* `align-items:center` — te rreshti i ballinës këto rrinë krah një karte më të
+   lartë, dhe pa këtë shifra do të ngjitej lart, jashtë vijës me të tjerat. */
 function statCard(c,n,l){
-  return `<div class="card"><div class="stat"><span class="n" style="color:${c}">${n}</span>
+  return `<div class="card" style="display:flex;align-items:center">
+    <div class="stat"><span class="n" style="color:${c}">${n}</span>
     <span style="font-size:13.5px">${l}</span></div></div>`;
 }
 function quickCard(ic,t,d,fn){
@@ -858,7 +887,7 @@ async function delAnn(id){
    TERRENI — turni i radhës, check-in dhe check-out i ekipit
 
    Check-in-i nuk nis më nga vullnetari: nis nga turni. Koordinatori ose
-   mbledhësi i autorizuar e planifikon turnin te "Orari"; kur i vjen ora, ekipi
+   mbledhësi i autorizuar e planifikon turnin te "Turni"; kur i vjen ora, ekipi
    i tij bën check-in këtu — dhe vetëm ai që e hapi e mbyll, duke raportuar sa
    nënshkrime mblodhi ekipi. Qendra nuk ka ekip, ndaj nuk sheh asnjë turn këtu.
    ============================================================================ */
@@ -885,7 +914,7 @@ async function vField(){
   $('view').innerHTML = `
     <h2 class="sec">Terreni</h2>
     <p class="sub">${qendra
-      ? 'Kush është në terren pikërisht tani dhe ku. Turnet planifikohen dhe shihen te Orari.'
+      ? 'Kush është në terren pikërisht tani dhe ku. Turnet planifikohen dhe shihen te Turni.'
       : 'Turni i radhës i ekipit tuaj. Check-in-i hapet kur i vjen ora turnit, dhe turni mbyllet nga koordinatori ose mbledhësi që e hapi.'}</p>
 
     ${fieldTopCard(cur, sh, qendra)}
@@ -949,13 +978,31 @@ async function vField(){
   initMap(now.filter(c => c.lat != null && c.lng != null));
 }
 
+/* Vendet e turnit si shirita: sa veta janë kërkuar, sa janë mbushur. Mbi një
+   numër të caktuar shiritash figura pushon së lexuari — atje kthehemi te teksti. */
+const SLOTS_MAX = 24;
+function slotsHtml(taken, capacity){
+  taken = Number(taken) || 0;
+  capacity = Number(capacity) || 0;
+  if(capacity <= 0)
+    return `<div class="meta" style="margin-top:7px">${nf(taken)} të regjistruar · pa kufi vendesh</div>`;
+  const on = Math.min(taken, capacity);
+  const bars = capacity <= SLOTS_MAX
+    ? `<div class="slots">${Array.from({length:capacity},
+        (_,i)=>`<span class="slot${i<on?' on':''}"></span>`).join('')}</div>`
+    : `<div class="bar" style="margin-top:9px"><span style="width:${on/capacity*100}%"></span></div>`;
+  return `${bars}
+    <div class="meta" style="margin-top:5px">${on} nga ${capacity} vende të zëna${
+      on >= capacity ? ' · plot' : ` · edhe ${capacity-on} ${capacity-on===1?'vend':'vende'}`}</div>`;
+}
+
 /* Karta e sipërme e Terrenit. Tri gjendje, sipas asaj që i duhet personit tani:
    jam brenda një turni · kam një turn të radhës · s'kam asgjë të planifikuar. */
 function fieldTopCard(cur, sh, qendra){
   if(qendra){
     return `<div class="notice">Roli juaj është në qendër: nuk i përkisni asnjë ekipi terreni,
       ndaj nuk bëni check-in te turnet. Turnet e planifikuara — të gjitha, nga të gjithë
-      koordinatorët — i shihni te <a class="link" onclick="go('shifts')">Orari</a>.</div>`;
+      koordinatorët — i shihni te <a class="link" onclick="go('shifts')">Turni</a>.</div>`;
   }
 
   /* ---- 1. Jam brenda një turni ---- */
@@ -1029,7 +1076,8 @@ function fieldTopCard(cur, sh, qendra){
         <span class="pill ${open?'ok':'blue'}">${esc(sh.unit_code||'')}</span>
       </div>
       <div class="meta" style="margin-top:5px">${esc(sh.unit_name||'')}${sh.notes?' · '+esc(sh.notes):''}
-        · e hapi ${esc(sh.created_by_name||'—')} · ${sh.signed_count} të regjistruar</div>
+        · e hapi ${esc(sh.created_by_name||'—')}</div>
+      ${slotsHtml(sh.signed_count, sh.capacity)}
       ${state}
 
       ${over && sh.i_am_lead ? `
@@ -1049,10 +1097,9 @@ function fieldTopCard(cur, sh, qendra){
           ${sh.i_am_in
             ? `<button class="btn ghost sm" onclick="leaveShift('${sh.id}')">Hiqem nga turni</button>`
             : `<button class="btn sec sm" onclick="joinShift('${sh.id}')">Regjistrohu në turn</button>`}
-          <span class="hint">Do të kërkohet leje për vendndodhjen (mund ta refuzoni).</span>
         </div>`}
       <div class="hint">Turnet e tjera të ekipit i gjeni te
-        <a class="link" onclick="go('shifts')">Orari</a>.</div>
+        <a class="link" onclick="go('shifts')">Turni</a>.</div>
     </div>`;
   }
 
@@ -1063,7 +1110,7 @@ function fieldTopCard(cur, sh, qendra){
       ose mbledhësi juaj i autorizuar. Sapo të planifikohet një, do të shfaqet këtu.</div>
     <div class="row" style="margin-top:12px">
       <button class="btn ${isTeamLead()?'':'sec'}" onclick="go('shifts')">
-        ${isTeamLead() ? 'Planifiko një turn' : 'Shiko Orarin'}</button>
+        ${isTeamLead() ? 'Planifiko një turn' : 'Shiko Turnin'}</button>
     </div>
   </div>`;
 }
@@ -1339,7 +1386,7 @@ async function vShifts(){
   const done     = rows.filter(s => s.closed_at || new Date(s.ends_at).getTime() < now);
   const mineCnt  = upcoming.filter(s => s.i_am_in).length;
 
-  // Grupimi sipas ditës — orari lexohet ditë pas dite.
+  // Grupimi sipas ditës — lista lexohet ditë pas dite.
   const byDay = {};
   upcoming.forEach(s => {
     const k = new Date(s.starts_at).toDateString();
@@ -1347,7 +1394,7 @@ async function vShifts(){
   });
 
   $('view').innerHTML = `
-    <h2 class="sec">Orari i turneve</h2>
+    <h2 class="sec">Turni</h2>
     <p class="sub">${isQendra()
       ? 'Të gjitha turnet e fushatës, nga të gjithë koordinatorët dhe mbledhësit e autorizuar. Turnet i planifikon vetëm ai që udhëheq ekipin në terren.'
       : 'Turnet e ekipit tuaj. I planifikon koordinatori ose mbledhësi i autorizuar; ju regjistrohuni te ato që ju përshtaten dhe bëni check-in te Terreni kur t\'u vijë ora.'}</p>
@@ -1437,7 +1484,7 @@ function shiftRow(s){
             ? ` · <b>${nf(s.signatures)}</b> nënshkrime` : ''}</div>` : ''}
       </div>
       <div class="row" style="gap:6px">
-        ${s.i_am_on_team && !s.closed_at && !over ? (s.i_am_in
+        ${isTeamRole() && s.i_am_on_team && !s.closed_at && !over ? (s.i_am_in
           ? `<button class="btn ghost sm" onclick="leaveShift('${s.id}')">Hiqem</button>`
           : `<button class="btn ${full?'sec':'green'} sm" ${full?'disabled':''}
                onclick="joinShift('${s.id}')">${full?'Plot':'Regjistrohu'}</button>`) : ''}
@@ -1469,8 +1516,8 @@ async function addShift(){
   vShifts();
 }
 
-/* Regjistrimi thirret nga të dyja faqet (Orari dhe karta e turnit te Terreni),
-   ndaj rifreskohet ajo ku ndodhet përdoruesi, jo gjithmonë Orari. */
+/* Regjistrimi thirret nga të dyja faqet (Turni dhe karta e turnit te Terreni),
+   ndaj rifreskohet ajo ku ndodhet përdoruesi, jo gjithmonë e para. */
 async function joinShift(id){
   const { error } = await sb.rpc('shift_join', { p_shift: id });
   if(error) return fail(error);
