@@ -1,0 +1,34 @@
+name: Deploy Supabase schema
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - schema.sql
+      - .github/workflows/deploy-supabase-schema.yml
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-production-schema
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Apply schema.sql
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Apply schema to Supabase
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL is not configured in GitHub Actions." >&2
+            exit 1
+          fi
+          psql "$SUPABASE_DB_URL" --set ON_ERROR_STOP=on --file schema.sql
+

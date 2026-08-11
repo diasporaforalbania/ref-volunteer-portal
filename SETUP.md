@@ -8,7 +8,7 @@ njerëz të miratuar nga qendra.
 
 | Skeda | Për çfarë shërben |
 |---|---|
-| **Ballina** | Progresi drejt 50,000, sa firma ke mbledhur ti, kush është në terren, ecuria e njësive |
+| **Hyrje** | Progresi drejt 50,000, sa firma ke mbledhur ti, kush është në terren, ecuria e njësive |
 | **Njoftime** | Njoftimet e rëndësishme (normal / e rëndësishme / urgjente, me fiksim lart) |
 | **Terreni** | Check-in te një **njësi e hapur**, check-out me numrin e firmave, harta e mbledhësve aktivë |
 | **Orari** | Turnet e planifikuara (e martë 18:00–20:00, njësia A1) dhe regjistrimi në to |
@@ -120,13 +120,46 @@ Koordinatori planifikon turne për **zonat e veta**, qendra për të gjitha:
 zgjidhni njësinë, datën, orën nga–deri dhe sa veta duhen (`0` = pa kufi).
 Vullnetarët regjistrohen vetë. Kur vendet mbushen, butoni bëhet *Plot*.
 
-## 6. Publikoni
+## 6. Publikimi automatik nga GitHub në Netlify
 
-Tërhiqni **të gjithë dosjen `vullnetaret`** te **Netlify Drop**
-(<https://app.netlify.com/drop>). Merrni një link publik menjëherë.
-Cloudflare Pages, Vercel ose GitHub Pages punojnë njësoj.
+Repoja është gati për t'u publikuar drejtpërdrejt nga GitHub. Te Netlify:
 
-Dosja duhet të shkojë e plotë — sidomos `lib/`, ku rrinë dy bibliotekat.
+1. Hapni **Add new project → Import an existing project → GitHub**.
+2. Zgjidhni repon `diasporaforalbania/ref-volunteer-portal`.
+3. Vendosni branch-in `main`. Lëreni **Build command** bosh dhe vendosni
+   **Publish directory** `.` (këto lexohen edhe nga `netlify.toml`).
+4. Nëse krijohet një site i ri, caktoni domenin ekzistues
+   `pershqiperine.netlify.app` te site-i i lidhur me GitHub. Më mirë, lidhni
+   repon me site-in ekzistues te **Build & deploy → Continuous deployment**.
+
+Pas këtij konfigurimi një herë, çdo `push`/merge në `main` publikon automatikisht
+`index.html`, `lib/` dhe skedarët e tjerë. Mos përdorni më Netlify Drop për këtë
+site, sepse ai nuk ndjek ndryshimet në GitHub.
+
+> **Kujdes:** `SUPABASE_ANON_KEY` në `index.html` është publik me qëllim. Mos
+> vendosni kurrë aty database password, `service_role` key ose connection string.
+
+## 6a. Përditësimi automatik i skemës Supabase nga GitHub
+
+Workflow-i `.github/workflows/deploy-supabase-schema.yml` ekzekuton `schema.sql`
+kur ai ndryshon në branch-in `main`. Për ta aktivizuar:
+
+1. Supabase → **Project Settings → Database → Connection string** dhe kopjoni
+   URI-n e **Session pooler**. Zëvendësoni `[YOUR-PASSWORD]` me fjalëkalimin e
+   database-it. Session pooler punon edhe kur GitHub runner nuk ka IPv6.
+2. GitHub repo → **Settings → Environments → New environment** → krijoni
+   `production`.
+3. Brenda environment-it `production`, shtoni secret me emrin e saktë
+   `SUPABASE_DB_URL` dhe vlerën e URI-së së plotë.
+4. GitHub → **Actions → Deploy Supabase schema → Run workflow** për provën e
+   parë. Më pas ai ekzekutohet vetë vetëm kur ndryshon `schema.sql`.
+
+Ndryshimet në HTML/JavaScript nuk ndryshojnë database-in: ato i publikon
+Netlify. Vetëm ndryshimet SQL në `schema.sql` aplikohen në Supabase. Skedari
+duhet të mbetet i sigurt për t'u ekzekutuar përsëri; ndryshimet që fshijnë ose
+riemërtojnë kolona/tabela duhen shkruar si migrime të kujdesshme.
+
+Dosja duhet të publikohet e plotë — sidomos `lib/`, ku rrinë dy bibliotekat.
 
 > **Pse `lib/` dhe jo CDN:** bibliotekat (Supabase dhe gjeneruesi i QR-it) janë
 > brenda dosjes me qëllim. Nëse një CDN bllokohet ose interneti është i dobët në
