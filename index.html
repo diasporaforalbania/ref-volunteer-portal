@@ -45,6 +45,7 @@
   label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#27484a}
   input,textarea,select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;
         font-size:15px;font-family:inherit;background:#fff;color:var(--ink)}
+  input:disabled,textarea:disabled{background:#eef2f2;color:#7c9195;cursor:not-allowed}
   textarea{min-height:86px;resize:vertical}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:9px;
        padding:11px 16px;font-size:14.5px;font-weight:600;cursor:pointer;background:var(--teal);color:#fff}
@@ -240,11 +241,28 @@ const truncate = (s,n) => { s=String(s||''); return s.length>n ? s.slice(0,n-1)+
 const nf = n => (Number(n)||0).toLocaleString('sq-AL');
 
 const ROLES = {
-  ndihmes:     'Ndihmës',
-  mbledhes:    'Mbledhës i autorizuar',
-  koordinator: 'Koordinator',
-  jurist:      'Jurist',
-  admin:       'Qendra (admin)'
+  ndihmes:          'Ndihmës',
+  mbledhes:         'Mbledhës i autorizuar',
+  koordinator:      'Koordinator',
+  jurist:           'Jurist',
+  logjistike:       'Logjistikë',
+  burime_njerezore: 'Burime Njerëzore',
+  pr_edukim:        'PR & Edukim',
+  it:               'IT',
+  admin:            'Qendra (admin)'
+};
+/* Përshkrimi i shkurtër i çdo roli — del te dropdown-i i regjistrimit, që
+   dikush që nuk e njeh strukturën e fushatës të dijë çfarë të zgjedhë.
+   'admin' qëllimisht nuk është këtu: s'zgjidhet kurrë vetë, e cakton admini. */
+const ROLE_DESC = {
+  ndihmes:          'Ndihmon në terren me mbledhjen e nënshkrimeve dhe detyra të tjera bazë.',
+  mbledhes:         'I trajnuar dhe i autorizuar zyrtarisht të mbledhë nënshkrime në terren.',
+  koordinator:      'Drejton një ose disa zona, organizon turnet dhe njerëzit e terrenit.',
+  jurist:           'Ndihmon me pyetje ligjore dhe siguron që mbledhja të jetë brenda ligjit.',
+  logjistike:       'Kujdeset për materialet, transportin dhe organizimin praktik të fushatës.',
+  burime_njerezore: 'Organizon ekipet e vullnetarëve, rekrutimin dhe mirëqenien e tyre.',
+  pr_edukim:        'Kujdeset për komunikimin publik dhe informimin e qytetarëve.',
+  it:               'Mirëmban portalin, të dhënat dhe sistemet digjitale të fushatës.'
 };
 const KINDS = {
   incident: { ic:'🚨', lb:'Incident',        d:'Pengesë, presion, konflikt në terren' },
@@ -360,6 +378,11 @@ let STATS = {};
 let active = 'home';
 const isStaff = () => ME && ['koordinator','jurist','admin'].includes(ME.role);
 const isAdmin = () => ME && ME.role === 'admin';
+const isField = () => ME && ['ndihmes','mbledhes'].includes(ME.role);
+
+// Gjendja e faqes "Karta ime": të dhënat private, njësitë (për zgjedhjen e
+// zonës së re) dhe kërkesat e mia në pritje, sipas llojit.
+let BADGE = { priv:null, units:[], reqs:{} };
 
 function configMissing(){ return SUPABASE_URL.startsWith('PASTE_') || SUPABASE_ANON_KEY.startsWith('PASTE_'); }
 
@@ -428,6 +451,12 @@ function renderAuth(mode){
       <input id="a_city" type="text" autocomplete="address-level2" placeholder="p.sh. Tiranë">
       <label>Telefoni</label>
       <input id="a_phone" type="tel" autocomplete="tel" placeholder="+355 …">
+      <label>Cilin rol do të kontribuosh? *</label>
+      <select id="a_role" onchange="$('a_role_hint').textContent = ROLE_DESC[this.value] || ''">
+        ${Object.keys(ROLE_DESC).map(k=>`<option value="${k}">${esc(ROLES[k])}</option>`).join('')}
+      </select>
+      <p class="hint" id="a_role_hint">${esc(ROLE_DESC.ndihmes)}</p>
+      <p class="hint">Kjo është vetëm preferenca juaj — qendra e konfirmon rolin final kur ju miraton.</p>
     ` : ''}
 
     <label>Email *</label>
@@ -467,13 +496,14 @@ async function doSignup(){
   const password = $('a_pass').value;
   const city = $('a_city').value.trim();
   const phone = $('a_phone').value.trim();
+  const requested_role = $('a_role').value;
   if(!full_name) return fail('Shkruani emrin dhe mbiemrin.');
   if(!email || !password) return fail('Plotësoni email-in dhe fjalëkalimin.');
   if(password.length < 8) return fail('Fjalëkalimi duhet të ketë të paktën 8 karaktere.');
 
   $('a_btn').disabled = true;
   const { data, error } = await sb.auth.signUp({
-    email, password, options:{ data:{ full_name, city, phone } }
+    email, password, options:{ data:{ full_name, city, phone, requested_role } }
   });
   $('a_btn').disabled = false;
   if(error) return fail(error.message);
@@ -571,7 +601,7 @@ function tabList(){
     ['materials','Materiale'], ['reports','Raportimet'], ['badge','Karta ime']
   ];
   if(isStaff()) t.push(['panel','Paneli']);
-  if(isAdmin()) t.push(['history','Historiku']);
+  if(isAdmin()) t.push(['admin','Admin'], ['history','Historiku']);
   return t;
 }
 
@@ -596,10 +626,10 @@ function renderApp(){
 
 function buildTabs(){
   const open = isStaff() ? (STATS.open_reports||0) : 0;
-  const pend = isStaff() ? (STATS.pending||0) : 0;
+  const adm  = isAdmin() ? ((STATS.pending||0) + (STATS.pending_requests||0)) : 0;
   $('tabs').innerHTML = tabList().map(([k,l])=>{
     let b = '';
-    if(k==='panel' && pend) b = `<span class="badge">${pend}</span>`;
+    if(k==='admin' && adm) b = `<span class="badge">${adm}</span>`;
     if(k==='reports' && open) b = `<span class="badge">${open}</span>`;
     return `<button class="tab ${k===active?'active':''}" onclick="go('${k}')">${l}${b}</button>`;
   }).join('');
@@ -611,7 +641,7 @@ function go(k){
   buildTabs();
   window.scrollTo(0,0);
   ({ home:vHome, news:vNews, field:vField, shifts:vShifts, materials:vMaterials,
-     reports:vReports, badge:vBadge, panel:vPanel, history:vHistory }[k])();
+     reports:vReports, badge:vBadge, panel:vPanel, admin:vAdmin, history:vHistory }[k])();
 }
 const loading = () => { $('view').innerHTML = `<div class="empty">Po ngarkohet…</div>`; };
 
@@ -1587,10 +1617,16 @@ async function noteReport(id){
    ============================================================================ */
 async function vBadge(){
   loading();
-  const [{ data:priv }, { data:camp }] = await Promise.all([
+  const [{ data:priv }, { data:camp }, { data:reqs }, { data:units }] = await Promise.all([
     sb.from('volunteer_private').select('*').eq('id', ME.id).maybeSingle(),
-    sb.from('campaign').select('*').eq('id',1).maybeSingle()
+    sb.from('campaign').select('*').eq('id',1).maybeSingle(),
+    sb.from('change_requests').select('*').eq('volunteer_id', ME.id).eq('status','pending'),
+    sb.from('units').select('id,code,name,region,territory').order('code')
   ]);
+  BADGE.priv = priv; BADGE.units = units || [];
+  BADGE.reqs = {};
+  (reqs||[]).forEach(r => BADGE.reqs[r.kind] = r);
+
   const verifyUrl = location.origin + location.pathname + '?v=' + encodeURIComponent(ME.volunteer_code);
   const photo = photoUrl(ME.photo_path);
 
@@ -1632,27 +1668,48 @@ async function vBadge(){
       <div class="no-print">
         <div class="card" style="margin-bottom:14px">
           <h3>Fotoja</h3>
-          <div class="meta">Portret i qartë i fytyrës, si në dokument. Zvogëlohet automatikisht.</div>
-          <input id="ph_file" type="file" accept="image/*" capture="user" style="margin-top:9px">
-          <div class="row" style="margin-top:11px">
-            <button class="btn" id="ph_btn" onclick="uploadPhoto()">Ngarko foton</button>
-            ${ME.photo_path?`<button class="btn ghost sm" onclick="removePhoto()">Hiq foton</button>`:''}
-          </div>
+          ${ME.photo_path ? `
+            <div class="meta">Fotoja ngarkohet vetëm një herë. Për ta ndryshuar, bëhet kërkesë te admini.</div>
+            ${BADGE.reqs.photo
+              ? `<div class="notice warn" style="margin-top:10px">Kërkesa juaj për ndryshim fotoje është në shqyrtim.</div>`
+              : `<button class="btn sec" style="margin-top:11px" onclick="openChangeRequest('photo')">Kërko ndryshim të fotos</button>`}
+          ` : `
+            <div class="meta">Portret i qartë i fytyrës, si në dokument. Zvogëlohet automatikisht.
+              <b>Kujdes:</b> ngarkohet vetëm një herë — më pas ndryshohet vetëm me kërkesë te admini.</div>
+            <input id="ph_file" type="file" accept="image/*" capture="user" style="margin-top:9px">
+            <div class="row" style="margin-top:11px">
+              <button class="btn" id="ph_btn" onclick="uploadPhoto()">Ngarko foton</button>
+            </div>
+          `}
         </div>
 
         <div class="card">
           <h3>Të dhënat e mia</h3>
+          <div class="meta">Këto u konfirmuan në regjistrim dhe nuk redaktohen më direkt këtu.</div>
           <label>Emri dhe mbiemri</label>
-          <input id="pf_name" value="${esc(ME.full_name||'')}">
+          <input value="${esc(ME.full_name||'')}" disabled>
           <label>Qyteti / zona</label>
-          <input id="pf_city" value="${esc(ME.city||'')}">
+          <input value="${esc(ME.city||'')}" disabled>
           <label>Telefoni <span class="meta">(e sheh vetëm qendra)</span></label>
-          <input id="pf_phone" type="tel" value="${esc(priv?.phone||'')}">
+          <input value="${esc(priv?.phone||'')}" disabled>
           <label>Kontakt urgjence <span class="meta">(e sheh vetëm qendra)</span></label>
-          <input id="pf_emerg" value="${esc(priv?.emergency_contact||'')}" placeholder="emër dhe numër">
-          <div style="margin-top:13px"><button class="btn" id="pf_btn" onclick="saveProfile()">Ruaj</button></div>
-          <p class="hint">Rolin dhe njësinë i cakton koordinatori.</p>
+          <input value="${esc(priv?.emergency_contact||'')}" disabled>
+          ${BADGE.reqs.profile
+            ? `<div class="notice warn" style="margin-top:12px">Kërkesa juaj për ndryshim të dhënash është në shqyrtim.</div>`
+            : `<div style="margin-top:13px"><button class="btn sec" onclick="openChangeRequest('profile')">Kërko ndryshim të të dhënave</button></div>`}
         </div>
+
+        ${isField() ? `
+        <div class="card" style="margin-top:14px">
+          <h3>Zona ime</h3>
+          ${ME.unit_id ? `
+            <div class="meta">Jeni te <b>${esc(ME.units?.code||'')} · ${esc(ME.units?.name||'')}</b>.
+              Zonën e ndryshon vetëm admini, me kërkesë.</div>
+            ${BADGE.reqs.zone
+              ? `<div class="notice warn" style="margin-top:10px">Kërkesa juaj për ndryshim zone është në shqyrtim.</div>`
+              : `<button class="btn sec" style="margin-top:11px" onclick="openChangeRequest('zone')">Kërko ndryshim zone</button>`}
+          ` : `<div class="meta">Ende s'jeni caktuar në asnjë zonë — ju cakton koordinatori ose qendra.</div>`}
+        </div>` : ''}
       </div>
     </div>`;
 
@@ -1672,42 +1729,70 @@ async function uploadPhoto(){
   const path = `${ME.id}/id-${Date.now()}.jpg`;
   const { error } = await sb.storage.from('vol-photos').upload(path, file, { contentType:'image/jpeg' });
   if(error){ btn.disabled=false; btn.textContent='Ngarko foton'; return fail(error); }
-  const old = ME.photo_path;
   const { error:e2 } = await sb.from('volunteers').update({ photo_path:path }).eq('id', ME.id);
   btn.disabled = false; btn.textContent = 'Ngarko foton';
   if(e2) return fail(e2);
-  if(old) await sb.storage.from('vol-photos').remove([old]);
   ME.photo_path = path;
-  toast('Fotoja u përditësua.');
+  toast('Fotoja u ngarkua.');
   renderApp();   // rifreskon edhe foton te koka e faqes; `active` mbetet 'badge'
 }
 
-async function removePhoto(){
-  if(!confirm('Të hiqet fotoja nga karta?')) return;
-  const old = ME.photo_path;
-  const { error } = await sb.from('volunteers').update({ photo_path:null }).eq('id', ME.id);
-  if(error) return fail(error);
-  if(old) await sb.storage.from('vol-photos').remove([old]);
-  ME.photo_path = null;
-  renderApp();
+/* ---- kërkesat për ndryshim: foto / të dhëna / zonë — vetëm admini i shqyrton ---- */
+function openChangeRequest(kind){
+  const title = { photo:'Kërko ndryshim të fotos', profile:'Kërko ndryshim të të dhënave',
+                  zone:'Kërko ndryshim zone' }[kind];
+  const body = {
+    photo: `<p class="meta">Kur admini e miraton, fotoja juaj aktuale fshihet dhe mund të ngarkoni një të re.</p>
+      <label>Përse duhet ndryshuar? (opsionale)</label>
+      <textarea id="crq_note" placeholder="p.sh. fotoja është e paqartë"></textarea>`,
+    profile: `<p class="meta">Shkruani vlerat e reja. Zbatohen vetëm pasi t'i miratojë admini.</p>
+      <label>Emri dhe mbiemri</label><input id="crq_name" value="${esc(ME.full_name||'')}">
+      <label>Qyteti / zona</label><input id="crq_city" value="${esc(ME.city||'')}">
+      <label>Telefoni</label><input id="crq_phone" type="tel" value="${esc(BADGE.priv?.phone||'')}">
+      <label>Kontakt urgjence</label><input id="crq_emerg" value="${esc(BADGE.priv?.emergency_contact||'')}">
+      <label>Shënim (opsionale)</label><textarea id="crq_note" placeholder="çfarë ndryshoi dhe pse"></textarea>`,
+    zone: `<p class="meta">Zona aktuale: <b>${esc(ME.units?.code||'—')} · ${esc(ME.units?.name||'')}</b></p>
+      <label>Zona e re</label>
+      <select id="crq_unit">
+        ${BADGE.units.filter(u=>u.id!==ME.unit_id).map(u=>`<option value="${u.id}">
+          ${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+      </select>
+      <label>Përse doni ta ndryshoni? (opsionale)</label>
+      <textarea id="crq_note" placeholder="p.sh. jam transferuar në një zonë tjetër"></textarea>`
+  }[kind];
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="modal"><div class="modal">
+    <button class="modal-x" onclick="closeModal()">✕</button>
+    <h3>${title}</h3>
+    ${body}
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="crq_btn" onclick="sendChangeRequest('${kind}')">Dërgo kërkesën</button>
+      <button class="btn ghost" onclick="closeModal()">Anulo</button>
+    </div>
+  </div></div>`);
 }
 
-async function saveProfile(){
-  const full_name = $('pf_name').value.trim();
-  if(!full_name) return fail('Emri nuk mund të jetë bosh.');
-  const city = $('pf_city').value.trim() || null;
-  $('pf_btn').disabled = true;
-  const { error } = await sb.from('volunteers').update({ full_name, city }).eq('id', ME.id);
-  if(error){ $('pf_btn').disabled = false; return fail(error); }
-  const { error:e2 } = await sb.from('volunteer_private').upsert({
-    id: ME.id, phone: $('pf_phone').value.trim() || null,
-    emergency_contact: $('pf_emerg').value.trim() || null
-  });
-  $('pf_btn').disabled = false;
-  if(e2) return fail(e2);
-  ME.full_name = full_name; ME.city = city;
-  toast('U ruajt.');
-  renderApp();
+async function sendChangeRequest(kind){
+  let payload = {};
+  if(kind === 'profile'){
+    const full_name = $('crq_name').value.trim();
+    if(!full_name) return fail('Emri nuk mund të jetë bosh.');
+    payload = { full_name, city: $('crq_city').value.trim(),
+                phone: $('crq_phone').value.trim(), emergency_contact: $('crq_emerg').value.trim() };
+  } else if(kind === 'zone'){
+    const unit_id = $('crq_unit')?.value;
+    if(!unit_id) return fail('Zgjidhni zonën e re.');
+    payload = { unit_id };
+  }
+  const note = $('crq_note').value.trim();
+  const btn = $('crq_btn'); btn.disabled = true;
+  const { error } = await sb.rpc('submit_change_request', { p_kind:kind, p_payload:payload, p_note: note || null });
+  btn.disabled = false;
+  if(error) return fail(error);
+  closeModal();
+  toast('Kërkesa u dërgua te admini.');
+  vBadge();
 }
 
 /* ============================================================================
@@ -1735,29 +1820,14 @@ async function vPanel(){
 
   $('view').innerHTML = `
     <h2 class="sec">Paneli</h2>
-    <p class="sub">Miratimi i vullnetarëve, njësitë dhe parametrat e fushatës.</p>
+    <p class="sub">Njësitë, struktura dhe parametrat e fushatës.
+      ${isAdmin() ? '' : ' Miratimi i vullnetarëve të rinj bëhet vetëm nga admini, te faqja "Admin".'}</p>
 
     <div class="grid g4" style="margin-bottom:18px">
-      ${statCard('var(--amber)', nf(pending.length), 'Në pritje')}
+      ${statCard('var(--amber)', nf(pending.length), 'Në pritje (te Admin)')}
       ${statCard('var(--teal)', nf(stats.volunteers||0), 'Të miratuar')}
       ${statCard('var(--green)', nf(stats.open_units||0), 'Njësi të hapura')}
       ${statCard('var(--red)', nf(stats.open_reports||0), 'Raportime të hapura')}
-    </div>
-
-    <div class="card" style="margin-bottom:16px">
-      <h3>Në pritje të miratimit <span class="pill ${pending.length?'amber':'gray'}">${pending.length}</span></h3>
-      <div class="meta">Miratoni vetëm ata që i njeh koordinatori i njësisë.</div>
-      <div style="margin-top:10px">
-        ${pending.length ? pending.map(v=>`
-          <div class="file-item">
-            ${avatarHtml(v.photo_path, v.full_name)}
-            <div style="flex:1;min-width:0">
-              <b>${esc(v.full_name||'(pa emër)')}</b> <span class="meta">${esc(v.volunteer_code)}</span>
-              <div class="meta">${esc(v.city||'—')} · regjistruar ${ago(v.created_at)}</div></div>
-            <button class="btn green sm" onclick="setStatus('${v.id}','approved')">Mirato</button>
-            <button class="btn ghost sm" onclick="setStatus('${v.id}','suspended')">Refuzo</button>
-          </div>`).join('') : '<div class="empty">Asnjë kërkesë në pritje.</div>'}
-      </div>
     </div>
 
     <div class="card" style="margin-bottom:16px">
@@ -1849,6 +1919,146 @@ async function vPanel(){
           <button class="btn" onclick="saveCampaign()">Ruaj</button>
         </div>
       </div>` : ''}`;
+}
+
+/* ============================================================================
+   ADMIN — vetëm admini. Miratimi i vullnetarëve të rinj dhe kërkesat për
+   ndryshim (foto, të dhëna profili, zonë) që vijnë nga "Karta ime".
+   ============================================================================ */
+async function vAdmin(){
+  if(!isAdmin()) return go('home');
+  loading();
+  const [vols, priv, reqs, units] = await Promise.all([
+    sb.from('volunteers').select('*').order('created_at',{ascending:false}),
+    sb.from('volunteer_private').select('*'),
+    sb.from('change_requests').select('*').eq('status','pending').order('created_at'),
+    sb.from('units').select('id,code,name').order('code')
+  ]);
+  const privById = Object.fromEntries((priv.data||[]).map(p=>[p.id,p]));
+  const rows = (vols.data||[]).map(v => ({ ...v, priv: privById[v.id] || {} }));
+  const pending = rows.filter(v => v.status === 'pending');
+  const byId = Object.fromEntries(rows.map(v => [v.id, v]));
+  const uById = Object.fromEntries((units.data||[]).map(u => [u.id, u]));
+  const reqRows = reqs.data || [];
+  const byKind = k => reqRows.filter(r => r.kind === k);
+  await loadStats(); buildTabs();
+
+  $('view').innerHTML = `
+    <h2 class="sec">Admin</h2>
+    <p class="sub">Miratimi i vullnetarëve të rinj dhe kërkesat për ndryshim. Kjo faqe e sheh vetëm admini.</p>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Vullnetarë të rinj <span class="pill ${pending.length?'amber':'gray'}">${pending.length}</span></h3>
+      <div class="meta">Zgjidhni rolin (parazgjedhur me atë të kërkuar) dhe miratoni ose refuzoni.</div>
+      <div style="margin-top:10px">
+        ${pending.length ? pending.map(v=>`
+          <div class="file-item" style="align-items:flex-start">
+            ${avatarHtml(v.photo_path, v.full_name)}
+            <div style="flex:1;min-width:0">
+              <b>${esc(v.full_name||'(pa emër)')}</b> <span class="meta">${esc(v.volunteer_code)}</span>
+              <div class="meta">${esc(v.city||'—')} · regjistruar ${ago(v.created_at)}
+                · ka kërkuar: <b>${esc(ROLES[v.requested_role]||v.requested_role||'—')}</b></div></div>
+            <select id="ad_role_${v.id}" style="width:auto;min-width:170px;font-size:12.5px;padding:6px">
+              ${Object.keys(ROLES).filter(k=>k!=='admin').map(k=>
+                `<option value="${k}" ${((v.requested_role||'ndihmes')===k)?'selected':''}>${esc(ROLES[k])}</option>`).join('')}
+            </select>
+            <button class="btn green sm" onclick="decidePending('${v.id}', true)">Mirato</button>
+            <button class="btn ghost sm" onclick="decidePending('${v.id}', false)">Refuzo</button>
+          </div>`).join('') : '<div class="empty">Asnjë vullnetar në pritje.</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Kërkesa për ndryshim foto <span class="pill ${byKind('photo').length?'amber':'gray'}">${byKind('photo').length}</span></h3>
+      <div style="margin-top:10px">
+        ${byKind('photo').length ? byKind('photo').map(r=>reqRowHtml(r, byId[r.volunteer_id], uById)).join('')
+          : '<div class="empty">Asnjë kërkesë.</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Kërkesa për ndryshim të dhënash <span class="pill ${byKind('profile').length?'amber':'gray'}">${byKind('profile').length}</span></h3>
+      <div style="margin-top:10px">
+        ${byKind('profile').length ? byKind('profile').map(r=>reqRowHtml(r, byId[r.volunteer_id], uById)).join('')
+          : '<div class="empty">Asnjë kërkesë.</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Kërkesa për ndryshim zone <span class="pill ${byKind('zone').length?'amber':'gray'}">${byKind('zone').length}</span></h3>
+      <div style="margin-top:10px">
+        ${byKind('zone').length ? byKind('zone').map(r=>reqRowHtml(r, byId[r.volunteer_id], uById)).join('')
+          : '<div class="empty">Asnjë kërkesë.</div>'}
+      </div>
+    </div>`;
+}
+
+/* Rreshti i vetëm i një kërkese, me krahasimin "aktual → i kërkuar" kur ka
+   dallim, që admini ta shohë çka po ndryshon pa u dashur t'i besojë verbërisht. */
+function diffLine(label, oldV, newV){
+  oldV = oldV || '—'; newV = (newV==null || newV==='') ? '—' : newV;
+  if(String(oldV).trim() === String(newV).trim()) return `<div class="meta">${esc(label)}: ${esc(oldV)}</div>`;
+  return `<div class="meta">${esc(label)}: ${esc(oldV)} → <b>${esc(newV)}</b></div>`;
+}
+
+function reqRowHtml(r, v, uById){
+  const name = v?.full_name || '(pa emër)';
+  let detail = '';
+  if(r.kind === 'profile'){
+    detail = diffLine('Emri', v?.full_name, r.payload.full_name)
+      + diffLine('Qyteti', v?.city, r.payload.city)
+      + diffLine('Telefoni', v?.priv?.phone, r.payload.phone)
+      + diffLine('Kontakt urgjence', v?.priv?.emergency_contact, r.payload.emergency_contact);
+  } else if(r.kind === 'zone'){
+    const from = uById[v?.unit_id], to = uById[r.payload.unit_id];
+    detail = `<div class="meta">Zona: ${from ? esc(from.code+' · '+from.name) : '—'}
+      → <b>${to ? esc(to.code+' · '+to.name) : '—'}</b></div>`;
+  } else if(r.kind === 'photo'){
+    detail = `<div class="meta">Ka foto aktuale — miratimi e fshin dhe lejon ngarkim të ri.</div>`;
+  }
+  return `<div class="file-item" style="align-items:flex-start">
+    ${avatarHtml(v?.photo_path, name)}
+    <div style="flex:1;min-width:0">
+      <b>${esc(name)}</b> <span class="meta">${esc(v?.volunteer_code||'')}</span>
+      ${detail}
+      ${r.note ? `<div class="meta">Shënim: ${esc(r.note)}</div>` : ''}
+      <div class="meta">${ago(r.created_at)}</div>
+    </div>
+    <button class="btn green sm" onclick="reviewRequest('${r.id}', true)">Mirato</button>
+    <button class="btn ghost sm" onclick="reviewRequest('${r.id}', false)">Refuzo</button>
+  </div>`;
+}
+
+async function decidePending(id, approve){
+  if(!confirm(approve ? 'Të miratohet ky vullnetar?' : 'Të refuzohet ky vullnetar?')) return;
+  const sel = $('ad_role_'+id);
+  const role = approve && sel ? sel.value : null;
+  const { error } = await sb.rpc('vol_decide_pending', { p_id:id, p_approve:approve, p_role:role });
+  if(error) return fail(error);
+  toast(approve ? 'Vullnetari u miratua.' : 'Vullnetari u refuzua.');
+  vAdmin();
+}
+
+async function reviewRequest(id, approve){
+  if(!confirm(approve ? 'Të miratohet kjo kërkesë?' : 'Të refuzohet kjo kërkesë?')) return;
+  let note = null;
+  if(!approve){
+    note = prompt('Arsyeja e refuzimit (opsionale):');
+    if(note === null) return;
+  }
+  if(approve){
+    // Fotoja e vjetër fshihet te storage KËTU, para se `review_change_request`
+    // të zbrazë `photo_path` — njësoj si `removePhoto` bënte më parë vetë.
+    const { data:req } = await sb.from('change_requests').select('*').eq('id', id).maybeSingle();
+    if(req?.kind === 'photo'){
+      const { data:vol } = await sb.from('volunteers').select('photo_path').eq('id', req.volunteer_id).maybeSingle();
+      if(vol?.photo_path) await sb.storage.from('vol-photos').remove([vol.photo_path]);
+    }
+  }
+  const { error } = await sb.rpc('review_change_request', { p_id:id, p_approve:approve, p_note:note });
+  if(error) return fail(error);
+  toast(approve ? 'Kërkesa u miratua.' : 'Kërkesa u refuzua.');
+  vAdmin();
 }
 
 /* ============================================================================
