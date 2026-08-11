@@ -54,6 +54,12 @@
   label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#27484a}
   input,textarea,select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;
         font-size:15px;font-family:inherit;background:#fff;color:var(--ink)}
+  /* Lartësi e përbashkët. Vetvetiu një <select> del më i ulët se një
+     <input type=date/time/number>, sepse shfletuesi u fut brenda kontrollet e
+     veta (kalendar, shigjeta). Te një rresht formulari me `align-items:flex-end`
+     kjo ngre e ul etiketat sipas fushës — "Njësia" del më poshtë se "Data".
+     Një lartësi e vetme i rreshton të gjitha. */
+  input:not([type="file"]),select{height:42px}
   input:disabled,textarea:disabled{background:#eef2f2;color:#7c9195;cursor:not-allowed}
   textarea{min-height:86px;resize:vertical}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:9px;
@@ -78,12 +84,25 @@
   .bar{background:#e6eef0;border-radius:8px;height:14px;overflow:hidden;position:relative;margin:8px 0}
   .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--aqua));transition:width .4s}
   .bar.big{height:30px;border-radius:10px}
-  /* Vendet e një turni: një shirit i vogël për çdo person të kërkuar. Sa më
-     shumë të regjistruar, aq më shumë shirita ngjyrosen — sa veta mungojnë
-     shihet me një vështrim, pa u dashur të lexohet numri. */
-  .slots{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
-  .slot{width:30px;height:9px;border-radius:5px;background:#e6eef0;flex:none}
-  .slot.on{background:linear-gradient(90deg,var(--teal),var(--aqua))}
+  /* Vendet e një turni: një rreth për çdo person të kërkuar. Të regjistruarit
+     dalin me fytyrën e tyre, vendet e lira rrinë bosh me vijë të ndërprerë —
+     sa veta mungojnë shihet me një vështrim, pa u dashur të lexohet numri.
+     Klikimi mbi një fytyrë hap emrin dhe rolin. */
+  .slots{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center}
+  .slot-p{position:relative;display:inline-flex;flex:none;cursor:pointer}
+  .slot-av{width:32px;height:32px;border-radius:50%;object-fit:cover;flex:none;
+    background:#eef7f6;border:2px solid var(--teal-l)}
+  .slot-p.on .slot-av{border-color:var(--amber);box-shadow:0 0 0 3px rgba(217,119,6,.32)}
+  .slot-e{width:32px;height:32px;border-radius:50%;flex:none;
+    border:2px dashed var(--line);background:#f7fbfb}
+  .slot-pop{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+    background:#fff;border-radius:11px;box-shadow:0 8px 26px rgba(6,40,48,.3);
+    padding:8px 12px;white-space:nowrap;z-index:6;text-align:left;cursor:default}
+  .slot-pop b{display:block;font-size:13.5px;line-height:1.3}
+  .slot-pop .meta{font-size:12px}
+  /* Shigjeta e vogël nga kutia drejt fytyrës. */
+  .slot-pop::after{content:'';position:absolute;top:100%;left:50%;margin-left:-6px;
+    border:6px solid transparent;border-top-color:#fff}
   .list{list-style:none;margin:0;padding:0}
   .list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
   .list li:last-child{border-bottom:none}
@@ -670,6 +689,7 @@ function buildTabs(){
 
 function go(k){
   destroyMap();                       // harta rri vetëm te Terreni
+  SLOT_POP = null;                    // asnjë kuti emri e mbetur hapur
   active = k;
   buildTabs();
   window.scrollTo(0,0);
@@ -978,23 +998,60 @@ async function vField(){
   initMap(now.filter(c => c.lat != null && c.lng != null));
 }
 
-/* Vendet e turnit si shirita: sa veta janë kërkuar, sa janë mbushur. Mbi një
-   numër të caktuar shiritash figura pushon së lexuari — atje kthehemi te teksti. */
-const SLOTS_MAX = 24;
-function slotsHtml(taken, capacity){
-  taken = Number(taken) || 0;
-  capacity = Number(capacity) || 0;
-  if(capacity <= 0)
-    return `<div class="meta" style="margin-top:7px">${nf(taken)} të regjistruar · pa kufi vendesh</div>`;
-  const on = Math.min(taken, capacity);
-  const bars = capacity <= SLOTS_MAX
-    ? `<div class="slots">${Array.from({length:capacity},
-        (_,i)=>`<span class="slot${i<on?' on':''}"></span>`).join('')}</div>`
-    : `<div class="bar" style="margin-top:9px"><span style="width:${on/capacity*100}%"></span></div>`;
-  return `${bars}
-    <div class="meta" style="margin-top:5px">${on} nga ${capacity} vende të zëna${
-      on >= capacity ? ' · plot' : ` · edhe ${capacity-on} ${capacity-on===1?'vend':'vende'}`}</div>`;
+/* ---- vendet e turnit: fytyrat e të regjistruarve + vendet bosh ----
+   `SLOTS` mban të dhënat e çdo turni në ekran, që klikimi mbi një fytyrë të
+   rivizatojë vetëm atë kuti e jo gjithë faqen. Mbi këtë numër rrathësh figura
+   pushon së lexuari, ndaj vendet e mbetura thuhen me fjalë. */
+const SLOTS_MAX = 14;
+const SLOTS = {};
+let SLOT_POP = null;              // "<id i turnit>:<indeksi>" i hapur, ose null
+
+function slotsHtml(sid, signed, capacity){
+  SLOTS[sid] = { signed: Array.isArray(signed) ? signed : [],
+                 capacity: Math.max(0, Number(capacity) || 0) };
+  return `<div class="slots" id="slots_${sid}">${slotsInner(sid)}</div>`;
 }
+
+function slotsInner(sid){
+  const { signed, capacity } = SLOTS[sid] || { signed:[], capacity:0 };
+  const shown = signed.slice(0, SLOTS_MAX);
+  const holes = Math.max(0, Math.min(capacity - signed.length, SLOTS_MAX - shown.length));
+  const hidden = signed.length - shown.length;
+
+  const faces = shown.map((p,i)=>{
+    const open = SLOT_POP === sid+':'+i;
+    return `<span class="slot-p${open?' on':''}" onclick="slotPop('${sid}',${i})"
+                  title="${esc(p.name||'Vullnetar')}">
+      ${avatarHtml(p.photo, p.name, 'slot-av')}
+      ${open ? `<span class="slot-pop"><b>${esc(p.name||'Vullnetar')}</b>
+          <span class="meta">${esc(ROLES[p.role] || p.role || '—')}</span></span>` : ''}
+    </span>`;
+  }).join('');
+
+  const label = capacity > 0
+    ? `${signed.length} nga ${capacity} vende të zëna`
+      + (signed.length >= capacity ? ' · plot'
+         : ` · edhe ${capacity-signed.length} ${capacity-signed.length===1?'vend':'vende'}`)
+    : `${signed.length} të regjistruar · pa kufi vendesh`;
+
+  return faces
+    + Array.from({length:holes}, ()=>`<span class="slot-e" title="vend i lirë"></span>`).join('')
+    + `<span class="meta" style="margin-left:3px">${hidden?`+${hidden} · `:''}${label}</span>`;
+}
+
+function slotPop(sid, i){
+  const key = sid+':'+i;
+  SLOT_POP = (SLOT_POP === key) ? null : key;
+  redrawSlots();
+}
+function redrawSlots(){
+  Object.keys(SLOTS).forEach(id => { const el = $('slots_'+id); if(el) el.innerHTML = slotsInner(id); });
+}
+/* Klikimi diku tjetër e mbyll kutinë. Ngjitet pas klikimit që e hapi, ndaj
+   kontrollohet nëse ai ndodhi brenda një fytyre. */
+document.addEventListener('click', e => {
+  if(SLOT_POP && !e.target?.closest?.('.slot-p')){ SLOT_POP = null; redrawSlots(); }
+});
 
 /* Karta e sipërme e Terrenit. Tri gjendje, sipas asaj që i duhet personit tani:
    jam brenda një turni · kam një turn të radhës · s'kam asgjë të planifikuar. */
@@ -1077,7 +1134,7 @@ function fieldTopCard(cur, sh, qendra){
       </div>
       <div class="meta" style="margin-top:5px">${esc(sh.unit_name||'')}${sh.notes?' · '+esc(sh.notes):''}
         · e hapi ${esc(sh.created_by_name||'—')}</div>
-      ${slotsHtml(sh.signed_count, sh.capacity)}
+      ${slotsHtml(sh.id, sh.signed, sh.capacity)}
       ${state}
 
       ${over && sh.i_am_lead ? `
@@ -1454,7 +1511,6 @@ async function vShifts(){
 
 function shiftRow(s){
   const full  = s.capacity > 0 && s.signed_count >= s.capacity;
-  const names = (s.signed_names || []).filter(Boolean);
   const t0 = new Date(s.starts_at).getTime(), t1 = new Date(s.ends_at).getTime();
   const running = !s.closed_at && t0 <= Date.now() && Date.now() <= t1;
   const over    = !s.closed_at && Date.now() > t1;
@@ -1476,10 +1532,9 @@ function shiftRow(s){
         <div class="meta" style="margin-top:3px">
           E hapi ${esc(s.created_by_name||'—')}${s.created_by_role
             ? ' · '+esc(ROLES[s.created_by_role]||s.created_by_role) : ''}
-          · ${s.signed_count} ${s.capacity>0?'nga '+s.capacity:''} të regjistruar${
-            names.length ? ': '+esc(truncate(names.join(', '), 90)) : ''}
         </div>
-        ${s.checked_in_count ? `<div class="meta" style="margin-top:3px">
+        ${slotsHtml(s.id, s.signed, s.capacity)}
+        ${s.checked_in_count ? `<div class="meta" style="margin-top:6px">
           ${s.checked_in_count} check-in${s.closed_at
             ? ` · <b>${nf(s.signatures)}</b> nënshkrime` : ''}</div>` : ''}
       </div>

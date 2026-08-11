@@ -1145,15 +1145,21 @@ returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
                starts_at timestamptz, ends_at timestamptz, capacity integer,
                notes text, created_by uuid, created_by_name text, created_by_role text,
                closed_at timestamptz, unit_is_open boolean,
-               signed_count bigint, signed_names text[], i_am_in boolean,
+               signed_count bigint, signed jsonb, i_am_in boolean,
                i_am_on_team boolean, i_can_manage boolean,
                checked_in_count bigint, signatures integer)
 language sql stable security definer set search_path = public as $$
   select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.capacity,
          s.notes, s.created_by, s.created_by_name, k.role, s.closed_at, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = s.id),
-         (select coalesce(array_agg(coalesce(nullif(v.full_name,''), g.volunteer_name)
-                                    order by g.created_at), '{}'::text[])
+         -- Kush është regjistruar: emri, roli dhe fotoja, që orari t'i tregojë
+         -- si fytyra. Vetëm këto tri fusha — asgjë tjetër personale, njësoj si
+         -- te `field_active()`.
+         (select coalesce(jsonb_agg(jsonb_build_object(
+                   'id',    g.volunteer_id,
+                   'name',  coalesce(nullif(v.full_name,''), g.volunteer_name, 'Vullnetar'),
+                   'role',  v.role,
+                   'photo', v.photo_path) order by g.created_at), '[]'::jsonb)
             from public.shift_signups g
             left join public.volunteers v on v.id = g.volunteer_id
            where g.shift_id = s.id),
@@ -1185,11 +1191,13 @@ grant execute on function public.shift_list(timestamptz) to authenticated;
 -- Udhëheqësi i sheh edhe turnet e veta që kaluan pa u mbyllur (deri 7 ditë):
 -- pa këtë, një turn i harruar do të zhdukej nga ekrani dhe nënshkrimet e tij
 -- nuk do të regjistroheshin kurrë.
+drop function if exists public.my_next_shift();
 create or replace function public.my_next_shift()
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
                starts_at timestamptz, ends_at timestamptz, capacity integer,
                notes text, created_by uuid, created_by_name text,
-               unit_is_open boolean, signed_count bigint, checked_in_count bigint,
+               unit_is_open boolean, signed_count bigint, signed jsonb,
+               checked_in_count bigint,
                i_am_in boolean, i_am_checked_in boolean, i_am_lead boolean)
 language sql stable security definer set search_path = public as $$
   with vis as (
@@ -1211,6 +1219,14 @@ language sql stable security definer set search_path = public as $$
   select p.id, p.unit_id, u.code, u.name, p.starts_at, p.ends_at, p.capacity,
          p.notes, p.created_by, p.created_by_name, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = p.id),
+         (select coalesce(jsonb_agg(jsonb_build_object(
+                   'id',    g.volunteer_id,
+                   'name',  coalesce(nullif(v.full_name,''), g.volunteer_name, 'Vullnetar'),
+                   'role',  v.role,
+                   'photo', v.photo_path) order by g.created_at), '[]'::jsonb)
+            from public.shift_signups g
+            left join public.volunteers v on v.id = g.volunteer_id
+           where g.shift_id = p.id),
          (select count(*) from public.checkins c
            where c.shift_id = p.id and c.ended_at is null),
          exists (select 1 from public.shift_signups g
