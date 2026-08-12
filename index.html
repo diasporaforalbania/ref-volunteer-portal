@@ -62,14 +62,25 @@
   .card h3{margin:0 0 6px;font-size:17px}
   .card .meta{color:var(--muted);font-size:12.5px}
   label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#27484a}
+  /* 16px NUK është zgjedhje estetike — mos e ul. Safari te iPhone-i e zmadhon
+     vetë faqen sapo preket një fushë me shkronja nën 16px, dhe nuk e kthen më
+     mbrapsht: pas hyrjes portali mbetej i zmadhuar derisa përdoruesi ta ngushtonte
+     me gishta. Me 16px, zmadhimi nuk niset fare. */
   input,textarea,select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;
-        font-size:15px;font-family:inherit;background:#fff;color:var(--ink)}
+        font-size:16px;font-family:inherit;background:#fff;color:var(--ink)}
   /* Lartësi e përbashkët. Vetvetiu një <select> del më i ulët se një
      <input type=date/time/number>, sepse shfletuesi u fut brenda kontrollet e
      veta (kalendar, shigjeta). Te një rresht formulari me `align-items:flex-end`
      kjo ngre e ul etiketat sipas fushës — "Njësia" del më poshtë se "Data".
      Një lartësi e vetme i rreshton të gjitha. */
-  input:not([type="file"]),select{height:42px}
+  input:not([type="file"]),select{height:44px}
+  /* Disa selekte te tabelat e Panelit e mbajnë font-size-in te stili inline, që
+     kolonat të rrinë të ngushta. Aty vetëm `!important` e kap — dhe pa këtë,
+     prekja e tyre te telefoni do ta zmadhonte faqen prapë. Ato tabela
+     rrëshqasin horizontalisht vetë, ndaj gjerësia e shtuar s'prish gjë. */
+  @media (max-width:768px){
+    input,textarea,select{font-size:16px!important}
+  }
   input:disabled,textarea:disabled{background:#eef2f2;color:#7c9195;cursor:not-allowed}
   textarea{min-height:86px;resize:vertical}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:9px;
@@ -461,6 +472,17 @@ const isTeamRole = () => ME && ['ndihmes','mbledhes','koordinator'].includes(ME.
 let BADGE = { priv:null, units:[], reqs:{} };
 
 function configMissing(){ return SUPABASE_URL.startsWith('PASTE_') || SUPABASE_ANON_KEY.startsWith('PASTE_'); }
+
+/* UUID i krijuar te klienti, që rreshti ta dijë ID-në e vet para se të shkojë
+   te baza. `randomUUID` kërkon HTTPS; te http-ja e zhvillimit bie te varianti
+   me `getRandomValues`, po aq i rastësishëm. */
+function newId(){
+  if(crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2,'0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
 
 /* ============================================================================
    Nisja
@@ -1082,16 +1104,20 @@ async function vNews(){
 async function addAnn(){
   const title = $('an_title').value.trim();
   if(!title) return fail('Shkruani titullin.');
-  // `.select()` — na duhet ID-ja e rreshtit për të nisur njoftimin në telefona.
-  const { data, error } = await sb.from('announcements').insert({
-    title, body: $('an_body').value.trim(),
+  // ID-ja krijohet KËTU dhe i jepet insertit, në vend që të pritet mbrapsht nga
+  // `.select()`. Ai kthim varet nga politikat e leximit dhe, kur s'kthente gjë,
+  // njoftimi në telefona anashkalohej pa asnjë shenjë — njoftimi publikohej,
+  // telefonat rrinin të heshtur, dhe s'kishte gabim për t'u parë.
+  const id = newId();
+  const { error } = await sb.from('announcements').insert({
+    id, title, body: $('an_body').value.trim(),
     level: $('an_level').value, audience: $('an_aud').value,
     pinned: $('an_pin').value === 'yes',
     author_id: ME.id, author_name: ME.full_name
-  }).select('id').maybeSingle();
+  });
   if(error) return fail(error);
   toast('Njoftimi u publikua.');
-  if(data?.id) pushNotify('announcement', data.id);
+  pushNotify('announcement', id);
   vNews();
 }
 async function delAnn(id){
@@ -1982,18 +2008,19 @@ async function sendReport(){
     photo_path = path;
   }
 
-  const { data, error } = await sb.from('reports').insert({
-    reporter_id: ME.id, reporter_name: ME.full_name,
+  const id = newId();
+  const { error } = await sb.from('reports').insert({
+    id, reporter_id: ME.id, reporter_name: ME.full_name,
     kind: repKind, severity: $('rp_sev').value,
     title, body, location_text: $('rp_loc').value.trim() || null,
     lat: pos?.lat ?? null, lng: pos?.lng ?? null, photo_path
-  }).select('id').maybeSingle();
+  });
   btn.disabled = false; btn.textContent = 'Dërgo raportimin';
   if(error) return fail(error);
   closeModal();
   toast('Raportimi u dërgua te qendra.');
   // Raportimi ka kuptim vetëm nëse dikush e sheh shpejt — njofto stafin tani.
-  if(data?.id) pushNotify('report', data.id);
+  pushNotify('report', id);
   if(active === 'reports') vReports();
 }
 
