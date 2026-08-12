@@ -234,6 +234,28 @@
   .mini-av{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#eef7f6;border:1px solid var(--line);flex:none}
   .avrow{display:flex;align-items:center;gap:9px}
   .file-item{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+
+  /* ---- rreshtat e faqes Admin ----
+     Në një rresht duhen tri gjëra që s'hyjnë dot bashkë te një telefon: të
+     dhënat e personit, lista e roleve dhe dy butonat. Më parë rreshti nuk
+     thyhej fare (`.file-item` s'ka `flex-wrap`), ndaj e vetmja kolonë që
+     tkurrej — ajo e emrit — shtypej derisa çdo fjalë binte në rresht të vetin.
+     Tani rreshti thyhet: i tëri në ekran të gjerë, tri kate në telefon. */
+  .adm-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;
+    padding:14px 0;border-bottom:1px solid var(--line)}
+  .adm-row:last-child{border-bottom:none}
+  .adm-info{flex:1 1 190px;min-width:0}
+  .adm-nm{font-weight:700;font-size:15px;line-height:1.3}
+  .adm-sel{flex:0 1 210px}
+  .adm-sel select{font-size:14px;height:40px;padding:8px 10px}
+  .adm-acts{display:flex;gap:8px;flex:0 0 auto}
+  @media (max-width:700px){
+    .adm-row{gap:9px}
+    /* çdo pjesë zë një rresht të plotë — asgjë nuk shtypet më */
+    .adm-info,.adm-sel,.adm-acts{flex:1 1 100%}
+    .adm-acts .btn{flex:1}
+    .adm-sel select{height:44px}
+  }
   .file-item:last-child{border-bottom:none}
   .file-ic{width:40px;height:40px;border-radius:9px;background:#eef7f6;display:flex;align-items:center;
     justify-content:center;font-size:19px;flex:none}
@@ -2543,18 +2565,23 @@ async function vAdmin(){
       <div class="meta">Zgjidhni rolin (parazgjedhur me atë të kërkuar) dhe miratoni ose refuzoni.</div>
       <div style="margin-top:10px">
         ${pending.length ? pending.map(v=>`
-          <div class="file-item" style="align-items:flex-start">
+          <div class="adm-row">
             ${avatarHtml(v.photo_path, v.full_name)}
-            <div style="flex:1;min-width:0">
-              <b>${esc(v.full_name||'(pa emër)')}</b> <span class="meta">${esc(v.volunteer_code)}</span>
-              <div class="meta">${esc(v.city||'—')} · regjistruar ${ago(v.created_at)}
-                · ka kërkuar: <b>${esc(ROLES[v.requested_role]||v.requested_role||'—')}</b></div></div>
-            <select id="ad_role_${v.id}" style="width:auto;min-width:170px;font-size:12.5px;padding:6px">
-              ${Object.keys(ROLES).filter(k=>k!=='admin').map(k=>
-                `<option value="${k}" ${((v.requested_role||'ndihmes')===k)?'selected':''}>${esc(ROLES[k])}</option>`).join('')}
-            </select>
-            <button class="btn green sm" onclick="decidePending('${v.id}', true)">Mirato</button>
-            <button class="btn ghost sm" onclick="decidePending('${v.id}', false)">Refuzo</button>
+            <div class="adm-info">
+              <div class="adm-nm">${esc(v.full_name||'(pa emër)')}</div>
+              <div class="meta">${esc(v.volunteer_code)} · ${esc(v.city||'—')} · regjistruar ${ago(v.created_at)}</div>
+              <div class="meta">ka kërkuar: <b>${esc(ROLES[v.requested_role]||v.requested_role||'—')}</b></div>
+            </div>
+            <div class="adm-sel">
+              <select id="ad_role_${v.id}">
+                ${Object.keys(ROLES).filter(k=>k!=='admin').map(k=>
+                  `<option value="${k}" ${((v.requested_role||'ndihmes')===k)?'selected':''}>${esc(ROLES[k])}</option>`).join('')}
+              </select>
+            </div>
+            <div class="adm-acts">
+              <button class="btn green sm" onclick="decidePending('${v.id}', true)">Mirato</button>
+              <button class="btn sec sm" onclick="decidePending('${v.id}', false)">Refuzo</button>
+            </div>
           </div>`).join('') : '<div class="empty">Asnjë vullnetar në pritje.</div>'}
       </div>
     </div>
@@ -2607,16 +2634,19 @@ function reqRowHtml(r, v, uById){
   } else if(r.kind === 'photo'){
     detail = `<div class="meta">Ka foto aktuale — miratimi e fshin dhe lejon ngarkim të ri.</div>`;
   }
-  return `<div class="file-item" style="align-items:flex-start">
+  return `<div class="adm-row">
     ${avatarHtml(v?.photo_path, name)}
-    <div style="flex:1;min-width:0">
-      <b>${esc(name)}</b> <span class="meta">${esc(v?.volunteer_code||'')}</span>
+    <div class="adm-info">
+      <div class="adm-nm">${esc(name)}
+        <span class="meta" style="font-weight:400">${esc(v?.volunteer_code||'')}</span></div>
       ${detail}
       ${r.note ? `<div class="meta">Shënim: ${esc(r.note)}</div>` : ''}
       <div class="meta">${ago(r.created_at)}</div>
     </div>
-    <button class="btn green sm" onclick="reviewRequest('${r.id}', true)">Mirato</button>
-    <button class="btn ghost sm" onclick="reviewRequest('${r.id}', false)">Refuzo</button>
+    <div class="adm-acts">
+      <button class="btn green sm" onclick="reviewRequest('${r.id}', true)">Mirato</button>
+      <button class="btn sec sm" onclick="reviewRequest('${r.id}', false)">Refuzo</button>
+    </div>
   </div>`;
 }
 
