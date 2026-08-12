@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Referendumi — Portali i vullnetarëve</title>
+<!-- Instalimi në telefon (dhe njoftimet, që pa instalim nuk punojnë dot te iOS). -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d9488">
+<!-- SVG-ja e para: shfletuesit modernë e marrin atë dhe del e qartë në çdo
+     madhësi. PNG-ja rri si rezervë për ata që s'e njohin SVG-në te ikonat. -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Referendumi">
 <style>
   :root{
     --teal:#0d9488; --teal-d:#0f766e; --teal-l:#2dd4bf; --cyan:#0891b2; --aqua:#22d3ee;
@@ -280,6 +290,12 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* Objektivi tregohet edhe para se të ngarkohen statistikat. */
 const DEFAULT_GOAL = 50000;
 
+/* Çelësi PUBLIK i njoftimeve (VAPID). Publik me qëllim — ai i fshehti rri te
+   Edge Function-i `send-push`, kurrë këtu. Sa kohë rri "PASTE_…", njoftimet
+   thjesht nuk ofrohen; gjithçka tjetër e portalit punon si më parë.
+   Krijohet një herë me:  npx web-push generate-vapid-keys           */
+const VAPID_PUBLIC_KEY = "BAZRjO2WjiwfOEUYZ9eEKyZmLN0TvbXPPYeHYicnAhEJuo95bncCU7VkcP_rbNHy9As3T8weSxbtuN49Nq__DBk";
+
 /* ============================================================================
    Ndihmës
    ============================================================================ */
@@ -507,7 +523,7 @@ function renderAuth(mode){
     ${mode==='signup' ? `
       <label>Emri dhe mbiemri *</label>
       <input id="a_name" type="text" autocomplete="name" placeholder="Emri juaj i plotë">
-      <label>Qyteti / zona</label>
+      <label>Qyteti / zona *</label>
       <input id="a_city" type="text" autocomplete="address-level2" placeholder="p.sh. Tiranë">
       <label>Telefoni</label>
       <input id="a_phone" type="tel" autocomplete="tel" placeholder="+355 …">
@@ -558,6 +574,9 @@ async function doSignup(){
   const phone = $('a_phone').value.trim();
   const requested_role = $('a_role').value;
   if(!full_name) return fail('Shkruani emrin dhe mbiemrin.');
+  // Qyteti është i detyrueshëm: pa të, qendra nuk di ku ta caktojë vullnetarin
+  // dhe kërkesa mbetet pezull te faqja "Admin".
+  if(!city) return fail('Shkruani qytetin ose zonën ku do të kontribuoni.');
   if(!email || !password) return fail('Plotësoni email-in dhe fjalëkalimin.');
   if(password.length < 8) return fail('Fjalëkalimi duhet të ketë të paktën 8 karaktere.');
 
@@ -681,8 +700,18 @@ function renderApp(){
   <div class="foot">Referendumi · portali i vullnetarëve. Mbajeni fushatën të qetë, të ligjshme dhe të dokumentuar.</div>
   <button class="fab no-print" onclick="openReport()">⚠️ Raporto</button>`;
   buildTabs();
-  go(active);
+  initPush();
+  go(hashTab() || active);
 }
+
+/* Klikimi mbi një njoftim e hap portalin te "./#news" ose "./#reports".
+   Këtu ajo adresë kthehet në skedën përkatëse — dhe `hashchange` e mbulon
+   rastin kur aplikacioni ishte tashmë i hapur në sfond. */
+function hashTab(){
+  const h = (location.hash || '').replace('#','');
+  return ME && tabList().some(([k]) => k === h) ? h : null;
+}
+window.addEventListener('hashchange', () => { const t = hashTab(); if(t) go(t); });
 
 function buildTabs(){
   const open = isStaff() ? (STATS.open_reports||0) : 0;
@@ -830,6 +859,132 @@ function quickCard(ic,t,d,fn){
 }
 
 /* ============================================================================
+   NJOFTIMET NË TELEFON (Web Push)
+
+   Vullnetari në terren nuk e hap portalin çdo orë. Një njoftim urgjent nga
+   qendra, ose një raportim nga terreni, duhet ta gjejë atë — jo ta presë.
+
+   Kufiri që vendos gjithçka: te iPhone-i njoftimet punojnë VETËM nëse portali
+   është shtuar te ekrani kryesor ("Add to Home Screen"). Nga Safari i zakonshëm
+   `PushManager` as nuk ekziston. Prandaj gjendja `ios-install` më poshtë nuk
+   është gabim — është udhëzim.
+   ============================================================================ */
+let SW_REG = null;
+const pushConfigured = () => !VAPID_PUBLIC_KEY.startsWith('PASTE_');
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
+                 || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isInstalled = () => window.matchMedia?.('(display-mode: standalone)').matches
+                       || window.navigator.standalone === true;
+
+/* Çelësi VAPID vjen si base64url, por `subscribe()` do bajte. */
+function urlB64ToUint8(b64){
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function initPush(){
+  if(!pushConfigured() || !('serviceWorker' in navigator)) return;
+  try { SW_REG = await navigator.serviceWorker.register('sw.js', { scope: './' }); }
+  catch(e){ SW_REG = null; }
+}
+
+/* Gjendja e njoftimeve për këtë pajisje — mbi këtë ndërtohet karta te Njoftime. */
+async function pushState(){
+  if(!pushConfigured()) return 'off-config';
+  if(!('serviceWorker' in navigator)) return 'unsupported';
+  if(!('PushManager' in window)) return isIOS() && !isInstalled() ? 'ios-install' : 'unsupported';
+  if(Notification.permission === 'denied') return 'blocked';
+  const sub = await (SW_REG || await navigator.serviceWorker.ready)?.pushManager.getSubscription();
+  return sub ? 'on' : 'off';
+}
+
+async function enablePush(){
+  const btn = $('np_btn'); if(btn) btn.disabled = true;
+  try {
+    if(!SW_REG) await initPush();
+    const reg = SW_REG || await navigator.serviceWorker.ready;
+    if(!reg) throw new Error('Shfletuesi nuk i mbështet njoftimet.');
+
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){
+      return fail(perm === 'denied'
+        ? 'Njoftimet u bllokuan. Lejojini te cilësimet e shfletuesit për këtë faqe.'
+        : 'Njoftimet nuk u lejuan.');
+    }
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8(VAPID_PUBLIC_KEY)
+    });
+    const j = sub.toJSON();
+    const { error } = await sb.rpc('push_subscribe', {
+      p_endpoint: sub.endpoint, p_p256dh: j.keys.p256dh,
+      p_auth: j.keys.auth, p_agent: navigator.userAgent
+    });
+    if(error){ await sub.unsubscribe(); return fail(error); }
+    toast('Njoftimet u aktivizuan për këtë pajisje.');
+  } catch(e){ fail(e); }
+  finally { if($('np_btn')) $('np_btn').disabled = false; go(active); }
+}
+
+async function disablePush(){
+  try {
+    const reg = SW_REG || await navigator.serviceWorker.ready;
+    const sub = await reg?.pushManager.getSubscription();
+    if(sub){
+      await sb.rpc('push_unsubscribe', { p_endpoint: sub.endpoint });
+      await sub.unsubscribe();
+    }
+    toast('Njoftimet u çaktivizuan për këtë pajisje.');
+  } catch(e){ fail(e); }
+  finally { go(active); }
+}
+
+/* Njoftimi nisi — por nëse dërgimi dështon, gjëja e publikuar mbetet e
+   publikuar. Prandaj gabimi këtu vetëm shënohet, nuk e ndërpret rrjedhën. */
+async function pushNotify(kind, id){
+  if(!pushConfigured()) return;
+  try { await sb.functions.invoke('send-push', { body: { kind, id } }); }
+  catch(e){ console.warn('njoftimi nuk u dërgua dot:', e); }
+}
+
+function pushCardHtml(state){
+  const box = (icon, title, body, action) => `
+    <div class="card no-print" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+        <div style="flex:1;min-width:200px">
+          <h3 style="margin:0">${icon} ${title}</h3>
+          <div class="meta" style="margin-top:3px">${body}</div>
+        </div>
+        ${action || ''}
+      </div>
+    </div>`;
+
+  if(state === 'on')
+    return box('🔔','Njoftimet janë aktive',
+      'Ky telefon merr njoftim për çdo shpallje të re, dhe stafi edhe për raportimet.',
+      `<button class="btn sec sm" onclick="disablePush()">Çaktivizo</button>`);
+
+  if(state === 'off')
+    return box('🔕','Njoftimet në këtë pajisje',
+      'Aktivizojini që njoftimet e qendrës t\'ju vijnë edhe kur portali është i mbyllur.',
+      `<button class="btn" id="np_btn" onclick="enablePush()">Aktivizo njoftimet</button>`);
+
+  if(state === 'ios-install')
+    return box('📲','Njoftimet kërkojnë instalimin',
+      'Te iPhone-i njoftimet punojnë vetëm kur portali shtohet te ekrani kryesor: '
+      + 'butoni <b>Share</b> në Safari → <b>Add to Home Screen</b>. '
+      + 'Pastaj hapeni nga ikona dhe kthehuni këtu.', '');
+
+  if(state === 'blocked')
+    return box('🔕','Njoftimet janë të bllokuara',
+      'I keni refuzuar më parë për këtë faqe. Lejojini te cilësimet e shfletuesit, pastaj rifreskoni.', '');
+
+  return '';   // 'unsupported' / 'off-config' — pa zhurmë, s'ka çfarë të bëjë përdoruesi
+}
+
+/* ============================================================================
    NJOFTIMET
    ============================================================================ */
 function annRow(a){
@@ -850,7 +1005,8 @@ async function vNews(){
   const rows = data || [];
   $('view').innerHTML = `
     <h2 class="sec">Njoftime</h2>
-    <p class="sub">Njoftimet e rëndësishme nga qendra dhe koordinatorët.</p>
+    <p class="sub">Njoftimet e rëndësishme nga qendra dhe koordinatorët.
+      Njoftimet në telefon i ndizni te <a class="link" onclick="go('panel')">Paneli</a>.</p>
     ${isStaff() ? `
       <div class="card no-print" style="margin-bottom:18px">
         <h3>Publiko një njoftim</h3>
@@ -894,14 +1050,16 @@ async function vNews(){
 async function addAnn(){
   const title = $('an_title').value.trim();
   if(!title) return fail('Shkruani titullin.');
-  const { error } = await sb.from('announcements').insert({
+  // `.select()` — na duhet ID-ja e rreshtit për të nisur njoftimin në telefona.
+  const { data, error } = await sb.from('announcements').insert({
     title, body: $('an_body').value.trim(),
     level: $('an_level').value, audience: $('an_aud').value,
     pinned: $('an_pin').value === 'yes',
     author_id: ME.id, author_name: ME.full_name
-  });
+  }).select('id').maybeSingle();
   if(error) return fail(error);
   toast('Njoftimi u publikua.');
+  if(data?.id) pushNotify('announcement', data.id);
   vNews();
 }
 async function delAnn(id){
@@ -1792,16 +1950,18 @@ async function sendReport(){
     photo_path = path;
   }
 
-  const { error } = await sb.from('reports').insert({
+  const { data, error } = await sb.from('reports').insert({
     reporter_id: ME.id, reporter_name: ME.full_name,
     kind: repKind, severity: $('rp_sev').value,
     title, body, location_text: $('rp_loc').value.trim() || null,
     lat: pos?.lat ?? null, lng: pos?.lng ?? null, photo_path
-  });
+  }).select('id').maybeSingle();
   btn.disabled = false; btn.textContent = 'Dërgo raportimin';
   if(error) return fail(error);
   closeModal();
   toast('Raportimi u dërgua te qendra.');
+  // Raportimi ka kuptim vetëm nëse dikush e sheh shpejt — njofto stafin tani.
+  if(data?.id) pushNotify('report', data.id);
   if(active === 'reports') vReports();
 }
 
@@ -2094,11 +2254,12 @@ function supervisorSelectHtml(v, coordList, mbledhesList){
 async function vPanel(){
   loading();
   const staff = isStaff();
-  const [tree, vols, units, stats] = await Promise.all([
+  const [tree, vols, units, stats, pstate] = await Promise.all([
     sb.rpc('struktura_tree'),
     staff ? sb.from('volunteers').select('*').order('created_at',{ascending:false}) : Promise.resolve({data:[]}),
     staff ? sb.rpc('unit_totals') : Promise.resolve({data:[]}),
-    staff ? loadStats() : Promise.resolve({})
+    staff ? loadStats() : Promise.resolve({}),
+    pushState()
   ]);
   const treeRows = tree.data || [];
   const rows = vols.data || [];
@@ -2117,6 +2278,8 @@ async function vPanel(){
     <h2 class="sec">Paneli</h2>
     <p class="sub">${staff ? 'Njësitë, struktura dhe parametrat e fushatës.' : 'Struktura e fushatës.'}
       ${staff && !isAdmin() ? ' Miratimi i vullnetarëve të rinj bëhet vetëm nga admini, te faqja "Admin".' : ''}</p>
+
+    ${pushCardHtml(pstate)}
 
     ${staff ? `
     <div class="grid g4" style="margin-bottom:18px">
@@ -2484,9 +2647,11 @@ function renderHistory(){
             <td class="meta">${esc(truncate(r.location_name||'—',22))}${r.city?'<div class="meta">'+esc(r.city)+'</div>':''}</td>
             <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill amber">pa mbyllur</span>'}</td>
             <td style="text-align:right"><b>${nf(r.signatures)}</b></td>
-            <td class="row" style="gap:4px;flex-wrap:nowrap">
-              <button class="btn ghost sm" onclick="editCheckin('${r.id}')">Ndrysho</button>
-              <button class="btn ghost sm" onclick="delCheckin('${r.id}')" title="Fshi">✕</button></td>
+            <td style="white-space:nowrap">
+              <div class="row" style="gap:6px;flex-wrap:nowrap">
+                <button class="btn red sm" onclick="editCheckin('${r.id}')">Ndrysho</button>
+                <button class="btn sec sm" onclick="delCheckin('${r.id}')" title="Fshi turnin">✕</button>
+              </div></td>
           </tr>`).join('')}
         </tbody></table>
         ${rows.length > 400 ? `<div class="hint">Po shfaqen 400 turnet e fundit nga ${rows.length}. Ngushtoni filtrin ose shkarkoni CSV-në.</div>` : ''}`

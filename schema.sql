@@ -204,6 +204,26 @@ create index if not exists shifts_unit_idx   on public.shifts (unit_id, starts_a
 create index if not exists signups_shift_idx on public.shift_signups (shift_id);
 create index if not exists signups_vol_idx   on public.shift_signups (volunteer_id);
 
+-- Njoftimet në telefon (Web Push). Një rresht për çdo pajisje ku vullnetari e
+-- ka instaluar portalin dhe ka pranuar njoftimet — një person mund të ketë
+-- telefonin dhe kompjuterin. `endpoint` është adresa unike që e jep vetë
+-- shfletuesi; `p256dh` dhe `auth_key` janë çelësat me të cilët shifrohet
+-- njoftimi, që as shërbimi i Google-it apo i Apple-it të mos e lexojë dot.
+--
+-- Kolona quhet `auth_key` e jo `auth`: `auth` është emri i skemës ku rri
+-- `auth.uid()`, dhe një kolonë me atë emër e bën kodin e mëposhtëm dykuptimësh.
+create table if not exists public.push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  volunteer_id uuid not null references public.volunteers on delete cascade,
+  endpoint     text not null unique,
+  p256dh       text not null,
+  auth_key     text not null,
+  user_agent   text,
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists push_sub_vol_idx on public.push_subscriptions (volunteer_id);
+
 -- Parametrat e fushatës (një rresht i vetëm).
 create table if not exists public.campaign (
   id         integer primary key default 1 check (id = 1),
@@ -463,6 +483,7 @@ alter table public.campaign          enable row level security;
 alter table public.shifts            enable row level security;
 alter table public.shift_signups     enable row level security;
 alter table public.change_requests   enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 -- ---- volunteers -----------------------------------------------------------
 -- Rolin dhe statusin NUK i ndryshon dot askush nga aplikacioni: vetëm përmes
@@ -687,6 +708,18 @@ drop policy if exists cr_select on public.change_requests;
 create policy cr_select on public.change_requests for select to authenticated
   using (volunteer_id = auth.uid() or public.vol_is_admin());
 
+-- ---- push_subscriptions ----------------------------------------------------
+-- Secili sheh e heq vetëm pajisjet e veta. Shkrimi kalon nga `push_subscribe`,
+-- që rreshti t'i mbetet gjithmonë atij që e krijoi: pa këtë, dikush mund të
+-- regjistronte adresën e pajisjes së vet nën emrin e tjetrit dhe të merrte
+-- njoftimet e destinuara për qendrën. Vetë dërgimi bëhet nga Edge Function-i
+-- `send-push`, që punon me çelësin e shërbimit dhe i lexon të gjitha.
+revoke all on public.push_subscriptions from anon, authenticated;
+grant select on public.push_subscriptions to authenticated;
+drop policy if exists push_select on public.push_subscriptions;
+create policy push_select on public.push_subscriptions for select to authenticated
+  using (volunteer_id = auth.uid());
+
 
 -- ============================ VEPRIMET E QENDRËS ============================
 -- Ndryshimi i statusit / rolit / njësisë bëhet vetëm këtu, me kontroll roli.
@@ -880,6 +913,45 @@ begin
 end $$;
 
 grant execute on function public.review_change_request(uuid, boolean, text) to authenticated;
+
+
+-- ============================ NJOFTIMET NË TELEFON ==========================
+-- Pajisja regjistrohet dhe çregjistrohet vetëm përmes këtyre dy funksioneve.
+-- `on conflict (endpoint)`: i njëjti telefon mund ta ndërrojë çelësin ose
+-- përdoruesin (dikush tjetër hyn në po atë pajisje) — atëherë rreshti
+-- rishkruhet, nuk shtohet një i dytë që do t'i çonte njoftimet te i pari.
+
+create or replace function public.push_subscribe(
+  p_endpoint text, p_p256dh text, p_auth text, p_agent text default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_approved() then
+    raise exception 'Vetëm vullnetarët e miratuar marrin njoftime.';
+  end if;
+  if coalesce(trim(p_endpoint),'') = '' or coalesce(trim(p_p256dh),'') = ''
+     or coalesce(trim(p_auth),'') = '' then
+    raise exception 'Të dhëna të paplota për njoftimet.';
+  end if;
+
+  insert into public.push_subscriptions (volunteer_id, endpoint, p256dh, auth_key, user_agent)
+  values (auth.uid(), trim(p_endpoint), trim(p_p256dh), trim(p_auth), left(coalesce(p_agent,''), 300))
+  on conflict (endpoint) do update
+    set volunteer_id = auth.uid(),
+        p256dh       = excluded.p256dh,
+        auth_key     = excluded.auth_key,
+        user_agent   = excluded.user_agent,
+        last_seen_at = now();
+end $$;
+
+create or replace function public.push_unsubscribe(p_endpoint text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.push_subscriptions
+   where endpoint = p_endpoint and volunteer_id = auth.uid();
+end $$;
+
+grant execute on function public.push_subscribe(text, text, text, text) to authenticated;
+grant execute on function public.push_unsubscribe(text) to authenticated;
 
 
 -- ---- njësitë: hapja/mbyllja dhe koordinatori (vetëm qendra) ----------------
