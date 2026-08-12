@@ -185,6 +185,34 @@
   .kind .lb{font-size:12px;font-weight:600;margin-top:3px}
   .kind.on{border-color:var(--teal);background:#effaf8;box-shadow:0 0 0 3px #d5f2ee}
 
+  /* ---- veprimet e një raportimi ----
+     Rregulli i vetëm që i bën këto të lexueshme: E MBUSHUR = gjendja ku ndodhet
+     raportimi tani; E ZBRAZËT ME KORNIZË = veprim që mund ta shtypësh. Më parë
+     "E zgjidhur" ishte buton i mbushur jeshil ndërsa raportimi ishte ende i
+     hapur — dukej sikur ishte zgjidhur, kur në fakt ishte ftesë për ta zgjidhur. */
+  .rep-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}
+  .rep-state,.rep-act,.rep-write,.rep-del{
+    display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:9px;
+    font-size:13px;font-weight:700;white-space:nowrap;font-family:inherit;line-height:1.2}
+  /* gjendja aktuale — pa veprim, thjesht "ja ku jemi" */
+  .rep-state{background:var(--green);color:#fff;border:1.5px solid var(--green)}
+  /* veprim që ndryshon gjendjen */
+  .rep-act{background:#fff;color:var(--teal-d);border:1.5px solid var(--teal-l);cursor:pointer}
+  .rep-act:hover{background:#effaf8}
+  .rep-act.done{color:var(--green);border-color:#6ee7b7}
+  .rep-act.done:hover{background:#ecfdf5}
+  .rep-act.reopen{color:var(--muted);border-color:var(--line)}
+  .rep-act.reopen:hover{background:#f3f8f8}
+  /* përgjigjja nuk ndryshon gjendje — shkruan tekst. Vija e ndërprerë e ndan
+     nga zinxhiri i gjendjeve dhe kujton një fushë ku shkruhet. */
+  .rep-write{background:#f2fbfd;color:#0b6c86;border:1.5px dashed #7dd3e8;cursor:pointer}
+  .rep-write:hover{background:#e6f6fb}
+  /* fshirja shtyhet në skajin tjetër, që të mos preket pa dashje */
+  .rep-del{margin-left:auto;background:#fff;color:var(--red);border:1.5px solid #fecaca;cursor:pointer}
+  .rep-del:hover{background:#fef2f2}
+  @media (max-width:560px){ .rep-del{margin-left:0} }
+
   /* ---- FAB raporto ---- */
   .fab{position:fixed;right:18px;bottom:18px;z-index:40;background:var(--red);color:#fff;border:none;
     border-radius:30px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;
@@ -2073,14 +2101,36 @@ function reportCard(r){
     </div>
     ${r.handled_note?`<div class="notice" style="margin:10px 0 0">
       <b>Përgjigja e qendrës${r.handled_name?' ('+esc(r.handled_name)+')':''}:</b> ${esc(r.handled_note)}</div>`:''}
-    ${isStaff()?`
-      <div class="row no-print" style="margin-top:12px;gap:7px">
-        ${r.status!=='review'?`<button class="btn sec sm" onclick="setReport('${r.id}','review')">Në shqyrtim</button>`:''}
-        ${r.status!=='resolved'?`<button class="btn green sm" onclick="setReport('${r.id}','resolved')">E zgjidhur</button>`:''}
-        ${r.status!=='open'?`<button class="btn ghost sm" onclick="setReport('${r.id}','open')">Rihape</button>`:''}
-        <button class="btn sec sm" onclick="noteReport('${r.id}')">Shkruaj përgjigje</button>
-      </div>`:''}
+    ${isStaff() ? reportActions(r) : ''}
   </div>`;
+}
+
+/* Rreshti i veprimeve. Gjendja e tanishme del e mbushur dhe pa klikim; çdo gjë
+   tjetër është folje — diçka që e bën ti, jo diçka që tregon ku je. */
+function reportActions(r){
+  const b = [];
+
+  if(r.status === 'review')
+    b.push(`<span class="rep-state">● Në shqyrtim</span>`);
+  else if(r.status === 'open')
+    b.push(`<button class="rep-act" onclick="setReport('${r.id}','review')">Merr në shqyrtim</button>`);
+
+  if(r.status === 'resolved')
+    b.push(`<span class="rep-state">✓ E zgjidhur</span>`);
+  else
+    b.push(`<button class="rep-act done" onclick="setReport('${r.id}','resolved')">✓ U zgjidh</button>`);
+
+  if(r.status !== 'open')
+    b.push(`<button class="rep-act reopen" onclick="setReport('${r.id}','open')">Rihap</button>`);
+
+  b.push(`<button class="rep-write" onclick="noteReport('${r.id}')">✎ ${
+    r.handled_note ? 'Ndrysho përgjigjen' : 'Shkruaj përgjigje'}</button>`);
+
+  // Fshirja është vetëm e adminit — njësoj si te politika `rep_delete`.
+  if(isAdmin())
+    b.push(`<button class="rep-del" onclick="delReport('${r.id}')">Fshije</button>`);
+
+  return `<div class="rep-actions no-print">${b.join('')}</div>`;
 }
 
 async function openReportPhoto(path){
@@ -2096,13 +2146,28 @@ async function setReport(id, status){
   vReports();
 }
 async function noteReport(id){
-  const note = prompt('Përgjigja për raportuesin:');
+  // Përgjigja e mëparshme lexohet nga baza e jo nga HTML-ja: po ta kalonim te
+  // `onclick`, çdo thonjëz brenda tekstit do ta prishte butonin.
+  const { data: cur } = await sb.from('reports').select('handled_note').eq('id', id).maybeSingle();
+  const note = prompt('Përgjigja për raportuesin:', cur?.handled_note || '');
   if(note === null) return;
   const { error } = await sb.from('reports').update({
-    handled_note: note.trim(), handled_by:ME.id, handled_name:ME.full_name,
+    handled_note: note.trim() || null, handled_by:ME.id, handled_name:ME.full_name,
     updated_at:new Date().toISOString()
   }).eq('id', id);
   if(error) return fail(error);
+  vReports();
+}
+
+/* Fshirja përfundimtare — vetëm admini. Fotoja hiqet nga storage e para: pasi
+   të fshihet rreshti, shtegu i saj humbet dhe skedari do të mbetej aty përgjithmonë. */
+async function delReport(id){
+  if(!confirm('Të fshihet ky raportim përgjithmonë? Nuk kthehet mbrapsht.')) return;
+  const { data: r } = await sb.from('reports').select('photo_path').eq('id', id).maybeSingle();
+  if(r?.photo_path) await sb.storage.from('vol-reports').remove([r.photo_path]);
+  const { error } = await sb.from('reports').delete().eq('id', id);
+  if(error) return fail(error);
+  toast('Raportimi u fshi.');
   vReports();
 }
 
