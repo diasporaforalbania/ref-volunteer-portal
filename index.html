@@ -941,12 +941,41 @@ async function disablePush(){
   finally { go(active); }
 }
 
-/* Njoftimi nisi — por nëse dërgimi dështon, gjëja e publikuar mbetet e
-   publikuar. Prandaj gabimi këtu vetëm shënohet, nuk e ndërpret rrjedhën. */
+/* Gabimi i një Edge Function-i vjen si "non-2xx status code" — arsyeja e vërtetë
+   rri te trupi i përgjigjes. Pa e nxjerrë atë, çdo dështim duket njësoj. */
+async function pushErrText(error){
+  try {
+    const t = await error?.context?.text?.();
+    if(t){ try { return JSON.parse(t).error || t; } catch(_){ return t; } }
+  } catch(_){}
+  return error?.message || 'gabim i panjohur';
+}
+
+/* Njoftimi nisi. Nëse dërgimi dështon, gjëja e publikuar mbetet e publikuar —
+   ndaj kjo nuk e ndërpret rrjedhën. Por dështimi TREGOHET: më parë humbiste në
+   konsolë dhe njoftimi thjesht "nuk vinte", pa asnjë shenjë pse. */
 async function pushNotify(kind, id){
   if(!pushConfigured()) return;
-  try { await sb.functions.invoke('send-push', { body: { kind, id } }); }
-  catch(e){ console.warn('njoftimi nuk u dërgua dot:', e); }
+  const { data, error } = await sb.functions.invoke('send-push', { body: { kind, id } });
+  if(error) return toast('Njoftimi në telefona nuk u dërgua — ' + await pushErrText(error), true);
+  if(!data) return;
+  if(data.sent)        toast(`Njoftimi shkoi te ${data.sent} pajisje.`);
+  else if(!data.matched) toast(`Asnjë pajisje e regjistruar te "${data.audience||'ky publik'}".`, true);
+  else                 toast(`S'u dërgua te asnjë nga ${data.matched} pajisjet`
+                           + (data.errors?.length ? ' — ' + data.errors[0] : '.'), true);
+}
+
+/* Provë: dërgon vetëm te pajisjet e mia. Nëse kjo mbërrin dhe një njoftim i
+   vërtetë jo, problemi është te publiku, jo te çelësat apo funksioni. */
+async function testPush(){
+  const btn = $('np_test'); if(btn){ btn.disabled = true; btn.textContent = 'Po dërgohet…'; }
+  const { data, error } = await sb.functions.invoke('send-push', { body: { kind: 'test' } });
+  if(btn){ btn.disabled = false; btn.textContent = 'Dërgo një provë'; }
+  if(error) return fail('Prova dështoi — ' + await pushErrText(error));
+  if(data?.sent) toast(`Prova u dërgua te ${data.sent} pajisje.`);
+  else toast(data?.errors?.length
+    ? 'Prova dështoi — ' + data.errors[0]
+    : 'Asnjë pajisje e regjistruar për ju. Aktivizoni njoftimet së pari.', true);
 }
 
 function pushCardHtml(state){
@@ -964,7 +993,10 @@ function pushCardHtml(state){
   if(state === 'on')
     return box('🔔','Njoftimet janë aktive',
       'Ky telefon merr njoftim për çdo shpallje të re, dhe stafi edhe për raportimet.',
-      `<button class="btn sec sm" onclick="disablePush()">Çaktivizo</button>`);
+      `<div class="row" style="gap:7px">
+         <button class="btn sec sm" id="np_test" onclick="testPush()">Dërgo një provë</button>
+         <button class="btn sec sm" onclick="disablePush()">Çaktivizo</button>
+       </div>`);
 
   if(state === 'off')
     return box('🔕','Njoftimet në këtë pajisje',

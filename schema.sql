@@ -426,6 +426,17 @@ language sql stable security definer set search_path = public as $$
    where v.supervisor_id = auth.uid();
 $$;
 
+-- Audienca "Vetëm qendra & koordinatorët" e njoftimeve. E ndarë me qëllim nga
+-- `vol_is_staff()`: ai përcakton kush ka TË DREJTA (shkruan njoftime, shqyrton
+-- raportime) dhe është vetëm koordinator/jurist/admin. Kjo përcakton kush e
+-- LEXON një njoftim intern — dhe aty hyjnë të gjitha rolet e qendrës, sepse
+-- logjistika, BNj, PR-i dhe IT-ja janë po aq "qendra" sa juristi. Pa këtë
+-- dallim, ata katër role nuk e shihnin njoftimin as në portal, as në telefon.
+create or replace function public.vol_is_internal() returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_qendra() or public.vol_is_coordinator();
+$$;
+
 -- Kush planifikon turne, dhe ku: koordinatori VETËM te zonat që mban, mbledhësi
 -- i autorizuar VETËM te zona e vet. Askush tjetër — as qendra. Ndarja sipas
 -- rolit mbahet e rreptë me qëllim: ndryshe një koordinator i caktuar rastësisht
@@ -593,7 +604,7 @@ create policy units_delete on public.units for delete to authenticated
 -- ---- announcements --------------------------------------------------------
 drop policy if exists ann_read on public.announcements;
 create policy ann_read on public.announcements for select to authenticated
-  using ( public.vol_is_approved() and (audience = 'all' or public.vol_is_staff()) );
+  using ( public.vol_is_approved() and (audience = 'all' or public.vol_is_internal()) );
 drop policy if exists ann_write on public.announcements;
 create policy ann_write on public.announcements for all to authenticated
   using (public.vol_is_staff()) with check (public.vol_is_staff());

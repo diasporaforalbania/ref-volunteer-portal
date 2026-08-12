@@ -159,6 +159,17 @@ are deleted automatically the first time a send fails with 404/410.
 
 ## If notifications don't arrive
 
+**Start with the test button.** Paneli → *Dërgo një provë* sends a push to your
+own devices only. That splits the problem in two:
+
+- **The test arrives, a real announcement doesn't** → the keys, the function and
+  the phone are all fine. The problem is the audience: nobody in the chosen
+  audience has notifications switched on.
+- **The test fails too** → the failure message says why (it now shows the real
+  reason from the function instead of failing silently).
+
+Then the usual suspects:
+
 - **No card on the Paneli page** → step 2 wasn't done (or wasn't deployed yet),
   or the browser has no push support.
 - **"Njoftimet janë të bllokuara"** → the user tapped *Don't allow* once. It has

@@ -26,7 +26,14 @@ const VAPID_PUBLIC_KEY  = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
 const VAPID_SUBJECT     = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:qendra@example.org';
 
+/* Kush ka të drejta (shkruan njoftime, shqyrton raportime). */
 const STAFF_ROLES = ['koordinator', 'jurist', 'admin'];
+/* Kush e MERR një njoftim "Vetëm qendra & koordinatorët" — të gjitha rolet e
+   qendrës, jo vetëm ato me të drejta shkrimi. Duhet të përputhet me
+   `vol_is_internal()` te schema.sql, ndryshe dikush do ta merrte njoftimin në
+   telefon dhe s'do ta gjente dot në portal. */
+const INTERNAL_ROLES = ['koordinator', 'jurist', 'admin',
+                        'logjistike', 'burime_njerezore', 'pr_edukim', 'it'];
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -40,7 +47,7 @@ const json = (body: unknown, status = 200) =>
    fikur. Një ditë: më gjatë s'ka kuptim, sepse lajmi vjetrohet. */
 const TTL = 60 * 60 * 24;
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST')    return json({ error: 'Method not allowed' }, 405);
 
@@ -64,15 +71,29 @@ Deno.serve(async (req) => {
   let body: { kind?: string; id?: string };
   try { body = await req.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
   const { kind, id } = body;
-  if (!id || (kind !== 'announcement' && kind !== 'report')) {
-    return json({ error: 'Bad request' }, 400);
+  if (kind !== 'announcement' && kind !== 'report' && kind !== 'test') {
+    return json({ error: 'Bad request: kind' }, 400);
   }
+  if (kind !== 'test' && !id) return json({ error: 'Bad request: id' }, 400);
 
   // 2. Teksti dhe publiku dalin nga baza, jo nga trupi i kërkesës.
   let title = '', text = '', url = './', tag = 'referendumi';
   let audienceRoles: string[] | null = null;   // null = të gjithë të miratuarit
+  let onlyMe = false;
+  let audienceLabel = 'të gjithë';
 
-  if (kind === 'announcement') {
+  if (kind === 'test') {
+    // Provë: shkon vetëm te pajisjet e vetë thirrësit. Ndan problemin e
+    // dërgimit nga problemi i publikut — nëse prova mbërrin, çelësat dhe
+    // funksioni janë në rregull dhe faji rri te audienca.
+    title = '🔔 Provë njoftimi';
+    text  = 'Njoftimet punojnë në këtë pajisje.';
+    url   = './#panel';
+    tag   = 'test-' + Date.now();
+    onlyMe = true;
+    audienceLabel = 'vetëm ju';
+
+  } else if (kind === 'announcement') {
     const { data: a } = await admin.from('announcements')
       .select('id, title, body, level, audience, author_name, author_id').eq('id', id).maybeSingle();
     if (!a) return json({ error: 'Not found' }, 404);
@@ -84,7 +105,8 @@ Deno.serve(async (req) => {
     text  = (a.body || '').slice(0, 240) || `Njoftim nga ${a.author_name || 'qendra'}`;
     url   = './#news';
     tag   = 'ann-' + a.id;
-    audienceRoles = a.audience === 'staff' ? STAFF_ROLES : null;
+    audienceRoles = a.audience === 'staff' ? INTERNAL_ROLES : null;
+    audienceLabel = a.audience === 'staff' ? 'qendra & koordinatorët' : 'të gjithë vullnetarët';
 
   } else {
     const { data: r } = await admin.from('reports')
@@ -101,21 +123,28 @@ Deno.serve(async (req) => {
           + (r.location_text ? ` · ${r.location_text}` : '');
     url   = './#reports';
     tag   = 'rep-' + r.id;
-    audienceRoles = STAFF_ROLES;   // raportimet i sheh vetëm stafi
+    audienceRoles = STAFF_ROLES;   // raportimet i shqyrton vetëm stafi
+    audienceLabel = 'stafi';
   }
 
   // 3. Pajisjet e publikut. Të pezulluarit nuk marrin njoftime.
   let q = admin.from('push_subscriptions')
     .select('id, endpoint, p256dh, auth_key, volunteers!inner(id, role, status)')
     .eq('volunteers.status', 'approved');
-  if (audienceRoles) q = q.in('volunteers.role', audienceRoles);
+  if (onlyMe)             q = q.eq('volunteer_id', me.id);
+  else if (audienceRoles) q = q.in('volunteers.role', audienceRoles);
 
   const { data: subs, error: subErr } = await q;
   if (subErr) return json({ error: subErr.message }, 500);
-  if (!subs?.length) return json({ sent: 0, failed: 0, removed: 0 });
+  // `matched` kthehet gjithmonë: një "0 të dërguara" pa të është i padeshifrueshëm
+  // — nuk dihet nëse dështoi dërgimi apo thjesht s'kishte kujt t'i shkonte.
+  if (!subs?.length) {
+    return json({ sent: 0, failed: 0, removed: 0, matched: 0, audience: audienceLabel });
+  }
 
   const payload = JSON.stringify({ title, body: text, url, tag });
   const stale: string[] = [];
+  const errors: string[] = [];
   let sent = 0, failed = 0;
 
   await Promise.all(subs.map(async (s) => {
@@ -125,15 +154,22 @@ Deno.serve(async (req) => {
         payload, { TTL });
       sent++;
     } catch (e) {
-      const code = (e as { statusCode?: number })?.statusCode;
+      const err = e as { statusCode?: number; body?: string; message?: string };
       // 404/410 = pajisja s'ekziston më (aplikacioni u çinstalua, leja u hoq).
       // Rreshti hiqet, që lista të mos mbushet me adresa të vdekura.
-      if (code === 404 || code === 410) stale.push(s.id);
-      else failed++;
+      if (err?.statusCode === 404 || err?.statusCode === 410) { stale.push(s.id); return; }
+      failed++;
+      // Arsyeja e parë mbahet dhe kthehet: pa të, "failed: 3" nuk thotë asgjë.
+      if (errors.length < 3) {
+        errors.push(`${err?.statusCode ?? '?'}: ${(err?.body || err?.message || '').slice(0, 160)}`);
+      }
+      console.error('push dështoi', err?.statusCode, err?.body || err?.message);
     }
   }));
 
   if (stale.length) await admin.from('push_subscriptions').delete().in('id', stale);
 
-  return json({ sent, failed, removed: stale.length });
+  return json({ sent, failed, removed: stale.length,
+                matched: subs.length, audience: audienceLabel,
+                errors: errors.length ? errors : undefined });
 });
