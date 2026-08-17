@@ -463,13 +463,13 @@ returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.volunteers (id, full_name, city, requested_role)
   values (new.id,
-          coalesce(new.raw_user_meta_data->>'full_name', ''),
-          nullif(new.raw_user_meta_data->>'city', ''),
-          coalesce(nullif(new.raw_user_meta_data->>'requested_role',''), 'ndihmes'))
+          left(trim(coalesce(new.raw_user_meta_data->>'full_name', '')), 120),
+          nullif(left(trim(new.raw_user_meta_data->>'city'), 80), ''),
+          coalesce(nullif(trim(new.raw_user_meta_data->>'requested_role'), ''), 'ndihmes'))
   on conflict (id) do nothing;
 
   insert into public.volunteer_private (id, phone, email)
-  values (new.id, nullif(new.raw_user_meta_data->>'phone',''), new.email)
+  values (new.id, nullif(left(trim(new.raw_user_meta_data->>'phone'), 40), ''), left(new.email, 255))
   on conflict (id) do nothing;
 
   return new;
@@ -557,10 +557,9 @@ language sql stable security definer set search_path = public as $$
       or ( public.vol_is_coordinator()
            and exists (select 1 from public.volunteers v
                         where v.id = p_id
+                          and v.status = 'approved'
                           and v.role in ('ndihmes','mbledhes')
-                          and ( v.unit_id in (select public.vol_my_unit_ids())
-                                or v.status = 'pending'
-                                or v.unit_id is null )) );
+                          and v.unit_id in (select public.vol_my_unit_ids())) );
 $$;
 
 -- Vetëm lexim direkt (vetvetja + hierarkia, si më parë). Shkrimi (telefoni,
@@ -607,7 +606,7 @@ create policy ann_read on public.announcements for select to authenticated
   using ( public.vol_is_approved() and (audience = 'all' or public.vol_is_internal()) );
 drop policy if exists ann_write on public.announcements;
 create policy ann_write on public.announcements for all to authenticated
-  using (public.vol_is_staff()) with check (public.vol_is_staff());
+  using (public.vol_is_internal()) with check (public.vol_is_internal());
 
 -- ---- materials ------------------------------------------------------------
 drop policy if exists mat_read on public.materials;
@@ -615,19 +614,19 @@ create policy mat_read on public.materials for select to authenticated
   using (public.vol_is_approved());
 drop policy if exists mat_write on public.materials;
 create policy mat_write on public.materials for all to authenticated
-  using (public.vol_is_staff()) with check (public.vol_is_staff());
+  using (public.vol_is_internal()) with check (public.vol_is_internal());
 
 -- ---- reports --------------------------------------------------------------
--- Raportuesi sheh vetëm të vetat; qendra sheh dhe trajton të gjitha.
+-- Raportuesi sheh vetëm të vetat; qendra (stafi i brendshëm) sheh dhe trajton të gjitha.
 drop policy if exists rep_read on public.reports;
 create policy rep_read on public.reports for select to authenticated
-  using (reporter_id = auth.uid() or public.vol_is_staff());
+  using (reporter_id = auth.uid() or public.vol_is_internal());
 drop policy if exists rep_insert on public.reports;
 create policy rep_insert on public.reports for insert to authenticated
   with check (reporter_id = auth.uid() and public.vol_is_approved());
 drop policy if exists rep_update on public.reports;
 create policy rep_update on public.reports for update to authenticated
-  using (public.vol_is_staff()) with check (public.vol_is_staff());
+  using (public.vol_is_internal()) with check (public.vol_is_internal());
 drop policy if exists rep_delete on public.reports;
 create policy rep_delete on public.reports for delete to authenticated
   using (public.vol_is_admin());
@@ -911,7 +910,9 @@ begin
              emergency_contact = nullif(r.payload->>'emergency_contact', '')
        where id = r.volunteer_id;
     elsif r.kind = 'photo' then
-      update public.volunteers set photo_path = null where id = r.volunteer_id;
+      update public.volunteers
+         set photo_path = coalesce(r.payload->>'photo_path', photo_path)
+       where id = r.volunteer_id;
     elsif r.kind = 'zone' then
       update public.volunteers set unit_id = (r.payload->>'unit_id')::uuid where id = r.volunteer_id;
     end if;
@@ -1178,6 +1179,61 @@ language sql stable security definer set search_path = public as $$
     left join public.shifts     s on s.id = c.shift_id
    where public.vol_is_admin()
    order by c.started_at desc;
+$$;
+
+-- Historiku i turneve me faqosje (pagination) dhe filtra në server
+create or replace function public.unit_history_paginated(
+  p_unit uuid default null,
+  p_from date default null,
+  p_to date default null,
+  p_limit integer default 100,
+  p_offset integer default 0
+)
+returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
+               volunteer_id uuid, volunteer_name text, location_name text, city text,
+               started_at timestamptz, ended_at timestamptz,
+               signatures integer, notes text, shift_id uuid, is_lead boolean)
+language sql stable security definer set search_path = public as $$
+  select c.id, c.unit_id, u.code, u.name, c.volunteer_id,
+         coalesce(nullif(v.full_name,''), c.volunteer_name, 'Vullnetar'),
+         c.location_name, c.city, c.started_at, c.ended_at, c.signatures, c.notes,
+         c.shift_id, (c.shift_id is null or s.created_by = c.volunteer_id)
+    from public.checkins c
+    left join public.units      u on u.id = c.unit_id
+    left join public.volunteers v on v.id = c.volunteer_id
+    left join public.shifts     s on s.id = c.shift_id
+   where public.vol_is_admin()
+     and (p_unit is null or c.unit_id = p_unit)
+     and (p_from is null or (c.started_at at time zone 'Europe/Tirane')::date >= p_from)
+     and (p_to   is null or (c.started_at at time zone 'Europe/Tirane')::date <= p_to)
+   order by c.started_at desc
+   limit greatest(1, least(coalesce(p_limit, 100), 500))
+  offset greatest(0, coalesce(p_offset, 0));
+$$;
+
+-- Përmbledhja statistikore e turneve sipas filtrave
+create or replace function public.unit_history_summary(
+  p_unit uuid default null,
+  p_from date default null,
+  p_to date default null
+)
+returns json
+language sql stable security definer set search_path = public as $$
+  with filtered as (
+    select c.id, c.unit_id, c.signatures, c.ended_at
+      from public.checkins c
+     where public.vol_is_admin()
+       and (p_unit is null or c.unit_id = p_unit)
+       and (p_from is null or (c.started_at at time zone 'Europe/Tirane')::date >= p_from)
+       and (p_to   is null or (c.started_at at time zone 'Europe/Tirane')::date <= p_to)
+  )
+  select json_build_object(
+    'total_signatures', coalesce(sum(signatures), 0),
+    'total_shifts', count(*),
+    'open_shifts', count(*) filter (where ended_at is null),
+    'active_units', count(distinct unit_id) filter (where unit_id is not null)
+  )
+  from filtered;
 $$;
 
 -- Turnet e MIA, me nënshkrimet e "kredituara". Te një turn ekipi numri real
@@ -1575,10 +1631,83 @@ create policy volrep_delete on storage.objects for delete to authenticated
          and ((storage.foldername(name))[1] = auth.uid()::text or public.vol_is_staff()));
 
 
+-- ============================ PAMJET PUBLIKE ================================
+-- Pamja e totalit të nënshkrimeve për faqen publike dhe funksionin /api/count.
+-- Nuk përmban të dhëna personale.
+create or replace view public.signature_totals as
+select
+  coalesce(sum(c.signatures), 0)::bigint as signatures,
+  (select coalesce(goal, 50000) from public.campaign where id = 1) as goal,
+  coalesce(max(c.ended_at), max(c.started_at), now()) as updated
+from public.checkins c;
+
+grant select on public.signature_totals to anon, authenticated;
+
+-- ============================ EKZEKUTIMI I FUNKSIONEVE =====================
+alter default privileges in schema public revoke execute on functions from public;
+
+-- Funksionet publike për vizitorët anonimë
+grant execute on function public.verify_volunteer(text) to anon;
+grant execute on function public.campaign_stats() to anon;
+
+-- Të gjitha funksionet dhe procedurat e skemës public për përdoruesit e kyçur
+grant execute on all functions in schema public to authenticated;
+
+-- Sinkronizimi i përdoruesve ekzistues të auth.users në tabelën volunteers
+insert into public.volunteers (id, full_name, city, requested_role, role, status)
+select
+  u.id,
+  coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+  nullif(u.raw_user_meta_data->>'city', ''),
+  case when u.email = 'geraldballa5@gmail.com' then null else coalesce(nullif(u.raw_user_meta_data->>'requested_role',''), 'ndihmes') end,
+  case when u.email = 'geraldballa5@gmail.com' then 'admin' else 'ndihmes' end,
+  case when u.email = 'geraldballa5@gmail.com' then 'approved' else 'pending' end
+from auth.users u
+left join public.volunteers v on v.id = u.id
+where v.id is null
+on conflict (id) do nothing;
+
+insert into public.volunteer_private (id, phone, email)
+select
+  u.id,
+  nullif(u.raw_user_meta_data->>'phone', ''),
+  u.email
+from auth.users u
+left join public.volunteer_private vp on vp.id = u.id
+where vp.id is null
+on conflict (id) do update set email = excluded.email;
+
+update public.volunteers
+set role = 'admin', status = 'approved'
+where id in (select id from auth.users where email = 'geraldballa5@gmail.com');
+
+
+-- ============================ INDEKSET E PERFORMANCËS ======================
+-- 1. Përshpejton kërkesat e terrenit aktiv (filtrimi i ended_at is null në çast)
+create index if not exists idx_checkins_active 
+  on public.checkins (started_at desc) 
+  where ended_at is null;
+
+-- 2. Optimizon faqosjen e historikut dhe filtrimin sipas njësive
+create index if not exists idx_checkins_unit_started 
+  on public.checkins (unit_id, started_at desc);
+
+-- 3. Optimizon pemën hierarkike të strukturës (lidhjet prind-fëmijë)
+create index if not exists idx_volunteers_supervisor_status 
+  on public.volunteers (supervisor_id, status) 
+  where status = 'approved';
+
+-- 4. Optimizon kalendarin e turneve aktive
+create index if not exists idx_shifts_active_window 
+  on public.shifts (starts_at desc, unit_id) 
+  where closed_at is null;
+
+
 -- ============================ NË FUND =======================================
 -- PostgREST e mban skemën në kujtesë. Pa këtë sinjal, funksionet e reja
 -- (`shift_check_in`, `my_next_shift`, …) kthejnë 404 derisa ai të rifreskohet
 -- vetë — dhe portali del i prishur pikërisht pasi skema u ngarkua me sukses.
 notify pgrst, 'reload schema';
+
 
 

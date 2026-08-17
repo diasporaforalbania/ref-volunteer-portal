@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # 1. Baza e të Dhënave PostgreSQL Lokale
+  db:
+    image: postgres:15-alpine
+    container_name: ref_volunteer_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. PostgREST — REST API automatike mbi PostgreSQL
+  postgrest:
+    image: postgrest/postgrest:v12.0.1
+    container_name: ref_volunteer_postgrest
+    restart: unless-stopped
+    ports:
+      - "54321:3000"
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgrespassword@db:5432/postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_OPEN_API_MODE: follow-privileges
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

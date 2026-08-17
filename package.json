@@ -1,0 +1,27 @@
+{
+  "name": "ref-volunteer-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Portali i vullnetarëve për referendumin",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "pages:dev": "wrangler pages dev dist --port 8788",
+    "typecheck": "tsc --noEmit",
+    "test:bridge": "node --test tests/bridge/*.test.mjs",
+    "test": "npm run typecheck && npm run test:bridge"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.1",
+    "wrangler": "^4.123.0"
+  }
+}

@@ -1,0 +1,2 @@
+# Cloudflare Pages / Netlify Redirection Rules
+https://pershqiperine.netlify.app/*  https://portal.referendum21.org/:splat  301!

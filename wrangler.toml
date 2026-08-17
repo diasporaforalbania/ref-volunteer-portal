@@ -1,0 +1,14 @@
+name = "ref-volunteer-portal"
+compatibility_date = "2026-08-16"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare Pages output directory
+pages_build_output_dir = "dist"
+
+# Cloudflare Workers static assets directory
+[assets]
+directory = "./dist"
+
+[vars]
+SUPABASE_URL = "https://yymmdyjjjvjbyleaoygf.supabase.co"
+DEFAULT_GOAL = "50000"
