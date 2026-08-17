@@ -206,15 +206,17 @@ export interface UnitTotalItem {
   code: string;
   name: string;
   region: string | null;
-  territory: string | null;
+  territory?: string | null;
   target: number;
   is_open: boolean;
-  /** Legacy: the first of `coordinators`, kept in sync server-side. */
   coordinator_id: string | null;
   coordinator_name: string | null;
-  coordinators: UnitCoordinatorRef[];
+  coordinators?: UnitCoordinatorRef[];
   signatures: number;
-  members: number;
+  shifts?: number;
+  active_now?: number;
+  volunteers_count?: number;
+  members?: number;
 }
 
 export interface ActiveFieldCollector {

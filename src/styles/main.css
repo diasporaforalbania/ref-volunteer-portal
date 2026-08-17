@@ -1654,6 +1654,109 @@ table.tbl tr:last-child td {
   color: var(--muted);
 }
 
+/* ---- pema organizative (Org Tree) ---- */
+.org-wrap {
+  overflow-x: auto;
+  padding: 4px 4px 16px;
+}
+
+.org-root {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 100%;
+}
+
+.org-root + .org-root {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px dashed var(--line);
+}
+
+.org-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.org-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 13px;
+  min-width: 112px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.org-card .mini-av {
+  margin: 0 auto 4px;
+}
+
+.org-card .nm {
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.org-card .rl {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+.org-card.me {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px #d5f2ee;
+}
+
+.org-kids {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  position: relative;
+  padding-top: 26px;
+}
+
+.org-kids::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+  transform: translateX(-.5px);
+}
+
+.org-kids::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.org-kids > .org-branch {
+  padding-top: 12px;
+}
+
+.org-kids > .org-branch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 12px;
+  background: var(--line);
+  transform: translateX(-.5px);
+}
+
 @media (max-width: 720px) {
   .board {
     grid-template-columns: 1fr;

@@ -7,7 +7,7 @@ import type {
   ReportStatus,
   MaterialCategory,
 } from '../types/database';
-import type { TabKey, BadgeState, HistoryState, SlotState } from '../types/app';
+import type { TabKey, BadgeState, HistoryState, OrgState, SlotState } from '../types/app';
 
 export const ROLES: Record<VolunteerRole, string> = {
   ndihmes: 'Ndihmës',
@@ -78,6 +78,12 @@ export class AppState {
     limit: 100,
     totalRows: 0,
     summary: null,
+  };
+
+  public ORG: OrgState = {
+    groups: [],
+    kidsOf: {},
+    sel: null,
   };
 
   public SLOTS: Record<string, SlotState> = {};

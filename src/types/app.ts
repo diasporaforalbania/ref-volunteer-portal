@@ -1,25 +1,23 @@
 import type {
-  VolunteerRole,
   VolunteerRow,
   VolunteerPrivateRow,
-  ChangeRequestRow,
-  UnitTotalItem,
-  HistoryRowItem,
-  HistorySummaryResult,
   UnitRow,
+  UnitTotalItem,
+  VolunteerRole,
+  ChangeRequestRow,
 } from './database';
 
 export type TabKey =
   | 'home'
-  | 'news'
-  | 'field'
   | 'shifts'
+  | 'field'
+  | 'history'
   | 'materials'
+  | 'news'
   | 'reports'
   | 'badge'
   | 'panel'
-  | 'admin'
-  | 'history';
+  | 'admin';
 
 export interface BadgeState {
   priv: VolunteerPrivateRow | null;
@@ -28,7 +26,7 @@ export interface BadgeState {
 }
 
 export interface HistoryState {
-  rows: HistoryRowItem[];
+  rows: any[];
   units: UnitTotalItem[];
   unit: string;
   from: string;
@@ -36,7 +34,13 @@ export interface HistoryState {
   page: number;
   limit: number;
   totalRows: number;
-  summary: HistorySummaryResult | null;
+  summary: {
+    total_signatures?: number;
+    total_shifts?: number;
+    open_shifts?: number;
+    active_units?: number;
+    total_hours?: number;
+  } | null;
 }
 
 export interface SlotParticipant {
@@ -50,6 +54,18 @@ export interface SlotState {
   signed: SlotParticipant[];
   capacity: number;
   label: string | null;
+}
+
+export interface OrgGroup {
+  id: string;
+  label: string;
+  roots: VolunteerRow[];
+}
+
+export interface OrgState {
+  groups: OrgGroup[];
+  kidsOf: Record<string, VolunteerRow[]>;
+  sel: string | null;
 }
 
 export interface SlippyMapPin {
