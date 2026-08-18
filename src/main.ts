@@ -3,7 +3,7 @@ import { sb, isConfigMissing } from './api/client';
 import { store } from './state/store';
 import { renderHeader, attachHeaderEvents } from './components/header';
 import { buildTabsHtml } from './components/tabs';
-import { renderAuth, renderGate } from './views/auth';
+import { renderAuth, renderGate, renderNewPassword } from './views/auth';
 import { renderVerify } from './views/verify';
 import { vHome } from './views/home';
 import { vNews } from './views/news';
@@ -90,6 +90,11 @@ export async function boot(): Promise<void> {
     return renderVerify(verifyCode);
   }
 
+  // Check if user returned from password reset link
+  if (location.hash.includes('type=recovery')) {
+    return renderNewPassword();
+  }
+
   if (isConfigMissing()) {
     const root = document.getElementById('root');
     if (root) {
@@ -107,6 +112,13 @@ export async function boot(): Promise<void> {
       console.warn('SW registration skipped:', err);
     });
   }
+
+  // Subscribe to auth state changes (e.g. password recovery)
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      renderNewPassword();
+    }
+  });
 
   const { data: sessionData } = await sb.auth.getSession();
   store.SESSION = sessionData.session;
@@ -196,16 +208,9 @@ document.addEventListener('click', (e: MouseEvent) => {
   }
 });
 
-// Global close pin on map
-document.addEventListener('click', (e: MouseEvent) => {
-  if ((e.target as HTMLElement)?.dataset.closePin) {
-    document.querySelectorAll('.map-pop').forEach(p => p.remove());
-  }
-});
-
-// Start app on DOMContentLoaded
+// Boot the application on DOM ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
+  document.addEventListener('DOMContentLoaded', () => boot());
 } else {
   boot();
 }

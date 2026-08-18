@@ -5,6 +5,21 @@ import { nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
 import type { VolunteerRole } from '../types/database';
 
+/**
+ * Returns the appropriate auth redirect URL.
+ * In production / deployed mode: strictly points to https://portal.referendum21.org/
+ * In local development: points to local origin (e.g. http://localhost:5173/)
+ */
+export function getAuthRedirectUrl(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.origin}/`;
+    }
+  }
+  return 'https://portal.referendum21.org/';
+}
+
 export function renderAuth(mode: 'login' | 'signup'): void {
   const root = document.getElementById('root');
   if (!root) return;
@@ -125,7 +140,10 @@ export async function doSignup(): Promise<void> {
   const { data, error } = await sb.auth.signUp({
     email,
     password,
-    options: { data: { full_name, city, phone, requested_role } },
+    options: {
+      emailRedirectTo: getAuthRedirectUrl(),
+      data: { full_name, city, phone, requested_role },
+    },
   });
   if (btn) btn.disabled = false;
 
@@ -151,11 +169,58 @@ export async function doReset(): Promise<void> {
   const email = (emailInput?.value || '').trim();
   if (!email) return fail('Shkruani email-in më sipër, pastaj klikoni sërish.');
 
+  const redirectTo = getAuthRedirectUrl();
   const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: location.href.split('?')[0],
+    redirectTo,
   });
-  if (error) return fail(error);
-  toast('Ju dërguam një email për rivendosjen e fjalëkalimit.');
+  if (error) return fail(error.message || String(error));
+  toast('Ju dërguam një email me lidhjen për rivendosjen e fjalëkalimit.');
+}
+
+export function renderNewPassword(): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+
+  root.innerHTML = `
+  <div class="auth-wrap"><div class="auth">
+    <h1>Fjalëkalim i ri</h1>
+    <p class="sub">Vendosni fjalëkalimin tuaj të ri për të vazhduar në portal.</p>
+
+    <label>Fjalëkalimi i ri *</label>
+    <input id="np_pass" type="password" placeholder="Të paktën 8 karaktere" autocomplete="new-password">
+
+    <label>Konfirmoni fjalëkalimin *</label>
+    <input id="np_pass_confirm" type="password" placeholder="Përsëritni fjalëkalimin" autocomplete="new-password">
+
+    <div style="margin-top:16px">
+      <button class="btn wide" id="np_btn">Ruaj fjalëkalimin</button>
+    </div>
+  </div></div>`;
+
+  const doSave = async () => {
+    const passInput = document.getElementById('np_pass') as HTMLInputElement | null;
+    const confirmInput = document.getElementById('np_pass_confirm') as HTMLInputElement | null;
+    const btn = document.getElementById('np_btn') as HTMLButtonElement | null;
+
+    const pass = passInput?.value || '';
+    const confirm = confirmInput?.value || '';
+
+    if (!pass || pass.length < 8) return fail('Fjalëkalimi duhet të ketë të paktën 8 karaktere.');
+    if (pass !== confirm) return fail('Fjalëkalimet nuk përputhen.');
+
+    if (btn) btn.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: pass });
+    if (btn) btn.disabled = false;
+
+    if (error) return fail(error.message);
+    toast('Fjalëkalimi u ndryshua me sukses!');
+    window.dispatchEvent(new CustomEvent('app:authenticated'));
+  };
+
+  document.getElementById('np_btn')?.addEventListener('click', doSave);
+  document.getElementById('np_pass_confirm')?.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') doSave();
+  });
 }
 
 export async function doLogout(): Promise<void> {
