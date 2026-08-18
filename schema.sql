@@ -1958,9 +1958,9 @@ select
   u.id,
   coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
   nullif(u.raw_user_meta_data->>'city', ''),
-  case when u.email = 'geraldballa5@gmail.com' then null else coalesce(nullif(u.raw_user_meta_data->>'requested_role',''), 'ndihmes') end,
-  case when u.email = 'geraldballa5@gmail.com' then 'admin' else 'ndihmes' end,
-  case when u.email = 'geraldballa5@gmail.com' then 'approved' else 'pending' end
+  coalesce(nullif(u.raw_user_meta_data->>'requested_role',''), 'ndihmes'),
+  'ndihmes',
+  'pending'
 from auth.users u
 left join public.volunteers v on v.id = u.id
 where v.id is null
@@ -1975,10 +1975,6 @@ from auth.users u
 left join public.volunteer_private vp on vp.id = u.id
 where vp.id is null
 on conflict (id) do update set email = excluded.email;
-
-update public.volunteers
-set role = 'admin', status = 'approved'
-where id in (select id from auth.users where email = 'geraldballa5@gmail.com');
 
 
 -- ============================ INDEKSET E PERFORMANCËS ======================
