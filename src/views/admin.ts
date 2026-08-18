@@ -85,9 +85,27 @@ export async function vAdmin(): Promise<void> {
             ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
             <div class="adm-info">
               <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')} <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span></div>
-              <div class="meta">${esc(v.volunteer_code)} · <b>${esc(ROLES[v.role])}</b> · ${esc(v.units?.name || 'Pa njësi')}</div>
+              <div class="meta">${esc(v.volunteer_code)}</div>
+            </div>
+            <div class="adm-sel">
+              <select id="registered_role_${v.id}" aria-label="Roli i ${esc(v.full_name)}">
+                ${roleKeys.map(r => `
+                  <option value="${r}" ${r === v.role ? 'selected' : ''}>${esc(ROLES[r])}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="adm-sel">
+              <select id="registered_unit_${v.id}" aria-label="Njësia e ${esc(v.full_name)}">
+                <option value="">(Pa njësi)</option>
+                ${units.map(u => `
+                  <option value="${u.id}" ${u.id === v.unit_id ? 'selected' : ''}>
+                    ${esc(u.code)} · ${esc(u.name)}
+                  </option>
+                `).join('')}
+              </select>
             </div>
             <div class="adm-acts">
+              <button class="btn sec sm" data-update-vol="${v.id}">Ruaj</button>
               ${v.status === 'approved'
                 ? `<button class="btn red sm" data-suspend-vol="${v.id}">✕ Anulo</button>`
                 : `<button class="btn green sm" data-reactivate-vol="${v.id}">↻ Riaktivizo</button>`}
@@ -162,6 +180,30 @@ export async function vAdmin(): Promise<void> {
       const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'suspended' });
       if (error) return fail(error);
       toast('Vullnetari u anulua.');
+      vAdmin();
+    });
+  });
+
+  view.querySelectorAll<HTMLButtonElement>('[data-update-vol]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.updateVol;
+      if (!id) return;
+
+      const roleSel = document.getElementById(`registered_role_${id}`) as HTMLSelectElement | null;
+      const unitSel = document.getElementById(`registered_unit_${id}`) as HTMLSelectElement | null;
+      const role = roleSel?.value as VolunteerRole | undefined;
+      if (!role) return fail('Zgjidhni një rol të vlefshëm.');
+
+      btn.disabled = true;
+      const [roleRes, unitRes] = await Promise.all([
+        sb.rpc('vol_set_role', { p_id: id, p_role: role }),
+        sb.rpc('vol_set_unit', { p_id: id, p_unit: unitSel?.value || null }),
+      ]);
+      btn.disabled = false;
+
+      if (roleRes.error) return fail(roleRes.error);
+      if (unitRes.error) return fail(unitRes.error);
+      toast('Roli dhe njësia u përditësuan.');
       vAdmin();
     });
   });
