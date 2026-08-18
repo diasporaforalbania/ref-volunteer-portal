@@ -1,4 +1,5 @@
 name = "portalreferendum21"
+main = "src/worker.ts"
 compatibility_date = "2026-08-16"
 compatibility_flags = ["nodejs_compat"]
 
@@ -13,4 +14,5 @@ html_handling = "auto-trailing-slash"
 
 [vars]
 SUPABASE_URL = "https://yymmdyjjjvjbyleaoygf.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5bW1keWpqanZqYnlsZWFveWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3ODUzODEsImV4cCI6MjA5ODM2MTM4MX0.mxR0_mF37Ste8eFgKKEBNwFXAILVY8JdZMQo-1zbkE0"
 DEFAULT_GOAL = "50000"

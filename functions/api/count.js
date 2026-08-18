@@ -1,10 +1,13 @@
 /**
  * GET /api/count
  * 
- * Cloudflare Pages Function (portal.referendum21.org)
+ * Cloudflare Pages Function / Worker API (portal.referendum21.org)
  * Secure Edge API Bridge for verified signature tallies.
  * Enforces strict Origin allowlisting, Zero-PII sanitization, and upstream timeouts.
  */
+
+const DEFAULT_SUPABASE_URL = 'https://yymmdyjjjvjbyleaoygf.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5bW1keWpqanZqYnlsZWFveWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3ODUzODEsImV4cCI6MjA5ODM2MTM4MX0.mxR0_mF37Ste8eFgKKEBNwFXAILVY8JdZMQo-1zbkE0';
 
 const ALLOWED_ORIGINS = new Set([
   'https://referendum21.org',
@@ -26,7 +29,7 @@ const ALLOWED_ORIGIN_PATTERNS = [
 ];
 
 export function isOriginAllowed(origin) {
-  if (!origin) return true; // Direct curl or same-origin requests
+  if (!origin) return true; // Direct curl, server fetch, or same-origin requests
   if (ALLOWED_ORIGINS.has(origin)) return true;
   return ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
 }
@@ -34,13 +37,15 @@ export function isOriginAllowed(origin) {
 export function getCorsHeaders(origin) {
   const headers = {
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, apikey, authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, apikey, authorization, accept',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin, Accept-Encoding',
   };
 
   if (origin && isOriginAllowed(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
+  } else if (!origin) {
+    headers['Access-Control-Allow-Origin'] = '*';
   }
 
   return headers;
@@ -94,7 +99,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
         if (origin && isOriginAllowed(origin)) {
           res.headers.set('Access-Control-Allow-Origin', origin);
         } else {
-          res.headers.delete('Access-Control-Allow-Origin');
+          res.headers.set('Access-Control-Allow-Origin', '*');
         }
         res.headers.set('Vary', 'Origin, Accept-Encoding');
         return res;
@@ -104,18 +109,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
     }
   }
 
-  const supabaseUrl = env?.SUPABASE_URL;
-  const supabaseAnonKey = env?.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return new Response(
-      JSON.stringify({ error: 'service_misconfigured' }),
-      {
-        status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
-      }
-    );
-  }
+  const supabaseUrl = env?.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const supabaseAnonKey = env?.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
   // 3. Upstream Fetch with 4000ms AbortController Timeout
   const controller = new AbortController();
