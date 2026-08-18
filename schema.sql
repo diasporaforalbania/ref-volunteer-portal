@@ -975,6 +975,12 @@ end $$;
 
 grant execute on function public.review_change_request(uuid, boolean, text) to authenticated;
 
+create or replace function public.decide_change_request(p_id uuid, p_approve boolean, p_note text default null)
+returns void language sql security definer set search_path = public as $$
+  select public.review_change_request(p_id, p_approve, p_note);
+$$;
+grant execute on function public.decide_change_request(uuid, boolean, text) to authenticated;
+
 
 -- ============================ NJOFTIMET NË TELEFON ==========================
 -- Pajisja regjistrohet dhe çregjistrohet vetëm përmes këtyre dy funksioneve.

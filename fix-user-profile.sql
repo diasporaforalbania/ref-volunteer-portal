@@ -13,8 +13,16 @@ grant select on public.volunteers to authenticated;
 grant update (photo_path) on public.volunteers to authenticated;
 grant select on public.volunteer_private to authenticated;
 grant select on public.units to authenticated;
+grant select on public.unit_coordinators to authenticated;
 grant select on public.campaign to authenticated;
 grant select on public.signature_totals to anon, authenticated;
+
+-- Alias për miratimin e kërkesave të ndryshimit
+create or replace function public.decide_change_request(p_id uuid, p_approve boolean, p_note text default null)
+returns void language sql security definer set search_path = public as $$
+  select public.review_change_request(p_id, p_approve, p_note);
+$$;
+grant execute on function public.decide_change_request(uuid, boolean, text) to authenticated;
 
 -- 3. Krijimi & Aktivizimi i profilit të Adminit për geraldballa5@gmail.com
 insert into public.volunteers (id, full_name, city, requested_role, role, status)

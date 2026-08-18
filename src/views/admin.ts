@@ -224,7 +224,7 @@ export async function vAdmin(): Promise<void> {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.approveReq;
       if (!id) return;
-      const { error } = await sb.rpc('decide_change_request', { p_id: id, p_approve: true });
+      const { error } = await sb.rpc('review_change_request', { p_id: id, p_approve: true, p_note: null });
       if (error) return fail(error);
       toast('Kërkesa u miratua.');
       vAdmin();
@@ -235,7 +235,7 @@ export async function vAdmin(): Promise<void> {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.rejectReq;
       if (!id || !confirm('Të refuzohet kjo kërkesë ndryshimi?')) return;
-      const { error } = await sb.rpc('decide_change_request', { p_id: id, p_approve: false });
+      const { error } = await sb.rpc('review_change_request', { p_id: id, p_approve: false, p_note: 'Refuzuar nga administratori.' });
       if (error) return fail(error);
       toast('Kërkesa u refuzua.');
       vAdmin();
