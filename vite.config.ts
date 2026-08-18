@@ -93,6 +93,69 @@ export default defineConfig(({ mode }) => {
           });
         },
       },
+      {
+        // Pikat aktive te nenshkrimit -- pasqyron functions/api/points.js, qe
+        // `npm run dev` te sillet si Cloudflare Pages. Logjika e sigurise e
+        // vertete jeton te endpointi; ky middleware ekziston vetem per zhvillim.
+        name: 'dev-api-points',
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            const url = req.url ? new URL(req.url, `http://${req.headers.host || 'localhost'}`) : null;
+            if (!url || url.pathname !== '/api/points') return next();
+
+            const origin = req.headers.origin || '*';
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.setHeader('Access-Control-Max-Age', '86400');
+            res.setHeader('Vary', 'Origin');
+
+            if (req.method === 'OPTIONS') {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+            if (req.method !== 'GET') return next();
+
+            try {
+              const { sanitizePoints } = await server.ssrLoadModule('/functions/api/points.js');
+              const select = 'id,unit_code,unit_name,point_name,city,lat,lng,opens_at,closes_at';
+              const upstream = await fetch(
+                `${supabaseUrl}/rest/v1/public_signing_points?select=${encodeURIComponent(select)}&limit=200`,
+                {
+                  headers: {
+                    apikey: supabaseAnonKey,
+                    Authorization: `Bearer ${supabaseAnonKey}`,
+                    Accept: 'application/json',
+                  },
+                }
+              );
+
+              if (!upstream.ok) {
+                res.statusCode = 502;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'upstream_unavailable' }));
+                return;
+              }
+
+              const points = sanitizePoints(await upstream.json());
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-cache');
+              res.end(JSON.stringify({
+                points,
+                count: points.length,
+                generated_at: new Date().toISOString(),
+              }));
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Unknown error';
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'internal_error', message }));
+            }
+          });
+        },
+      },
     ],
   };
 });
