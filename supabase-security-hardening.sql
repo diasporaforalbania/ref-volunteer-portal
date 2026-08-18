@@ -123,35 +123,9 @@ drop policy if exists mat_write on public.materials;
 create policy mat_write on public.materials for all to authenticated
   using (public.vol_is_internal()) with check (public.vol_is_internal());
 
-drop policy if exists rep_read on public.reports;
-create policy rep_read on public.reports for select to authenticated
-  using (reporter_id = auth.uid() or public.vol_is_internal());
-
-drop policy if exists rep_update on public.reports;
-create policy rep_update on public.reports for update to authenticated
+drop policy if exists rep_write on public.reports;
+create policy rep_write on public.reports for update to authenticated
   using (public.vol_is_internal()) with check (public.vol_is_internal());
 
--- 5. INDEKSET E PERFORMANCËS
-create index if not exists idx_checkins_active 
-  on public.checkins (started_at desc) 
-  where ended_at is null;
-
-create index if not exists idx_checkins_unit_started 
-  on public.checkins (unit_id, started_at desc);
-
-create index if not exists idx_volunteers_supervisor_status 
-  on public.volunteers (supervisor_id, status) 
-  where status = 'approved';
-
-create index if not exists idx_shifts_active_window 
-  on public.shifts (starts_at desc, unit_id) 
-  where closed_at is null;
-
--- Rifreskimi i skemës PostgREST
+-- 5. RIFRESKIMI I SCHEMAS PËR POSTGREST
 notify pgrst, 'reload schema';
-
--- ============================================================================
--- KONTROLLI I TESTIMIT (Verifikoni pas ekzekutimit):
--- 1. `select * from public.signature_totals;` -> duhet të kthejë 1 rresht
--- 2. `select * from public.volunteer_private;` si anon -> duhet të kthejë 0 rreshta
--- ============================================================================

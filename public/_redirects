@@ -1,1 +1,2 @@
-# Cloudflare redirect rules must use relative source paths.
+# Cloudflare Pages / Netlify Redirection Rules
+/*  /index.html  200
