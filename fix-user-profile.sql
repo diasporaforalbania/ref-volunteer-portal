@@ -24,32 +24,7 @@ returns void language sql security definer set search_path = public as $$
 $$;
 grant execute on function public.decide_change_request(uuid, boolean, text) to authenticated;
 
--- 3. Krijimi & Aktivizimi i profilit të Adminit për geraldballa5@gmail.com
-insert into public.volunteers (id, full_name, city, requested_role, role, status)
-select
-  u.id,
-  coalesce(u.raw_user_meta_data->>'full_name', 'Gerald Balla'),
-  coalesce(nullif(u.raw_user_meta_data->>'city', ''), 'Tiranë'),
-  null,
-  'admin',
-  'approved'
-from auth.users u
-where u.email = 'geraldballa5@gmail.com'
-on conflict (id) do update set
-  role = 'admin',
-  status = 'approved';
-
-insert into public.volunteer_private (id, phone, email)
-select
-  u.id,
-  nullif(u.raw_user_meta_data->>'phone', ''),
-  u.email
-from auth.users u
-where u.email = 'geraldballa5@gmail.com'
-on conflict (id) do update set
-  email = excluded.email;
-
--- 4. Përditësimi i çdo përdoruesi tjetër ekzistues në auth.users
+-- 3. Sinkronizimi i përdoruesve ekzistues nga auth.users (roli bazë: ndihmës, në pritje)
 insert into public.volunteers (id, full_name, city, requested_role, role, status)
 select
   u.id,
