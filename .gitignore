@@ -1,1 +1,22 @@
-database_volunteer/Supabase Snippet See_all_volunteers-2.csv
+# Dependencies
+node_modules/
+
+# Production build output
+dist/
+
+# Local environment variables and secrets (DO NOT COMMIT)
+.env
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cloudflare Wrangler local state
+.wrangler/
+
+# Temporary data files
+database_volunteer/
