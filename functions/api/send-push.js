@@ -5,27 +5,68 @@
  * Replaces the Supabase Deno Edge Function with native Cloudflare Edge execution.
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = new Set([
+  'https://portal.referendum21.org',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8788',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:8788',
+]);
+
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/[a-z0-9-]+\.ref-volunteer-portal\.pages\.dev$/,
+  /^https:\/\/ref-volunteer-portal\.pages\.dev$/,
+  /^https:\/\/portalreferendum21\.[a-z0-9-]+\.workers\.dev$/,
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  return ALLOWED_ORIGIN_PATTERNS.some(p => p.test(origin));
+}
+
+function getCorsHeaders(origin) {
+  const headers = {
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
+  };
+  if (origin && isOriginAllowed(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+  return headers;
+}
 
 const STAFF_ROLES = ['koordinator', 'jurist', 'admin'];
 const INTERNAL_ROLES = ['koordinator', 'jurist', 'admin', 'logjistike', 'burime_njerezore', 'pr_edukim', 'it'];
 
-function jsonResponse(data, status = 200) {
+function jsonResponse(data, status = 200, origin = null) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
+    headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json; charset=utf-8' },
   });
 }
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS_HEADERS });
+export async function onRequestOptions({ request }) {
+  const origin = request?.headers?.get('Origin');
+  if (origin && !isOriginAllowed(origin)) {
+    return new Response(null, { status: 403 });
+  }
+  return new Response(null, { headers: getCorsHeaders(origin) });
 }
 
 export async function onRequestPost({ request, env }) {
+  const origin = request.headers.get('Origin');
+  if (origin && !isOriginAllowed(origin)) {
+    return new Response(JSON.stringify({ error: 'forbidden_origin' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabaseUrl = env.SUPABASE_URL || 'https://yymmdyjjjvjbyleaoygf.supabase.co';
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
   const vapidPublicKey = env.VAPID_PUBLIC_KEY;
@@ -33,13 +74,13 @@ export async function onRequestPost({ request, env }) {
   const vapidSubject = env.VAPID_SUBJECT || 'mailto:qendra@referendum21.org';
 
   if (!serviceRoleKey) {
-    return jsonResponse({ error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY is missing' }, 500);
+    return jsonResponse({ error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY is missing' }, 500, origin);
   }
 
   // 1. Authenticate caller
   const authHeader = request.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Unauthorized: Missing or invalid authorization token' }, 401);
+    return jsonResponse({ error: 'Unauthorized: Missing or invalid authorization token' }, 401, origin);
   }
   const token = authHeader.replace('Bearer ', '');
 
