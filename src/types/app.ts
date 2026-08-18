@@ -52,18 +52,6 @@ export interface SlotState {
   label: string | null;
 }
 
-export interface OrgGroup {
-  id: string;
-  label: string;
-  roots: VolunteerRow[];
-}
-
-export interface OrgState {
-  groups: OrgGroup[];
-  kidsOf: Record<string, VolunteerRow[]>;
-  sel: string | null;
-}
-
 export interface SlippyMapPin {
   id?: string;
   lat: number;

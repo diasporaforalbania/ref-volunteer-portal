@@ -5,17 +5,26 @@ import { shrinkImage } from '../utils/image';
 import { toast, fail } from '../components/toast';
 import { openModal, closeModal } from '../components/modal';
 import { badgeCardHtml, renderBadgeQr } from '../components/badge';
-import type { ChangeRequestKind, ChangeRequestRow, UnitRow, VolunteerPrivateRow } from '../types/database';
+import type {
+  ChangeRequestKind,
+  ChangeRequestRow,
+  UnitRow,
+  UnitTotalItem,
+  VolunteerPrivateRow,
+  VolunteerRow,
+} from '../types/database';
 
 export async function vBadge(): Promise<void> {
   const view = document.getElementById('view');
   if (!view || !store.ME) return;
   view.innerHTML = '<div class="empty">Po ngarkohet karta…</div>';
 
-  const [privRes, unitsRes, reqsRes] = await Promise.all([
+  const [privRes, unitsRes, reqsRes, totalsRes, teamRes] = await Promise.all([
     sb.from('volunteer_private').select('*').eq('id', store.ME.id).maybeSingle(),
     sb.from('units').select('id,code,name,is_open').order('code'),
     sb.from('change_requests').select('*').eq('volunteer_id', store.ME.id).eq('status', 'pending'),
+    sb.rpc('unit_totals'),
+    sb.rpc('struktura_tree'),
   ]);
 
   store.BADGE.priv = privRes.data as VolunteerPrivateRow | null;
@@ -23,6 +32,9 @@ export async function vBadge(): Promise<void> {
   store.BADGE.reqs = Object.fromEntries(
     ((reqsRes.data || []) as ChangeRequestRow[]).map(r => [r.kind, r])
   );
+
+  const totals = (totalsRes.data || []) as UnitTotalItem[];
+  const team = (teamRes.data || []) as VolunteerRow[];
 
   const verifyUrl = `${location.origin}${location.pathname}?v=${encodeURIComponent(store.ME.volunteer_code)}`;
   const pReq = store.BADGE.reqs.profile;
@@ -72,6 +84,49 @@ export async function vBadge(): Promise<void> {
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Si funksionon struktura</h3>
+      <div class="meta">
+        Njësia është qendra e gjithçkaje. Njerëzit vendosen rreth saj, dhe vendi tregon
+        se kush i përgjigjet kujt.
+      </div>
+
+      <div class="struct-me">${myPlaceHtml(totals, team)}</div>
+
+      <div class="struct-rules">
+        <div class="struct-rule r-coord">
+          <div class="struct-hd"><span class="struct-dot"></span><b>Koordinatori</b>
+            <span class="struct-where">mbi njësi</span></div>
+          <p>Një koordinator mund të mbajë disa njësi njëherësh, dhe një njësi mund të
+             mbahet nga disa koordinatorë. Vetëm qendra i cakton.</p>
+        </div>
+        <div class="struct-rule r-collect">
+          <div class="struct-hd"><span class="struct-dot"></span><b>Mbledhësi i autorizuar</b>
+            <span class="struct-where">nën njësi</span></div>
+          <p>I përket një njësie të vetme. Eprorët e tij janë të gjithë koordinatorët e
+             asaj njësie — nuk ka më një supervizor të vetëm personal.</p>
+        </div>
+        <div class="struct-rule r-help">
+          <div class="struct-hd"><span class="struct-dot"></span><b>Ndihmësi</b>
+            <span class="struct-where">nën një mbledhës</span></div>
+          <p>I përgjigjet një mbledhësi të vetëm dhe ndjek njësinë e tij. Nëse mbledhësi
+             del nga njësia, ndihmësi mbetet në pritje derisa ta marrë një mbledhës tjetër.</p>
+        </div>
+        <div class="struct-rule">
+          <div class="struct-hd"><span class="struct-dot"></span><b>Njësitë e mbyllura</b>
+            <span class="struct-where">pa vende të reja</span></div>
+          <p>Mbeten të dukshme që historiku të lexohet, por nuk pranojnë njerëz të rinj
+             derisa qendra t’i rihapë.</p>
+        </div>
+      </div>
+
+      <div class="meta" style="margin-top:12px">
+        Vendet ndryshohen te <b>Paneli</b>: qendra i lëviz të gjithë, koordinatori
+        mbledhësit dhe ndihmësit brenda njësive që mban, mbledhësi vetëm ndihmësit e
+        ekipit të vet.
+      </div>
     </div>`;
 
   renderBadgeQr('my_badge_qr', verifyUrl);
@@ -83,6 +138,46 @@ export async function vBadge(): Promise<void> {
   document.getElementById('input_badge_photo')?.addEventListener('change', uploadPhoto);
   document.getElementById('btn_edit_profile')?.addEventListener('click', () => openChangeModal('profile'));
   document.getElementById('btn_edit_zone')?.addEventListener('click', () => openChangeModal('zone'));
+}
+
+/** Where this volunteer currently sits, in their own words. */
+function myPlaceHtml(totals: UnitTotalItem[], team: VolunteerRow[]): string {
+  const me = store.ME;
+  if (!me) return '';
+
+  const unitOf = (id: string | null): UnitTotalItem | undefined =>
+    id ? totals.find(u => u.id === id) : undefined;
+  const label = (u: UnitTotalItem): string => `${esc(u.code)} · ${esc(u.name)}`;
+
+  if (me.role === 'koordinator') {
+    const held = totals.filter(u => (u.coordinators || []).some(c => c.id === me.id));
+    return held.length
+      ? `<b>Ju mbani ${held.length === 1 ? 'një njësi' : `${held.length} njësi`}:</b>
+         ${held.map(u => `<span class="chip">${label(u)}</span>`).join(' ')}`
+      : '<b>Ende pa njësi.</b> Qendra ju vendos mbi një njësi te Paneli.';
+  }
+
+  if (me.role === 'mbledhes') {
+    const unit = unitOf(me.unit_id);
+    if (!unit) return '<b>Ende pa njësi.</b> Ju pret një vend nën një njësi të hapur.';
+    const coords = unit.coordinators || [];
+    const helpers = team.filter(v => v.supervisor_id === me.id).length;
+    return `<b>Jeni nën njësinë ${label(unit)}.</b>
+      ${coords.length
+        ? `Koordinatorët e saj: ${coords.map(c => `<span class="chip">${esc(c.name || c.code || '—')}</span>`).join(' ')}`
+        : 'Kjo njësi ende nuk ka koordinator.'}
+      ${helpers ? `Ekipi juaj: <b>${helpers}</b> ndihmës.` : 'Ende pa ndihmës në ekip.'}`;
+  }
+
+  if (me.role === 'ndihmes') {
+    const lead = team.find(v => v.id === me.supervisor_id);
+    if (!lead) return '<b>Ende pa mbledhës.</b> Jeni në pritje derisa t’ju marrë një mbledhës i autorizuar.';
+    const unit = unitOf(me.unit_id);
+    return `<b>Jeni në ekipin e ${esc(lead.full_name || lead.volunteer_code)}</b>${
+      unit ? `, te njësia ${label(unit)}.` : '.'}`;
+  }
+
+  return '<b>Ju jeni pjesë e qendrës.</b> Qendra nuk qëndron nën një njësi terreni.';
 }
 
 export function openChangeModal(kind: 'profile' | 'zone'): void {

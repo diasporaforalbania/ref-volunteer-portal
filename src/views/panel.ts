@@ -1,9 +1,9 @@
 import { sb } from '../api/client';
-import { store, ROLES } from '../state/store';
-import { esc } from '../utils/security';
+import { store } from '../state/store';
+import { esc, truncate } from '../utils/security';
 import { nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
-import { structuraHtml, pickOrg } from '../components/orgTree';
+import { renderUnitBoard } from '../components/unitBoard';
 import type { UnitTotalItem, VolunteerRow } from '../types/database';
 
 export async function vPanel(): Promise<void> {
@@ -11,16 +11,14 @@ export async function vPanel(): Promise<void> {
   if (!view) return;
   view.innerHTML = '<div class="empty">Po ngarkohet paneli…</div>';
 
-  const [totalsRes, teamRes, coRes] = await Promise.all([
+  const [totalsRes, teamRes] = await Promise.all([
     sb.rpc('unit_totals'),
     sb.rpc('struktura_tree'),
-    sb.from('volunteers').select('id,full_name,volunteer_code').eq('role', 'koordinator').eq('status', 'approved'),
   ]);
 
   if (totalsRes.error) return fail(totalsRes.error);
   const units = (totalsRes.data || []) as UnitTotalItem[];
   const team = (teamRes.data || []) as VolunteerRow[];
-  const coords = (coRes.data || []) as VolunteerRow[];
 
   const isAdm = store.isAdmin();
 
@@ -30,17 +28,25 @@ export async function vPanel(): Promise<void> {
 
     <div class="card" style="margin-bottom:16px">
       <div class="row" style="justify-content:space-between;align-items:center">
-        <h3 style="margin:0">Njësitë organizative</h3>
+        <h3 style="margin:0">Struktura e njësive</h3>
         ${isAdm ? '<button class="btn green sm" id="btn_add_unit">+ Shto njësi</button>' : ''}
       </div>
-      <div class="meta">Zonat e mbledhjes së nënshkrimeve, koordinatorët dhe progresi.</div>
+      <div class="meta">
+        Koordinatorët rrinë mbi njësinë, mbledhësit e autorizuar nën të, ndihmësit nën një mbledhës.
+      </div>
+      <div style="margin-top:14px" id="board_box"></div>
+    </div>
+
+    <div class="card">
+      <h3>Njësitë organizative</h3>
+      <div class="meta">Zonat e mbledhjes së nënshkrimeve, objektivat dhe progresi.</div>
       <div class="scroll-x" style="margin-top:10px">
         <table class="tbl">
           <thead>
             <tr>
               <th>Kodi</th>
               <th>Emri</th>
-              <th>Koordinatori</th>
+              <th>Koordinatorët</th>
               <th>Statusi</th>
               <th style="text-align:right">Firma</th>
               <th style="text-align:right">Objektivi</th>
@@ -51,21 +57,15 @@ export async function vPanel(): Promise<void> {
           <tbody>
             ${units.map(u => {
               const pc = u.target > 0 ? Math.min(100, Math.round((u.signatures / u.target) * 100)) : 0;
+              const coords = u.coordinators || [];
               return `
                 <tr>
                   <td><b>${esc(u.code)}</b></td>
                   <td>${esc(u.name)}</td>
                   <td>
-                    ${isAdm ? `
-                      <select class="coord-select" data-unit-id="${u.id}" style="font-size:13px;height:34px;padding:4px 8px">
-                        <option value="">(Pa koordinator)</option>
-                        ${coords.map(c => `
-                          <option value="${c.id}" ${c.id === u.coordinator_id ? 'selected' : ''}>
-                            ${esc(c.full_name || c.volunteer_code)}
-                          </option>
-                        `).join('')}
-                      </select>
-                    ` : esc(u.coordinator_name || '—')}
+                    ${coords.length
+                      ? coords.map(c => `<span class="chip">${esc(truncate(c.name || c.code || '—', 22))}</span>`).join(' ')
+                      : '<span class="meta">—</span>'}
                   </td>
                   <td>
                     ${isAdm ? `
@@ -93,15 +93,9 @@ export async function vPanel(): Promise<void> {
           </tbody>
         </table>
       </div>
-    </div>
-
-    <div class="card">
-      <h3>Struktura e ekipit</h3>
-      <div class="meta">Hierarkia organizative: Koordinatorët → Mbledhësit → Ndihmësit.</div>
-      <div style="margin-top:14px" id="org_box">
-        ${structuraHtml(team)}
-      </div>
     </div>`;
+
+  renderUnitBoard('board_box', units, team);
 
   document.getElementById('btn_add_unit')?.addEventListener('click', async () => {
     const codeInput = prompt('Kodi i njësisë (p.sh. A1):');
@@ -131,22 +125,6 @@ export async function vPanel(): Promise<void> {
     if (error) return fail(error);
     toast('Njësia u shtua.');
     vPanel();
-  });
-
-  // Attach coordinator select change handlers
-  view.querySelectorAll<HTMLSelectElement>('.coord-select').forEach(sel => {
-    sel.addEventListener('change', async () => {
-      const unitId = sel.dataset.unitId;
-      const coordId = sel.value || null;
-      if (unitId) {
-        const { error } = await sb.rpc('unit_set_coordinator', {
-          p_unit: unitId,
-          p_coord: coordId,
-        });
-        if (error) return fail(error);
-        toast('Koordinatori u caktua.');
-      }
-    });
   });
 
   // Attach toggle open/close handlers
@@ -193,14 +171,6 @@ export async function vPanel(): Promise<void> {
       if (error) return fail(error);
       toast('Njësia u fshi.');
       vPanel();
-    });
-  });
-
-  // Attach org tree button handlers
-  view.querySelectorAll<HTMLElement>('[data-org-id]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const orgId = btn.dataset.orgId;
-      if (orgId) pickOrg(orgId);
     });
   });
 }

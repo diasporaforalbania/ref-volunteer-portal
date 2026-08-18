@@ -193,19 +193,28 @@ export interface CampaignStatsResult {
   pending_requests: number;
 }
 
+/** One coordinator standing over a unit, as returned by `unit_totals`. */
+export interface UnitCoordinatorRef {
+  id: string;
+  name: string | null;
+  code: string | null;
+  photo: string | null;
+}
+
 export interface UnitTotalItem {
   id: string;
   code: string;
   name: string;
   region: string | null;
+  territory: string | null;
   target: number;
   is_open: boolean;
+  /** Legacy: the first of `coordinators`, kept in sync server-side. */
   coordinator_id: string | null;
   coordinator_name: string | null;
+  coordinators: UnitCoordinatorRef[];
   signatures: number;
-  shifts: number;
-  active_now: number;
-  volunteers_count: number;
+  members: number;
 }
 
 export interface ActiveFieldCollector {

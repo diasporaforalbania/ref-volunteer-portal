@@ -18,6 +18,7 @@ grant select on public.signature_totals to anon, authenticated;
 
 -- 2. SIGURIA E TABELAVE (ROW LEVEL SECURITY & PERMISSION REVOCATION)
 alter table if exists public.units             enable row level security;
+alter table if exists public.unit_coordinators enable row level security;
 alter table if exists public.volunteers        enable row level security;
 alter table if exists public.volunteer_private enable row level security;
 alter table if exists public.announcements     enable row level security;
@@ -35,6 +36,7 @@ alter table if exists public.push_subscriptions enable row level security;
 revoke all on public.volunteers        from anon, authenticated;
 revoke all on public.volunteer_private from anon, authenticated;
 revoke all on public.units             from anon, authenticated;
+revoke all on public.unit_coordinators from anon, authenticated;
 revoke all on public.checkins          from anon, authenticated;
 revoke all on public.shifts            from anon, authenticated;
 revoke all on public.shift_signups     from anon, authenticated;
@@ -47,6 +49,7 @@ grant select on public.volunteers        to authenticated;
 grant update (photo_path) on public.volunteers to authenticated;
 grant select on public.volunteer_private to authenticated;
 grant select on public.units             to authenticated;
+grant select on public.unit_coordinators to authenticated;
 grant select on public.announcements     to authenticated;
 grant select, insert, update, delete on public.announcements to authenticated;
 grant select on public.materials         to authenticated;
@@ -102,6 +105,14 @@ grant execute on function public.vol_set_role(uuid, text) to authenticated;
 grant execute on function public.vol_decide_pending(uuid, boolean, text) to authenticated;
 grant execute on function public.vol_set_unit(uuid, uuid) to authenticated;
 grant execute on function public.vol_set_supervisor(uuid, uuid) to authenticated;
+
+-- Tabela e Panelit: koordinatorët mbi njësi, mbledhësit nën to, ndihmësit nën
+-- mbledhës. Lejet e vërteta rrinë brenda vetë funksioneve (qendra kudo,
+-- koordinatori te njësitë e veta, mbledhësi te ekipi i vet).
+grant execute on function public.unit_coord_add(uuid, uuid) to authenticated;
+grant execute on function public.unit_coord_remove(uuid, uuid) to authenticated;
+grant execute on function public.unit_assign_collector(uuid, uuid) to authenticated;
+grant execute on function public.unit_assign_helper(uuid, uuid) to authenticated;
 
 -- 4. PËRDITËSIMI I RREGULLAVE TË BRENDSHME (RLS PËR PR, BNJ, IT, LOGJISTIKË)
 drop policy if exists ann_write on public.announcements;

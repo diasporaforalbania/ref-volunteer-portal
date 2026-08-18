@@ -59,9 +59,10 @@ create table if not exists public.volunteers (
   status        text not null default 'pending'
                 check (status in ('pending','approved','suspended')),
   unit_id       uuid references public.units on delete set null,
-  -- Struktura Koordinator → Mbledhës → Ndihmës (e ndarë nga zona/njësia):
-  -- një mbledhës i përgjigjet një koordinatori, një ndihmës i përgjigjet
-  -- një mbledhësi. Vetëm përmes `vol_set_supervisor` më poshtë.
+  -- Lidhja Mbledhës → Ndihmës: një ndihmës i përgjigjet një mbledhësi të
+  -- vetëm. Mbledhësi NUK ka supervizor personal — eprorët e tij janë
+  -- koordinatorët e njësisë ku qëndron (`unit_coordinators`), sepse një njësi
+  -- mbahet nga disa. Vetëm përmes `unit_assign_helper` më poshtë.
   supervisor_id uuid references public.volunteers on delete set null,
   city          text,
   photo_path    text,                             -- foto e ID-së në storage
@@ -69,6 +70,19 @@ create table if not exists public.volunteers (
   approved_at   timestamptz,
   approved_by   uuid references auth.users on delete set null
 );
+
+-- Kush e mban një njësi. Zëvendëson `units.coordinator_id`: një koordinator
+-- mban disa njësi DHE një njësi mbahet nga disa koordinatorë. Gjithë kufizimi
+-- i hierarkisë varet nga kjo tabelë përmes `vol_my_unit_ids()`, ndaj mjafton
+-- ta ndryshosh këtu që lejet të ndjekin strukturën kudo tjetër.
+create table if not exists public.unit_coordinators (
+  unit_id      uuid not null references public.units on delete cascade,
+  volunteer_id uuid not null references public.volunteers on delete cascade,
+  assigned_at  timestamptz not null default now(),
+  assigned_by  uuid references auth.users on delete set null,
+  primary key (unit_id, volunteer_id)
+);
+create index if not exists unit_coord_vol_idx on public.unit_coordinators (volunteer_id);
 
 -- Të dhënat e kontaktit rrinë veçmas: i sheh vetëm vetë personi + qendra.
 create table if not exists public.volunteer_private (
@@ -273,6 +287,38 @@ end $$;
 
 create index if not exists units_coord_idx on public.units (coordinator_id);
 
+-- Koordinatorët ekzistues kalojnë te `unit_coordinators`. `units.coordinator_id`
+-- mbetet si kolonë e trashëguar, e sinkronizuar me koordinatorin e parë të
+-- njësisë (shih `unit_sync_primary_coordinator`), që çdo kod i vjetër që ende
+-- e lexon të mos prishet.
+insert into public.unit_coordinators (unit_id, volunteer_id)
+select id, coordinator_id from public.units where coordinator_id is not null
+on conflict do nothing;
+
+-- Mbledhësi nuk ka më supervizor personal — njësia e tij është eprori. Para se
+-- ta pastrojmë `supervisor_id`, mbledhësit pa njësi trashëgojnë njësinë e
+-- koordinatorit të tyre, kur ai mban vetëm një; ndryshe lidhja do të humbte.
+update public.volunteers v
+   set unit_id = uc.unit_id
+  from (select volunteer_id, min(unit_id::text)::uuid as unit_id, count(*) as n
+          from public.unit_coordinators group by volunteer_id) uc
+ where v.role = 'mbledhes'
+   and v.unit_id is null
+   and v.supervisor_id = uc.volunteer_id
+   and uc.n = 1;
+
+update public.volunteers set supervisor_id = null
+ where role = 'mbledhes' and supervisor_id is not null;
+
+-- Ndihmësi ndjek njësinë e mbledhësit të vet.
+update public.volunteers h
+   set unit_id = c.unit_id
+  from public.volunteers c
+ where h.role = 'ndihmes'
+   and h.supervisor_id = c.id
+   and c.role = 'mbledhes'
+   and h.unit_id is distinct from c.unit_id;
+
 -- Rolet e reja (logjistikë, burime njerëzore, PR & edukim, IT) + roli i
 -- kërkuar në regjistrim. Kolona shtohet për bazat ekzistuese; kufizimi i
 -- `role` rikrijohet çdo herë (i lirë ta bësh disa herë, s'prek të dhëna).
@@ -369,13 +415,13 @@ $$;
 -- Zonat që mban koordinatori aktual. Baza e gjithë kufizimit të hierarkisë.
 create or replace function public.vol_my_unit_ids() returns setof uuid
 language sql stable security definer set search_path = public as $$
-  select id from public.units where coordinator_id = auth.uid();
+  select unit_id from public.unit_coordinators where volunteer_id = auth.uid();
 $$;
 
 create or replace function public.vol_coordinates_unit(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.units
-                  where id = p_unit and coordinator_id = auth.uid());
+  select exists (select 1 from public.unit_coordinators
+                  where unit_id = p_unit and volunteer_id = auth.uid());
 $$;
 
 -- A është njësia e hapur për mbledhje? Përdoret te kontrolli i check-in-it.
@@ -396,9 +442,11 @@ language sql stable security definer set search_path = public as $$
      and public.vol_is_approved();
 $$;
 
--- Zinxhiri im LART: unë, supervizori im, dhe supervizori i tij. Këta janë
--- udhëheqësit e mi — turnet që hapin ata janë turnet ku bëj pjesë. Struktura
--- ka vetëm tri shtresa (Koordinator → Mbledhës → Ndihmës), ndaj dy hapa mjaftojnë.
+-- Zinxhiri im LART: unë, mbledhësi im (nëse jam ndihmës) dhe koordinatorët e
+-- njësisë sime. Këta janë udhëheqësit e mi — turnet që hapin ata janë turnet ku
+-- bëj pjesë. Mbledhësi nuk ka më supervizor personal: njësia ka disa
+-- koordinatorë dhe të gjithë janë eprorët e tij njësoj, ndaj hapi i dytë lart
+-- lexohet nga `unit_coordinators` e jo nga `supervisor_id`.
 create or replace function public.vol_my_lead_ids() returns setof uuid
 language sql stable security definer set search_path = public as $$
   select v.id from public.volunteers v where v.id = auth.uid()
@@ -406,9 +454,8 @@ language sql stable security definer set search_path = public as $$
   select v.supervisor_id from public.volunteers v
    where v.id = auth.uid() and v.supervisor_id is not null
   union
-  select s.supervisor_id from public.volunteers v
-   join public.volunteers s on s.id = v.supervisor_id
-   where v.id = auth.uid() and s.supervisor_id is not null;
+  select uc.volunteer_id from public.unit_coordinators uc
+   where uc.unit_id = (select unit_id from public.volunteers where id = auth.uid());
 $$;
 
 -- E gjithë dega ime: zinxhiri lart PLUS kush varet nga unë (mbledhësit e mi dhe
@@ -419,11 +466,9 @@ create or replace function public.vol_my_team_ids() returns setof uuid
 language sql stable security definer set search_path = public as $$
   select t.id from public.vol_my_lead_ids() t(id)
   union
-  select v.id from public.volunteers v where v.supervisor_id = auth.uid()
+  select v.id from public.volunteers v where v.unit_id in (select public.vol_my_unit_ids())
   union
-  select w.id from public.volunteers w
-   join public.volunteers v on v.id = w.supervisor_id
-   where v.supervisor_id = auth.uid();
+  select v.id from public.volunteers v where v.supervisor_id = auth.uid();
 $$;
 
 -- Audienca "Vetëm qendra & koordinatorët" e njoftimeve. E ndarë me qëllim nga
@@ -441,6 +486,15 @@ $$;
 -- i autorizuar VETËM te zona e vet. Askush tjetër — as qendra. Ndarja sipas
 -- rolit mbahet e rreptë me qëllim: ndryshe një koordinator i caktuar rastësisht
 -- në një zonë do të planifikonte turne në territorin e një kolegu.
+-- Kush i vendos njerëzit rreth një njësie te tabela e Panelit: qendra kudo,
+-- koordinatori vetëm te njësitë që mban. Mbledhësi nuk hyn këtu — ai prek
+-- vetëm ekipin e vet, dhe atë e kontrollon `unit_assign_helper` veç e veç.
+create or replace function public.vol_can_staff_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_admin()
+      or (public.vol_is_coordinator() and public.vol_coordinates_unit(p_unit));
+$$;
+
 create or replace function public.vol_can_plan_unit(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.vol_is_approved()
@@ -599,6 +653,19 @@ create policy units_update on public.units for update to authenticated
   with check (public.vol_is_admin() or public.vol_coordinates_unit(id));
 create policy units_delete on public.units for delete to authenticated
   using (public.vol_is_admin());
+
+-- ---- unit_coordinators ----------------------------------------------------
+-- Kush mban cilën njësi e lexojnë të gjithë të miratuarit (u duhet për tabelën
+-- e Panelit dhe për të ditur kujt i raportojnë). Shkrimi kalon VETËM nga
+-- `unit_coord_add` / `unit_coord_remove`, që janë të qendrës — përndryshe një
+-- koordinator do t'i shtonte vetes njësi dhe do të hapte gjithë hierarkinë.
+alter table public.unit_coordinators enable row level security;
+revoke all on public.unit_coordinators from anon, authenticated;
+grant select on public.unit_coordinators to authenticated;
+
+drop policy if exists unit_coord_read on public.unit_coordinators;
+create policy unit_coord_read on public.unit_coordinators for select to authenticated
+  using (public.vol_is_approved());
 
 -- ---- announcements --------------------------------------------------------
 drop policy if exists ann_read on public.announcements;
@@ -811,37 +878,19 @@ begin
   update public.volunteers set unit_id = p_unit where id = p_id;
 end $$;
 
--- Struktura Koordinator → Mbledhës → Ndihmës. E ndarë nga njësia/zona
--- (`unit_id`): kjo është zinxhiri i raportimit, jo territori. Vetëm mbledhësi
--- ka supervizor koordinator, dhe vetëm ndihmësi ka supervizor mbledhës —
--- çdo kombinim tjetër refuzohet, që pema të mos prishet me role të papërshtatshme.
+-- I TRASHËGUAR. `supervisor_id` tani mban vetëm lidhjen Mbledhës → Ndihmës;
+-- mbledhësi nuk ka supervizor personal, sepse eprorët e tij janë koordinatorët
+-- e njësisë ku qëndron. Mbahet që thirrjet e vjetra të mos bien, por gjithë
+-- puna bëhet nga `unit_assign_helper` më poshtë, bashkë me lejet e saj.
 create or replace function public.vol_set_supervisor(p_id uuid, p_supervisor uuid)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_role text; v_sup_role text;
+declare v_role text;
 begin
-  if not public.vol_is_staff() then
-    raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
-  end if;
-  if not public.vol_is_center() and not public.vol_can_see_volunteer(p_id) then
-    raise exception 'Ky vullnetar nuk është në hierarkinë tuaj.';
-  end if;
-
   select role into v_role from public.volunteers where id = p_id;
-  if v_role not in ('mbledhes','ndihmes') then
-    raise exception 'Vetëm mbledhësit dhe ndihmësit kanë supervizor në këtë strukturë.';
+  if v_role = 'mbledhes' then
+    raise exception 'Mbledhësi nuk ka supervizor personal — vendoseni nën një njësi.';
   end if;
-
-  if p_supervisor is not null then
-    select role into v_sup_role from public.volunteers where id = p_supervisor;
-    if v_role = 'mbledhes' and v_sup_role <> 'koordinator' then
-      raise exception 'Mbledhësi mund të ketë supervizor vetëm një koordinator.';
-    end if;
-    if v_role = 'ndihmes' and v_sup_role <> 'mbledhes' then
-      raise exception 'Ndihmësi mund të ketë supervizor vetëm një mbledhës.';
-    end if;
-  end if;
-
-  update public.volunteers set supervisor_id = p_supervisor where id = p_id;
+  perform public.unit_assign_helper(p_id, p_supervisor);
 end $$;
 
 
@@ -981,19 +1030,195 @@ begin
    where id = p_unit;
 end $$;
 
+-- I TRASHËGUAR. Një njësi mban tani disa koordinatorë (`unit_coordinators`);
+-- kjo e lë njësinë me një të vetëm, ose pa asnjë. E mbajmë që thirrjet e
+-- vjetra të mos e prishin sinkronin duke shkruar drejt te `coordinator_id`.
 create or replace function public.unit_set_coordinator(p_unit uuid, p_coord uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.vol_is_admin() then
     raise exception 'Vetëm qendra cakton koordinatorët e zonave.';
   end if;
-  if p_coord is not null
-     and not exists (select 1 from public.volunteers
-                      where id = p_coord and role in ('koordinator','admin')) then
-    raise exception 'Zona i caktohet vetëm një koordinatori.';
+  delete from public.unit_coordinators where unit_id = p_unit;
+  if p_coord is not null then
+    perform public.unit_coord_add(p_unit, p_coord);
+  else
+    perform public.unit_sync_primary_coordinator(p_unit);
   end if;
-  update public.units set coordinator_id = p_coord where id = p_unit;
 end $$;
+
+-- ---- tabela e Panelit: koordinatorët mbi njësi, mbledhësit nën to ---------
+-- Tri veprime, një për çdo rregull të tabelës. Çdonjëra e verifikon vetë rolin
+-- e vullnetarit dhe të drejtën e thirrësit — fronti nuk është roja i vetëm.
+
+-- `units.coordinator_id` mbetet e sinkronizuar me koordinatorin e parë të
+-- njësisë, që kodi i trashëguar që ende e lexon të mos gjejë bosh.
+create or replace function public.unit_sync_primary_coordinator(p_unit uuid)
+returns void language sql security definer set search_path = public as $$
+  update public.units u
+     set coordinator_id = (select uc.volunteer_id
+                             from public.unit_coordinators uc
+                            where uc.unit_id = p_unit
+                            order by uc.assigned_at, uc.volunteer_id
+                            limit 1)
+   where u.id = p_unit;
+$$;
+
+-- Koordinator MBI njësi. Shumë koordinatorë mbi një njësi dhe një koordinator
+-- mbi shumë njësi — prandaj tabelë lidhëse e jo kolonë. Vetëm qendra: kush
+-- mban një njësi përcakton kë sheh dhe kë komandon, ndaj s'e vendos vetë.
+create or replace function public.unit_coord_add(p_unit uuid, p_vol uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm qendra cakton koordinatorët e njësive.';
+  end if;
+  if not exists (select 1 from public.volunteers
+                  where id = p_vol and role = 'koordinator' and status = 'approved') then
+    raise exception 'Mbi njësi vihet vetëm një koordinator i miratuar.';
+  end if;
+  if not coalesce((select is_open from public.units where id = p_unit), false) then
+    raise exception 'Njësia është e mbyllur — hapeni para se të vendosni njerëz.';
+  end if;
+
+  insert into public.unit_coordinators (unit_id, volunteer_id, assigned_by)
+  values (p_unit, p_vol, auth.uid())
+  on conflict (unit_id, volunteer_id) do nothing;
+
+  perform public.unit_sync_primary_coordinator(p_unit);
+end $$;
+
+-- Heqja lejohet edhe te njësitë e mbyllura: ndryshe një njësi e mbyllur do të
+-- mbante përgjithmonë koordinatorë që s'i heq dot askush.
+create or replace function public.unit_coord_remove(p_unit uuid, p_vol uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm qendra cakton koordinatorët e njësive.';
+  end if;
+  delete from public.unit_coordinators where unit_id = p_unit and volunteer_id = p_vol;
+  perform public.unit_sync_primary_coordinator(p_unit);
+end $$;
+
+-- Mbledhës i autorizuar NËN njësi — një njësi e vetme, gjithmonë. `p_unit`
+-- bosh do të thotë "kthehu në rezervë". Kur del nga njësia, ndihmësit e tij
+-- lirohen dhe presin një mbledhës tjetër; kur thjesht ndërron njësi, ata e
+-- ndjekin, sepse lidhja e tyre është me personin, jo me territorin.
+create or replace function public.unit_assign_collector(p_vol uuid, p_unit uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_role text; v_old uuid;
+begin
+  if not public.vol_is_approved() then
+    raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
+  end if;
+
+  select role, unit_id into v_role, v_old from public.volunteers where id = p_vol;
+  if v_role is null then
+    raise exception 'Vullnetari nuk u gjet.';
+  end if;
+  if v_role <> 'mbledhes' then
+    raise exception 'Nën njësi vihet vetëm një mbledhës i autorizuar.';
+  end if;
+
+  if not public.vol_is_admin() then
+    if p_unit is not null and not public.vol_can_staff_unit(p_unit) then
+      raise exception 'Mund të vendosni njerëz vetëm te njësitë tuaja.';
+    end if;
+    if v_old is not null and not public.vol_can_staff_unit(v_old) then
+      raise exception 'Ky mbledhës i përket një njësie që nuk e mbani ju.';
+    end if;
+    if p_unit is null and v_old is null then
+      raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
+    end if;
+  end if;
+
+  if p_unit is not null
+     and not coalesce((select is_open from public.units where id = p_unit), false) then
+    raise exception 'Njësia është e mbyllur — hapeni para se të vendosni njerëz.';
+  end if;
+
+  update public.volunteers
+     set unit_id = p_unit, supervisor_id = null
+   where id = p_vol;
+
+  if p_unit is null then
+    update public.volunteers set supervisor_id = null, unit_id = null
+     where supervisor_id = p_vol and role = 'ndihmes';
+  else
+    update public.volunteers set unit_id = p_unit
+     where supervisor_id = p_vol and role = 'ndihmes';
+  end if;
+end $$;
+
+-- Ndihmës NËN një mbledhës — një i vetëm. `p_collector` bosh e kthen në
+-- rezervë. Njësia e ndihmësit ndjek gjithmonë mbledhësin, ndaj nuk caktohet
+-- veçmas: ndryshe do të mbetej te një njësi ku s'ka më ekip.
+create or replace function public.unit_assign_helper(p_vol uuid, p_collector uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_role text; v_old uuid; v_unit uuid; v_old_unit uuid;
+begin
+  if not public.vol_is_approved() then
+    raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
+  end if;
+
+  select role, supervisor_id into v_role, v_old from public.volunteers where id = p_vol;
+  if v_role is null then
+    raise exception 'Vullnetari nuk u gjet.';
+  end if;
+  if v_role <> 'ndihmes' then
+    raise exception 'Nën një mbledhës vihet vetëm një ndihmës.';
+  end if;
+
+  if p_collector is not null then
+    select unit_id into v_unit from public.volunteers
+     where id = p_collector and role = 'mbledhes' and status = 'approved';
+    if not found then
+      raise exception 'Ndihmësi vihet vetëm nën një mbledhës të autorizuar.';
+    end if;
+    if v_unit is null then
+      raise exception 'Ky mbledhës nuk është ende nën një njësi.';
+    end if;
+    if not coalesce((select is_open from public.units where id = v_unit), false) then
+      raise exception 'Njësia është e mbyllur — hapeni para se të vendosni njerëz.';
+    end if;
+  end if;
+
+  if v_old is not null then
+    select unit_id into v_old_unit from public.volunteers where id = v_old;
+  end if;
+
+  -- Qendra kudo; koordinatori brenda njësive që mban — si te destinacioni ashtu
+  -- edhe te vendi nga vjen, që të mos e tërheqë dot nga ekipi i një kolegu;
+  -- mbledhësi vetëm te ekipi i vet.
+  if not public.vol_is_admin() then
+    if not ((p_collector is null
+             or p_collector = auth.uid()
+             or public.vol_can_staff_unit(v_unit))
+        and (v_old is null
+             or v_old = auth.uid()
+             or (v_old_unit is not null and public.vol_can_staff_unit(v_old_unit)))) then
+      raise exception 'Mund të rregulloni vetëm ekipin tuaj.';
+    end if;
+    if p_collector is null and v_old is null then
+      raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
+    end if;
+  end if;
+
+  update public.volunteers
+     set supervisor_id = p_collector,
+         unit_id = case when p_collector is null then null else v_unit end
+   where id = p_vol;
+end $$;
+
+revoke all on function public.unit_sync_primary_coordinator(uuid) from public, anon;
+revoke all on function public.unit_coord_add(uuid, uuid) from public, anon;
+revoke all on function public.unit_coord_remove(uuid, uuid) from public, anon;
+revoke all on function public.unit_assign_collector(uuid, uuid) from public, anon;
+revoke all on function public.unit_assign_helper(uuid, uuid) from public, anon;
+grant execute on function public.unit_coord_add(uuid, uuid) to authenticated;
+grant execute on function public.unit_coord_remove(uuid, uuid) to authenticated;
+grant execute on function public.unit_assign_collector(uuid, uuid) to authenticated;
+grant execute on function public.unit_assign_helper(uuid, uuid) to authenticated;
 
 -- Krijimi dhe fshirja e njësive kalojnë në RPC të kufizuara te admini.
 -- Kjo vazhdon të funksionojë edhe kur skripti i forcimit të sigurisë heq
@@ -1112,7 +1337,8 @@ drop function if exists public.unit_totals();
 create or replace function public.unit_totals()
 returns table (id uuid, code text, name text, region text, territory text,
                target integer, is_open boolean, coordinator_id uuid,
-               coordinator_name text, signatures bigint, members bigint)
+               coordinator_name text, coordinators jsonb,
+               signatures bigint, members bigint)
 language sql stable security definer set search_path = public as $$
   select u.id, u.code, u.name, u.region, u.territory, u.target,
          u.is_open, u.coordinator_id,
@@ -1121,6 +1347,20 @@ language sql stable security definer set search_path = public as $$
          -- politika e `volunteers` pikërisht këtë e ndalon.
          case when public.vol_is_center() or u.coordinator_id = auth.uid()
               then k.full_name end,
+         -- Lista e plotë e koordinatorëve për tabelën e Panelit. Kufiri është
+         -- po ai i `struktura_tree()`: qendra i sheh të gjitha, koordinatori
+         -- vetëm njësitë që mban, kushdo tjetër vetëm njësinë ku qëndron.
+         case when public.vol_is_qendra()
+                   or u.id in (select public.vol_my_unit_ids())
+                   or u.id = (select unit_id from public.volunteers where id = auth.uid())
+              then coalesce((select jsonb_agg(jsonb_build_object(
+                               'id', c2.id, 'name', c2.full_name,
+                               'code', c2.volunteer_code, 'photo', c2.photo_path)
+                             order by c2.full_name)
+                              from public.unit_coordinators uc
+                              join public.volunteers c2 on c2.id = uc.volunteer_id
+                             where uc.unit_id = u.id), '[]'::jsonb)
+              else '[]'::jsonb end,
          coalesce((select sum(c.signatures) from public.checkins c where c.unit_id = u.id), 0),
          (select count(*) from public.volunteers v where v.unit_id = u.id and v.status = 'approved')
     from public.units u
@@ -1140,12 +1380,14 @@ $$;
 -- `security definer` sepse kjo pamje shkon PËRTEJ politikës bazë të
 -- `volunteers` (ndihmësi/mbledhësi tani mund të shohin pjesë të hierarkisë
 -- që RLS-ja normalisht s'ua lejon) — njësoj si `field_active()`.
+drop function if exists public.struktura_tree();
 create or replace function public.struktura_tree()
 returns table (id uuid, full_name text, role text, photo_path text,
-               volunteer_code text, supervisor_id uuid)
+               volunteer_code text, supervisor_id uuid, unit_id uuid)
 language sql stable security definer set search_path = public as $$
-  with me as (select id, role from public.volunteers where id = auth.uid())
-  select v.id, v.full_name, v.role, v.photo_path, v.volunteer_code, v.supervisor_id
+  with me as (select id, role, unit_id from public.volunteers where id = auth.uid())
+  select v.id, v.full_name, v.role, v.photo_path, v.volunteer_code,
+         v.supervisor_id, v.unit_id
     from public.volunteers v, me
    where v.status = 'approved'
      and v.role in ('koordinator','mbledhes','ndihmes')
@@ -1153,20 +1395,27 @@ language sql stable security definer set search_path = public as $$
        me.role in ('admin','jurist','logjistike','burime_njerezore','pr_edukim','it')
        or (me.role = 'koordinator' and (
              v.id = me.id
-             or (v.role = 'mbledhes' and v.supervisor_id = me.id)
-             or (v.role = 'ndihmes' and v.supervisor_id in
-                   (select id from public.volunteers where supervisor_id = me.id and role = 'mbledhes'))
+             -- gjithë njerëzit e njësive që mbaj, plus kolegët e mi mbi to
+             or v.unit_id in (select public.vol_my_unit_ids())
+             or v.id in (select uc.volunteer_id from public.unit_coordinators uc
+                          where uc.unit_id in (select public.vol_my_unit_ids()))
+             -- dhe rezerva: kush pret ende një njësi, që të mund ta tërheq
+             or (v.role in ('mbledhes','ndihmes') and v.unit_id is null)
        ))
        or (me.role = 'mbledhes' and (
              v.id = me.id
-             or v.id = (select supervisor_id from public.volunteers where id = me.id)
+             or (v.role = 'koordinator' and me.unit_id is not null
+                 and v.id in (select uc.volunteer_id from public.unit_coordinators uc
+                               where uc.unit_id = me.unit_id))
              or (v.role = 'ndihmes' and v.supervisor_id = me.id)
+             or (v.role = 'ndihmes' and v.supervisor_id is null)
        ))
        or (me.role = 'ndihmes' and (
              v.id = me.id
              or v.id = (select supervisor_id from public.volunteers where id = me.id)
-             or v.id = (select supervisor_id from public.volunteers
-                         where id = (select supervisor_id from public.volunteers where id = me.id))
+             or (v.role = 'koordinator' and me.unit_id is not null
+                 and v.id in (select uc.volunteer_id from public.unit_coordinators uc
+                               where uc.unit_id = me.unit_id))
        ))
      )
    order by v.full_name;
