@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Referendumi në telefon — udhëzues instalimi</title>
+<style>
+  /* ---- Tokens: light is the bare :root, dark redefines only values ---- */
+  :root {
+    --ground: #f2f6f4;
+    --surface: #ffffff;
+    --surface-2: #e7efec;
+    --ink: #0c2320;
+    --ink-2: #4a635e;
+    --rule: #d2e0db;
+    --accent: #0d9488;
+    --accent-deep: #0b6f66;
+    --accent-soft: #d8ece8;
+    --warn: #a1520a;
+    --warn-soft: #fbf1e2;
+    --warn-rule: #e6cfa8;
+    --shadow: 0 1px 2px rgba(12, 35, 32, .06), 0 8px 24px rgba(12, 35, 32, .07);
+
+    /* Device chrome: a depicted phone looks the same in either page theme,
+       so these are defined once and never redefined per theme. */
+    --dev-frame: #172320;
+    --dev-bezel: #2c3d39;
+    --dev-sky-1: #0f766e;
+    --dev-sky-2: #22a6c3;
+    --dev-card: #ffffff;
+    --dev-ink: #0c2320;
+    --dev-ink-2: #7d938e;
+    --dev-field: #eef3f1;
+    --dev-chrome: #f7f7f9;
+    --dev-chrome-2: #e8e8ed;
+    --dev-chrome-ink: #3c4043;
+    --dev-sheet: #f1f1f6;
+    --dev-ios: #0a84ff;
+    --dev-hi: #ffd75e;
+    --dev-hi-ring: #e8a200;
+    --dev-green: #1e8e3e;
+
+    --font-display: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0a1513;
+      --surface: #11201d;
+      --surface-2: #182b27;
+      --ink: #e3efeb;
+      --ink-2: #93aca6;
+      --rule: #223733;
+      --accent: #2dd4bf;
+      --accent-deep: #5eead4;
+      --accent-soft: #0e302c;
+      --warn: #e9b44c;
+      --warn-soft: #241d10;
+      --warn-rule: #4a3a1a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0a1513;
+    --surface: #11201d;
+    --surface-2: #182b27;
+    --ink: #e3efeb;
+    --ink-2: #93aca6;
+    --rule: #223733;
+    --accent: #2dd4bf;
+    --accent-deep: #5eead4;
+    --accent-soft: #0e302c;
+    --warn: #e9b44c;
+    --warn-soft: #241d10;
+    --warn-rule: #4a3a1a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* ---------------- Header ---------------- */
+  header { display: flex; flex-direction: column; gap: 18px; }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 5.5vw, 46px);
+    line-height: 1.1;
+    letter-spacing: -.01em;
+    margin: 0;
+    text-wrap: balance;
+    font-weight: 600;
+  }
+
+  .lede {
+    margin: 0;
+    max-width: 60ch;
+    font-size: 18px;
+    color: var(--ink-2);
+  }
+
+  .url-chip {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 16px;
+    color: var(--ink);
+  }
+
+  /* ---------------- Sections ---------------- */
+  section { display: flex; flex-direction: column; gap: 24px; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 27px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -.01em;
+  }
+
+  .sec-note { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+  .platform-tag {
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--accent-deep);
+    background: var(--accent-soft);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+
+  /* ---------------- Step grid ---------------- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+    gap: 28px;
+    align-items: start;
+  }
+
+  .step { display: flex; flex-direction: column; gap: 14px; }
+
+  .step-text { display: flex; gap: 12px; align-items: flex-start; }
+
+  .num {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+  }
+
+  .step-body { display: flex; flex-direction: column; gap: 5px; }
+  .step-title { font-weight: 650; font-size: 16px; line-height: 1.35; }
+  .step-sub { font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+
+  kbd {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+
+  /* ---------------- Phone mockup ---------------- */
+  .phone {
+    margin: 0;
+    width: 100%;
+    max-width: 214px;
+    aspect-ratio: 214 / 400;
+    background: var(--dev-frame);
+    border-radius: 26px;
+    padding: 7px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--dev-bezel);
+  }
+
+  .screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--dev-card);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    font-size: 9px;
+    color: var(--dev-ink);
+  }
+
+  /* Portal page reproduced in miniature */
+  .portal {
+    flex: 1;
+    background: linear-gradient(160deg, var(--dev-sky-1), var(--dev-sky-2));
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    min-height: 0;
+  }
+
+  .portal-card {
+    width: 100%;
+    background: var(--dev-card);
+    border-radius: 10px;
+    padding: 12px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .portal-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; line-height: 1; }
+  .portal-sub { font-size: 7px; color: var(--dev-ink-2); line-height: 1.35; }
+
+  .seg {
+    display: flex;
+    background: var(--dev-field);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg span {
+    flex: 1;
+    text-align: center;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 4px 0;
+    border-radius: 4px;
+    color: var(--dev-ink-2);
+  }
+  .seg span.on { background: var(--dev-card); color: var(--dev-sky-1); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+  .field { height: 15px; border: 1px solid var(--dev-field); border-radius: 5px; background: var(--dev-card); }
+  .portal-btn {
+    background: var(--dev-sky-1);
+    color: #fff;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 6px 0;
+    border-radius: 6px;
+  }
+
+  /* Browser chrome */
+  .bar {
+    background: var(--dev-chrome);
+    color: var(--dev-chrome-ink);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    flex: 0 0 auto;
+  }
+  .bar.top { border-bottom: 1px solid var(--dev-chrome-2); }
+  .bar.bottom { border-top: 1px solid var(--dev-chrome-2); justify-content: space-between; }
+
+  .addr {
+    flex: 1;
+    background: var(--dev-chrome-2);
+    border-radius: 20px;
+    text-align: center;
+    font-size: 8px;
+    padding: 4px 6px;
+    font-family: var(--font-mono);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .ico { width: 16px; height: 16px; flex: 0 0 auto; display: grid; place-items: center; color: var(--dev-chrome-ink); }
+  .ico svg { width: 13px; height: 13px; display: block; }
+
+  /* The yellow ring that points at the control to tap */
+  .target {
+    position: relative;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px var(--dev-hi), 0 0 0 4px var(--dev-hi-ring);
+    background: var(--dev-hi);
+    color: #3a2b00;
+  }
+  .target.sq { border-radius: 5px; }
+
+  /* iOS share sheet */
+  .sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: var(--dev-sheet);
+    border-radius: 12px 12px 0 0;
+    padding: 8px 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    box-shadow: 0 -8px 20px rgba(0,0,0,.22);
+  }
+  .grabber { width: 30px; height: 3px; border-radius: 2px; background: #c4c4cc; margin: 0 auto 7px; }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--dev-card);
+    margin: 0 8px;
+    padding: 7px 9px;
+    font-size: 9px;
+  }
+  .row + .row { border-top: 1px solid var(--dev-chrome-2); }
+  .row.first { border-radius: 8px 8px 0 0; }
+  .row.last { border-radius: 0 0 8px 8px; }
+  .row.only { border-radius: 8px; }
+  .row.hit { box-shadow: 0 0 0 2px var(--dev-hi-ring); position: relative; z-index: 2; border-radius: 8px; }
+  .row .g { width: 15px; height: 15px; display: grid; place-items: center; color: var(--dev-ios); }
+  .row .g svg { width: 12px; height: 12px; }
+  .row .lbl { flex: 1; text-align: left; }
+
+  /* Android menu */
+  .menu {
+    position: absolute;
+    top: 26px; right: 6px;
+    width: 118px;
+    background: var(--dev-card);
+    border-radius: 7px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.3);
+    padding: 4px 0;
+    font-size: 8.5px;
+    z-index: 3;
+  }
+  .menu div { padding: 5px 9px; color: var(--dev-ink); }
+  .menu div.hit { background: var(--dev-hi); font-weight: 700; box-shadow: inset 3px 0 0 var(--dev-hi-ring); }
+
+  /* Confirm dialogs */
+  .dialog {
+    position: absolute;
+    left: 10px; right: 10px;
+    background: var(--dev-card);
+    border-radius: 12px;
+    padding: 11px 12px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.32);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 4;
+  }
+  .dialog.mid { top: 50%; transform: translateY(-50%); }
+  .dialog.bot { bottom: 12px; }
+  .dlg-head { display: flex; align-items: center; gap: 8px; }
+  .dlg-title { font-size: 10px; font-weight: 700; }
+  .dlg-sub { font-size: 8px; color: var(--dev-ink-2); line-height: 1.4; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 10px; align-items: center; font-size: 9px; font-weight: 700; }
+  .dlg-actions .ghost { color: var(--dev-ink-2); }
+  .pill {
+    background: var(--dev-green);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 999px;
+  }
+
+  /* App icon */
+  .app-icon {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(160deg, var(--dev-sky-1), var(--dev-sky-2));
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 17px;
+    box-shadow: 0 2px 5px rgba(0,0,0,.28);
+    flex: 0 0 auto;
+  }
+  .icon-name { font-size: 7.5px; text-align: center; margin-top: 3px; }
+
+  /* Home screen */
+  .home {
+    flex: 1;
+    background: linear-gradient(170deg, #1d3b48, #3f6f7d);
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .home-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px 6px; }
+  .home-app { display: flex; flex-direction: column; align-items: center; }
+  .home-app .ph { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.17); }
+  .home-app .icon-name { color: #fff; }
+  .home-app.live .icon-name { color: #fff; font-weight: 700; }
+  .status-time { color: #fff; font-size: 8px; font-weight: 700; margin-bottom: 8px; padding-left: 2px; }
+
+  /* Standalone (installed) view — no browser bars at all */
+  .standalone-flag {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: var(--accent);
+    color: #fff;
+    font-size: 7.5px;
+    font-weight: 700;
+    text-align: center;
+    padding: 3px 0;
+    letter-spacing: .04em;
+    z-index: 5;
+  }
+
+  .caption {
+    font-size: 12px;
+    color: var(--ink-2);
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  /* ---------------- Callouts ---------------- */
+  .callout {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-rule);
+    border-radius: 10px;
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .callout h3 {
+    margin: 0;
+    font-size: 17px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--warn);
+  }
+  .callout p { margin: 0; font-size: 15px; }
+  .callout ol { margin: 2px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .fact {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .fact strong { font-size: 15px; }
+  .fact span { font-size: 14px; color: var(--ink-2); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-size: 13px;
+    color: var(--ink-2);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  a { color: var(--accent-deep); }
+  a:focus-visible, kbd:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 32px 18px 56px; gap: 44px; }
+    .phone { max-width: 200px; margin: 0 auto; }
+  }
+
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  @media print {
+    @page { size: A4 portrait; margin: 11mm; }
+    .wrap { padding: 0; max-width: none; }
+    .step, .callout, .fact, .phone, figure { break-inside: avoid; }
+    .sec-head, h1, h2 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Portali i vullnetarëve</div>
+    <h1>Vendose Referendumin në telefon</h1>
+    <p class="lede">Portali punon si aplikacion i vërtetë: ikonë në ekran, pa shiritin e shfletuesit, dhe me njoftime.
+      Nuk shkarkohet nga App Store apo Play Store — shtohet direkt nga faqja, për gjysmë minute.</p>
+    <div class="url-chip">portal.referendum21.org</div>
+  </header>
+
+  <section>
+    <div class="facts">
+      <div class="fact">
+        <strong>Pa dyqan aplikacionesh</strong>
+        <span>Asgjë për të shkarkuar. Ikona krijohet nga vetë faqja.</span>
+      </div>
+      <div class="fact">
+        <strong>Njoftimet kërkojnë instalimin</strong>
+        <span>Në iPhone njoftimet punojnë vetëm pasi portali të jetë shtuar në ekran.</span>
+      </div>
+      <div class="fact">
+        <strong>E njëjta llogari</strong>
+        <span>Hyrja mbetet e ruajtur — nuk ka nevojë të regjistroheni sërish.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ iPhone ============================ -->
+  <section>
+    <div class="sec-head">
+      <h2>iPhone dhe iPad</h2>
+      <span class="platform-tag">Safari</span>
+      <p class="sec-note">Duhet patjetër Safari. Në Chrome apo Firefox opsioni nuk shfaqet njësoj.</p>
+    </div>
+
+    <div class="steps">
+
+      <!-- iOS 1 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">1</div>
+          <div class="step-body">
+            <div class="step-title">Hapni portalin në Safari</div>
+            <div class="step-sub">Shkruani adresën lart dhe prisni sa të dalë faqja e hyrjes.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top"><div class="addr">portal.referendum21.org</div></div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+            <div class="bar bottom">
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 14v5a1 1 0 001 1h14a1 1 0 001-1v-5"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="8" rx="1.5"/><rect x="9" y="10" width="8" height="8" rx="1.5"/></svg>
+              </span>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Faqja e hyrjes së portalit</figcaption>
+      </div>
+
+      <!-- iOS 2 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">2</div>
+          <div class="step-body">
+            <div class="step-title">Prekni butonin e ndarjes</div>
+            <div class="step-sub">Katrori me shigjetën lart, poshtë në mes të ekranit.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top"><div class="addr">portal.referendum21.org</div></div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+            <div class="bar bottom">
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </span>
+              <span class="ico target" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 14v5a1 1 0 001 1h14a1 1 0 001-1v-5"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+              </span>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="8" rx="1.5"/><rect x="9" y="10" width="8" height="8" rx="1.5"/></svg>
+              </span>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Butoni i ndarjes, i rrethuar me të verdhë</figcaption>
+      </div>
+
+      <!-- iOS 3 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">3</div>
+          <div class="step-body">
+            <div class="step-title">Zgjidhni <kbd>Add to Home Screen</kbd></div>
+            <div class="step-sub">Rrëshqitni listën poshtë derisa ta gjeni. Emri shfaqet në gjuhën e telefonit tuaj.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top"><div class="addr">portal.referendum21.org</div></div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve</div>
+              </div>
+            </div>
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="row first">
+                <span class="lbl">Copy</span>
+                <span class="g" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg></span>
+              </div>
+              <div class="row">
+                <span class="lbl">Add to Bookmarks</span>
+                <span class="g" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg></span>
+              </div>
+              <div class="row hit">
+                <span class="lbl"><strong>Add to Home Screen</strong></span>
+                <span class="g" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>
+              </div>
+              <div class="row last">
+                <span class="lbl">Add to Reading List</span>
+                <span class="g" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h7v15H4z"/><path d="M13 5h7v15h-7z"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Rreshti që duhet prekur</figcaption>
+      </div>
+
+      <!-- iOS 4 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">4</div>
+          <div class="step-body">
+            <div class="step-title">Konfirmoni me <kbd>Add</kbd></div>
+            <div class="step-sub">Emri <em>Referendumi</em> vjen gati. Butoni ndodhet lart djathtas.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top" style="justify-content:space-between">
+              <span style="font-size:9px;color:var(--dev-ios)">Cancel</span>
+              <span style="font-size:9px;font-weight:700">Add to Home Screen</span>
+              <span class="target sq" style="font-size:9px;font-weight:700;padding:2px 7px">Add</span>
+            </div>
+            <div style="flex:1;background:var(--dev-sheet);padding:14px 12px;display:flex;flex-direction:column;gap:10px;min-height:0">
+              <div style="display:flex;gap:9px;align-items:center;background:var(--dev-card);border-radius:8px;padding:9px">
+                <div class="app-icon">R</div>
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                  <div style="font-size:10px;font-weight:700">Referendumi</div>
+                  <div style="font-size:7.5px;color:var(--dev-ink-2);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">portal.referendum21.org</div>
+                </div>
+              </div>
+              <div style="font-size:8px;color:var(--dev-ink-2);line-height:1.5">
+                Një ikonë do të shtohet në ekranin kryesor për hyrje të shpejtë në këtë faqe.
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Ekrani i fundit para se të shtohet</figcaption>
+      </div>
+
+      <!-- iOS 5 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">5</div>
+          <div class="step-body">
+            <div class="step-title">Gati — hapeni nga ekrani</div>
+            <div class="step-sub">Ikona qëndron mes aplikacioneve të tjera dhe hapet pa shiritin e Safari-t.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="home">
+              <div class="status-time">9:41</div>
+              <div class="home-grid">
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Telefoni</div></div>
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Mesazhe</div></div>
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Kamera</div></div>
+                <div class="home-app live">
+                  <div class="app-icon">R</div>
+                  <div class="icon-name">Referendumi</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Ikona e re në ekranin kryesor</figcaption>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================ Android ============================ -->
+  <section>
+    <div class="sec-head">
+      <h2>Android</h2>
+      <span class="platform-tag">Chrome</span>
+      <p class="sec-note">Chrome shpesh e ofron vetë instalimin. Nëse jo, gjendet te menyja me tre pika.</p>
+    </div>
+
+    <div class="steps">
+
+      <!-- A 1 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">1</div>
+          <div class="step-body">
+            <div class="step-title">Hapni portalin në Chrome</div>
+            <div class="step-sub">Shkruani adresën dhe prisni sa të ngarkohet faqja e hyrjes.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top">
+              <div class="addr">portal.referendum21.org</div>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </span>
+            </div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Faqja e hyrjes së portalit</figcaption>
+      </div>
+
+      <!-- A 2 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">2</div>
+          <div class="step-body">
+            <div class="step-title">Hapni menynë me tre pika</div>
+            <div class="step-sub">Lart djathtas. Nëse Chrome shfaq vetë njoftimin <kbd>Install app</kbd>, prekeni atë dhe kaloni te hapi 4.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top">
+              <div class="addr">portal.referendum21.org</div>
+              <span class="ico target" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </span>
+            </div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Menyja ⋮ lart djathtas</figcaption>
+      </div>
+
+      <!-- A 3 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">3</div>
+          <div class="step-body">
+            <div class="step-title">Zgjidhni <kbd>Install app</kbd></div>
+            <div class="step-sub">Në disa telefona shkruan <em>Add to Home screen</em> ose <em>Instalo aplikacionin</em>.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top">
+              <div class="addr">portal.referendum21.org</div>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </span>
+            </div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve</div>
+              </div>
+            </div>
+            <div class="menu">
+              <div>New tab</div>
+              <div>Bookmarks</div>
+              <div>History</div>
+              <div class="hit">Install app</div>
+              <div>Settings</div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Rreshti që duhet prekur në meny</figcaption>
+      </div>
+
+      <!-- A 4 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">4</div>
+          <div class="step-body">
+            <div class="step-title">Konfirmoni me <kbd>Install</kbd></div>
+            <div class="step-sub">Chrome tregon emrin dhe ikonën përpara se ta shtojë.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top">
+              <div class="addr">portal.referendum21.org</div>
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </span>
+            </div>
+            <div class="portal" style="filter:brightness(.72)">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve</div>
+              </div>
+            </div>
+            <div class="dialog mid">
+              <div class="dlg-head">
+                <div class="app-icon" style="width:26px;height:26px;font-size:13px;border-radius:7px">R</div>
+                <div class="dlg-title">Install app?</div>
+              </div>
+              <div class="dlg-sub">Referendumi — portal.referendum21.org</div>
+              <div class="dlg-actions">
+                <span class="ghost">Cancel</span>
+                <span class="pill target sq">Install</span>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Dritarja e konfirmimit</figcaption>
+      </div>
+
+      <!-- A 5 -->
+      <div class="step">
+        <div class="step-text">
+          <div class="num">5</div>
+          <div class="step-body">
+            <div class="step-title">Gati — ikona është shtuar</div>
+            <div class="step-sub">E gjeni në ekran ose te lista e aplikacioneve. Hapet në ekran të plotë.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="home">
+              <div class="status-time">9:41</div>
+              <div class="home-grid">
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Telefoni</div></div>
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Chrome</div></div>
+                <div class="home-app live">
+                  <div class="app-icon">R</div>
+                  <div class="icon-name">Referendumi</div>
+                </div>
+                <div class="home-app"><div class="ph"></div><div class="icon-name">Kamera</div></div>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Ikona e re mes aplikacioneve</figcaption>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================ Si duket ============================ -->
+  <section>
+    <div class="sec-head">
+      <h2>Si e dalloni që u instalua</h2>
+      <p class="sec-note">Shenja më e sigurt: shiriti i adresës zhduket krejt.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-text">
+          <div class="num" style="background:var(--ink-2)">✕</div>
+          <div class="step-body">
+            <div class="step-title">Nga shfletuesi</div>
+            <div class="step-sub">Adresa dhe butonat e Safari-t/Chrome-it zënë vend lart e poshtë.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="bar top"><div class="addr">portal.referendum21.org</div></div>
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+            <div class="bar bottom">
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 14v5a1 1 0 001 1h14a1 1 0 001-1v-5"/></svg></span>
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="8" rx="1.5"/><rect x="9" y="10" width="8" height="8" rx="1.5"/></svg></span>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Para instalimit</figcaption>
+      </div>
+
+      <div class="step">
+        <div class="step-text">
+          <div class="num">✓</div>
+          <div class="step-body">
+            <div class="step-title">Si aplikacion</div>
+            <div class="step-sub">Ekran i plotë, pa adresë. Kështu duhet të duket kur e hapni nga ikona.</div>
+          </div>
+        </div>
+        <figure class="phone">
+          <div class="screen">
+            <div class="portal">
+              <div class="portal-card">
+                <div class="portal-title">Referendumi</div>
+                <div class="portal-sub">Portali i vullnetarëve · mbledhja e 50,000 nënshkrimeve</div>
+                <div class="seg"><span class="on">Hyr</span><span>Regjistrohu</span></div>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="portal-btn">Hyr në portal</div>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <figcaption class="caption">Pas instalimit</figcaption>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ Problemet ============================ -->
+  <section>
+    <div class="sec-head">
+      <h2>Nëse ikona hapet bosh</h2>
+    </div>
+
+    <div class="callout">
+      <h3>Fshijeni ikonën dhe shtojeni sërish</h3>
+      <p>Disa telefona e ruajtën adresën e gabuar kur ikona u shtua herët. Rifreskimi nuk e rregullon —
+        ikona duhet krijuar nga e para.</p>
+      <ol>
+        <li>Mbani gishtin mbi ikonën <em>Referendumi</em> dhe fshijeni.</li>
+        <li>Hapni sërish <span style="font-family:var(--font-mono)">portal.referendum21.org</span> në Safari ose Chrome.</li>
+        <li>Kontrolloni që faqja e hyrjes shfaqet normalisht në shfletues.</li>
+        <li>Përsërisni hapat e mësipërm për ta shtuar përsëri.</li>
+      </ol>
+    </div>
+
+    <div class="facts">
+      <div class="fact">
+        <strong>Në iPhone nuk del opsioni</strong>
+        <span>Po e hapni me Chrome ose brenda Facebook/Instagram. Hapeni me Safari.</span>
+      </div>
+      <div class="fact">
+        <strong>Në Android nuk del «Install app»</strong>
+        <span>Është shtuar tashmë një herë, ose faqja s'u ngarkua plotësisht. Rifreskoni dhe provoni sërish.</span>
+      </div>
+      <div class="fact">
+        <strong>Ikona doli, faqja s'hapet</strong>
+        <span>Kontrolloni internetin: portali ka nevojë për lidhje sa herë hapet.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>Pamjet e telefonave janë ilustrime. Butonat mund të kenë emra pak të ndryshëm sipas versionit të telefonit,
+      por radha e hapave mbetet e njëjtë.</div>
+    <div>Portali i vullnetarëve · portal.referendum21.org</div>
+  </footer>
+
+</div>
+</body>
+</html>
