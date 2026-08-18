@@ -1,7 +1,7 @@
 /**
  * Cloudflare Worker Entry Point for portal.referendum21.org
  * 
- * Intercepts /api/* requests (e.g. /api/count, /api/send-push) and forwards
+ * Intercepts /api/* requests (e.g. /api/count, /api/points, /api/send-push) and forwards
  * all other static assets and SPA routes to env.ASSETS.
  */
 
@@ -9,6 +9,8 @@
 import { onRequestGet as handleCountGet, onRequestOptions as handleCountOptions } from '../functions/api/count.js';
 // @ts-ignore
 import { onRequestPost as handlePushPost, onRequestOptions as handlePushOptions } from '../functions/api/send-push.js';
+// @ts-ignore
+import { onRequestGet as handlePointsGet, onRequestOptions as handlePointsOptions } from '../functions/api/points.js';
 
 export interface Env {
   ASSETS: {
@@ -41,7 +43,27 @@ export default {
       });
     }
 
-    // 2. /api/send-push endpoint for broadcast notifications
+    // 2. /api/points endpoint for the public "where to sign" cards
+    //
+    // KUJDES: një endpoint i ri NUK shfaqet vetvetiu sepse skedari ekziston te
+    // `functions/api/`. Kjo dosje nuk rutohet nga Cloudflare — `wrangler.toml`
+    // ka `main = "src/worker.ts"`, ndaj ky skedar është i vetmi ruter. Pa
+    // rreshtat e mëposhtëm kërkesa bie te `env.ASSETS.fetch()` dhe prodhimi
+    // kthen `error code: 1101`.
+    if (url.pathname === '/api/points') {
+      if (request.method === 'OPTIONS') {
+        return handlePointsOptions({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      if (request.method === 'GET') {
+        return handlePointsGet({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 3. /api/send-push endpoint for broadcast notifications
     if (url.pathname === '/api/send-push') {
       if (request.method === 'OPTIONS') {
         return handlePushOptions({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
@@ -55,7 +77,7 @@ export default {
       });
     }
 
-    // 3. Delegate all static assets and SPA routes to Cloudflare Assets
+    // 4. Delegate all static assets and SPA routes to Cloudflare Assets
     return env.ASSETS.fetch(request);
   },
 };
