@@ -35,6 +35,14 @@ export const ROLE_DESC: Record<Exclude<VolunteerRole, 'admin'>, string> = {
   it: 'Mirëmban portalin, të dhënat dhe sistemet digjitale të fushatës.',
 };
 
+/**
+ * Roles a volunteer may request when signing up. `it` is deliberately left out —
+ * the centre assigns that role itself, so it is no longer offered at signup.
+ * Existing IT volunteers and admin role assignment are unaffected.
+ */
+export const SIGNUP_ROLES: Array<Exclude<VolunteerRole, 'admin'>> =
+  (Object.keys(ROLE_DESC) as Array<Exclude<VolunteerRole, 'admin'>>).filter(r => r !== 'it');
+
 export const KINDS: Record<ReportKind, { ic: string; lb: string; d: string }> = {
   incident: { ic: '🚨', lb: 'Incident', d: 'Pengesë, presion, konflikt në terren' },
   legal: { ic: '⚖️', lb: 'Shqetësim ligjor', d: 'Pyetje ose problem me procedurën/ligjin' },

@@ -1,5 +1,5 @@
 import { sb, DEFAULT_GOAL } from '../api/client';
-import { store, ROLE_DESC, ROLES } from '../state/store';
+import { store, ROLE_DESC, ROLES, SIGNUP_ROLES } from '../state/store';
 import { esc } from '../utils/security';
 import { nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
@@ -24,8 +24,6 @@ export function renderAuth(mode: 'login' | 'signup'): void {
   const root = document.getElementById('root');
   if (!root) return;
 
-  const roleDescKeys = Object.keys(ROLE_DESC) as Array<Exclude<VolunteerRole, 'admin'>>;
-
   root.innerHTML = `
   <div class="auth-wrap"><div class="auth">
     <h1>Referendumi</h1>
@@ -45,7 +43,7 @@ export function renderAuth(mode: 'login' | 'signup'): void {
       <input id="a_phone" type="tel" autocomplete="tel" placeholder="+355 …">
       <label>Cilin rol do të kontribuosh? *</label>
       <select id="a_role">
-        ${roleDescKeys.map(k => `<option value="${k}">${esc(ROLES[k])}</option>`).join('')}
+        ${SIGNUP_ROLES.map(k => `<option value="${k}">${esc(ROLES[k])}</option>`).join('')}
       </select>
       <p class="hint" id="a_role_hint">${esc(ROLE_DESC.ndihmes)}</p>
       <p class="hint">Kjo është vetëm preferenca juaj — qendra e konfirmon rolin final kur ju miraton.</p>
@@ -127,7 +125,8 @@ export async function doSignup(): Promise<void> {
   const full_name = (nameInput?.value || '').trim();
   const city = (cityInput?.value || '').trim();
   const phone = (phoneInput?.value || '').trim();
-  const requested_role = roleSelect?.value || 'ndihmes';
+  const picked = (roleSelect?.value || '') as Exclude<VolunteerRole, 'admin'>;
+  const requested_role = SIGNUP_ROLES.includes(picked) ? picked : 'ndihmes';
   const email = (emailInput?.value || '').trim();
   const password = passInput?.value || '';
 
