@@ -1,5 +1,5 @@
 import { sb } from '../api/client';
-import { store, ROLES } from '../state/store';
+import { ROLES } from '../state/store';
 import { esc } from '../utils/security';
 import { fmtDateTime } from '../utils/format';
 import { avatarHtml } from '../api/storage';
@@ -11,19 +11,21 @@ export async function vAdmin(): Promise<void> {
   if (!view) return;
   view.innerHTML = '<div class="empty">Po ngarkohet paneli i administratorit…</div>';
 
-  const [pendingVols, pendingReqs, allUnits, allCoordinators] = await Promise.all([
+  const [pendingVols, registeredVols, pendingReqs, allUnits] = await Promise.all([
     sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').eq('status', 'pending').order('created_at'),
+    sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').in('status', ['approved', 'suspended']).order('full_name'),
     sb.from('change_requests').select('*, volunteers(full_name, volunteer_code)').eq('status', 'pending').order('created_at'),
     sb.from('units').select('id,code,name').order('code'),
-    sb.from('volunteers').select('id,full_name,volunteer_code').eq('role', 'koordinator').eq('status', 'approved'),
   ]);
 
   if (pendingVols.error) return fail(pendingVols.error);
+  if (registeredVols.error) return fail(registeredVols.error);
+  if (pendingReqs.error) return fail(pendingReqs.error);
+  if (allUnits.error) return fail(allUnits.error);
   const vols = (pendingVols.data || []) as VolunteerRow[];
+  const registered = (registeredVols.data || []) as VolunteerRow[];
   const reqs = (pendingReqs.data || []) as Array<ChangeRequestRow & { volunteers?: { full_name: string; volunteer_code: string } }>;
   const units = (allUnits.data || []) as UnitRow[];
-  const coords = (allCoordinators.data || []) as VolunteerRow[];
-
   const roleKeys = Object.keys(ROLES) as VolunteerRole[];
 
   view.innerHTML = `
@@ -70,6 +72,28 @@ export async function vAdmin(): Promise<void> {
             </div>
           </div>
         `).join('') : '<div class="empty">Nuk ka vullnetarë në pritje të miratimit.</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h3 style="margin:0">Vullnetarët e regjistruar <span class="pill blue">${registered.length}</span></h3>
+      <div class="meta" style="margin-top:4px">Lista e vullnetarëve të miratuar dhe të pezulluar, me rolet dhe njësitë e tyre.</div>
+
+      <div style="margin-top:12px">
+        ${registered.length ? registered.map(v => `
+          <div class="adm-row">
+            ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
+            <div class="adm-info">
+              <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')} <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span></div>
+              <div class="meta">${esc(v.volunteer_code)} · <b>${esc(ROLES[v.role])}</b> · ${esc(v.units?.name || 'Pa njësi')}</div>
+            </div>
+            <div class="adm-acts">
+              ${v.status === 'approved'
+                ? `<button class="btn red sm" data-suspend-vol="${v.id}">✕ Anulo</button>`
+                : `<button class="btn green sm" data-reactivate-vol="${v.id}">↻ Riaktivizo</button>`}
+            </div>
+          </div>
+        `).join('') : '<div class="empty">Nuk ka ende vullnetarë të regjistruar.</div>'}
       </div>
     </div>
 
@@ -127,6 +151,28 @@ export async function vAdmin(): Promise<void> {
       const { error } = await sb.rpc('vol_decide_pending', { p_id: id, p_approve: false });
       if (error) return fail(error);
       toast('Kërkesa u refuzua.');
+      vAdmin();
+    });
+  });
+
+  view.querySelectorAll<HTMLElement>('[data-suspend-vol]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.suspendVol;
+      if (!id || !confirm('Të anulohet ky vullnetar? Llogaria do të pezullohet dhe mund të riaktivizohet më vonë.')) return;
+      const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'suspended' });
+      if (error) return fail(error);
+      toast('Vullnetari u anulua.');
+      vAdmin();
+    });
+  });
+
+  view.querySelectorAll<HTMLElement>('[data-reactivate-vol]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.reactivateVol;
+      if (!id) return;
+      const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'approved' });
+      if (error) return fail(error);
+      toast('Vullnetari u riaktivizua.');
       vAdmin();
     });
   });

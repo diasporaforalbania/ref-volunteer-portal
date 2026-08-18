@@ -95,6 +95,8 @@ grant execute on function public.push_subscribe(text, text, text, text) to authe
 grant execute on function public.push_unsubscribe(text) to authenticated;
 grant execute on function public.unit_set_open(uuid, boolean) to authenticated;
 grant execute on function public.unit_set_coordinator(uuid, uuid) to authenticated;
+grant execute on function public.unit_create(text, text, text, text, integer) to authenticated;
+grant execute on function public.unit_delete(uuid) to authenticated;
 grant execute on function public.vol_set_status(uuid, text) to authenticated;
 grant execute on function public.vol_set_role(uuid, text) to authenticated;
 grant execute on function public.vol_decide_pending(uuid, boolean, text) to authenticated;

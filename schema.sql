@@ -995,6 +995,50 @@ begin
   update public.units set coordinator_id = p_coord where id = p_unit;
 end $$;
 
+-- Krijimi dhe fshirja e njësive kalojnë në RPC të kufizuara te admini.
+-- Kjo vazhdon të funksionojë edhe kur skripti i forcimit të sigurisë heq
+-- lejet INSERT/DELETE të drejtpërdrejta nga tabela `units`.
+create or replace function public.unit_create(
+  p_code text, p_name text, p_region text default null,
+  p_territory text default null, p_target integer default 0
+)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini mund të shtojë njësi.';
+  end if;
+  if nullif(trim(p_code), '') is null or nullif(trim(p_name), '') is null then
+    raise exception 'Kodi dhe emri i njësisë janë të detyrueshëm.';
+  end if;
+  if coalesce(p_target, 0) < 0 then
+    raise exception 'Objektivi nuk mund të jetë negativ.';
+  end if;
+
+  insert into public.units (code, name, region, territory, target)
+  values (upper(trim(p_code)), trim(p_name), nullif(trim(p_region), ''),
+          nullif(trim(p_territory), ''), coalesce(p_target, 0))
+  returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function public.unit_delete(p_unit uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini mund të fshijë njësi.';
+  end if;
+  delete from public.units where id = p_unit;
+  if not found then
+    raise exception 'Njësia nuk u gjet.';
+  end if;
+end $$;
+
+revoke all on function public.unit_create(text, text, text, text, integer) from public, anon;
+revoke all on function public.unit_delete(uuid) from public, anon;
+grant execute on function public.unit_create(text, text, text, text, integer) to authenticated;
+grant execute on function public.unit_delete(uuid) to authenticated;
+
 -- Korrigjimi i historikut të një turni (vetëm qendra) — numri i firmave dhe orët.
 create or replace function public.checkin_edit(
   p_id uuid, p_signatures integer, p_started timestamptz,
@@ -1708,6 +1752,3 @@ create index if not exists idx_shifts_active_window
 -- (`shift_check_in`, `my_next_shift`, …) kthejnë 404 derisa ai të rifreskohet
 -- vetë — dhe portali del i prishur pikërisht pasi skema u ngarkua me sukses.
 notify pgrst, 'reload schema';
-
-
-

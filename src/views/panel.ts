@@ -29,7 +29,10 @@ export async function vPanel(): Promise<void> {
     <p class="sub">Njësitë organizative, objektivat e mbledhjes dhe struktura e ekipit.</p>
 
     <div class="card" style="margin-bottom:16px">
-      <h3>Njësitë organizative</h3>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Njësitë organizative</h3>
+        ${isAdm ? '<button class="btn green sm" id="btn_add_unit">+ Shto njësi</button>' : ''}
+      </div>
       <div class="meta">Zonat e mbledhjes së nënshkrimeve, koordinatorët dhe progresi.</div>
       <div class="scroll-x" style="margin-top:10px">
         <table class="tbl">
@@ -82,6 +85,7 @@ export async function vPanel(): Promise<void> {
                   ${isAdm ? `
                     <td style="text-align:right">
                       <button class="btn ghost sm" data-edit-unit-target="${u.id}" data-target-val="${u.target}">🎯</button>
+                      <button class="btn red sm" data-delete-unit="${u.id}" data-unit-name="${esc(u.name)}">Fshi</button>
                     </td>
                   ` : ''}
                 </tr>`;
@@ -98,6 +102,36 @@ export async function vPanel(): Promise<void> {
         ${structuraHtml(team)}
       </div>
     </div>`;
+
+  document.getElementById('btn_add_unit')?.addEventListener('click', async () => {
+    const codeInput = prompt('Kodi i njësisë (p.sh. A1):');
+    if (codeInput == null) return;
+    const code = codeInput.trim().toUpperCase();
+    if (!code) return fail('Kodi i njësisë është i detyrueshëm.');
+
+    const nameInput = prompt('Emri i njësisë:');
+    if (nameInput == null) return;
+    const name = nameInput.trim();
+    if (!name) return fail('Emri i njësisë është i detyrueshëm.');
+
+    const region = prompt('Rajoni (opsionale):')?.trim() || null;
+    const territory = prompt('Territori (opsionale):')?.trim() || null;
+    const targetInput = prompt('Objektivi i nënshkrimeve:', '0');
+    if (targetInput == null) return;
+    const target = Number.parseInt(targetInput, 10);
+    if (!Number.isInteger(target) || target < 0) return fail('Objektivi duhet të jetë numër zero ose pozitiv.');
+
+    const { error } = await sb.rpc('unit_create', {
+      p_code: code,
+      p_name: name,
+      p_region: region,
+      p_territory: territory,
+      p_target: target,
+    });
+    if (error) return fail(error);
+    toast('Njësia u shtua.');
+    vPanel();
+  });
 
   // Attach coordinator select change handlers
   view.querySelectorAll<HTMLSelectElement>('.coord-select').forEach(sel => {
@@ -145,6 +179,19 @@ export async function vPanel(): Promise<void> {
       const { error } = await sb.from('units').update({ target }).eq('id', unitId);
       if (error) return fail(error);
       toast('Objektivi u përditësua.');
+      vPanel();
+    });
+  });
+
+  view.querySelectorAll<HTMLElement>('[data-delete-unit]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const unitId = btn.dataset.deleteUnit;
+      const unitName = btn.dataset.unitName || 'kjo njësi';
+      if (!unitId || !confirm(`Të fshihet “${unitName}”? Vullnetarët e saj do të mbeten pa njësi dhe turnet e lidhura do të fshihen.`)) return;
+
+      const { error } = await sb.rpc('unit_delete', { p_unit: unitId });
+      if (error) return fail(error);
+      toast('Njësia u fshi.');
       vPanel();
     });
   });
