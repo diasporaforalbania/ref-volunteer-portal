@@ -17,8 +17,45 @@ directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 html_handling = "auto-trailing-slash"
+# Cdo kerkese kalon e para nga `src/worker.ts`.
+#
+# Dy arsye, te dyja te verifikuara:
+#   1. Pa kete, `/` perputhet me `dist/index.html` dhe sherbehet drejt nga
+#      shtresa e assets-eve — Worker-i nuk thirret fare, ndaj `withRuntimeConfig()`
+#      nuk e fut dot `<meta name="vapid-public-key">` dhe njoftimet mbeten
+#      "te padisponueshme" per te gjithe.
+#   2. MOS e ktheni ne liste rrugesh (`["/", "/index.html"]`). Ne ate forme cdo
+#      rruge e papermendur trajtohet TERESISHT nga assets-et, dhe me
+#      `not_found_handling = "single-page-application"` kjo do te thote qe
+#      `/api/count` e `/api/points` marrin index.html ne vend te JSON-it.
+#
+# Kostoja: edhe asset-et statike numerohen si thirrje Worker-i. Ne kete perdorim
+# eshte e papercaktueshme; po u be shqetesim per kuoten, alternativa eshte
+# `["/", "/index.html", "/api/*"]` — por atehere cdo endpoint i ri duhet shtuar
+# ketu DHE te `src/worker.ts`.
+run_worker_first = true
 
 [vars]
 SUPABASE_URL = "https://yymmdyjjjvjbyleaoygf.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5bW1keWpqanZqYnlsZWFveWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3ODUzODEsImV4cCI6MjA5ODM2MTM4MX0.mxR0_mF37Ste8eFgKKEBNwFXAILVY8JdZMQo-1zbkE0"
 DEFAULT_GOAL = "50000"
+
+# Gjysma PUBLIKE e cift-celesave VAPID. Rri ketu me qellim, per tri arsye:
+#
+#   1. Eshte publike per nga natyra — shfletuesi i cdo vullnetari e merr ate
+#      gjithsesi. Vetem `VAPID_PRIVATE_KEY` eshte sekret.
+#   2. Nje `Variable` e thjeshte e vendosur te paneli i Cloudflare-it FSHIHET ne
+#      publikimin e radhes: me nje bllok `[vars]` prezent, wrangler-i i heq te
+#      gjitha variablat perpara se te vendose ato te konfigurimit. (Sekretet nuk
+#      preken kurre.) Pra paneli eshte vendi i gabuar per te.
+#   3. Ketu e lexojne te dyja anet — `src/worker.ts` ia kalon shfletuesit si
+#      `<meta>`, dhe `functions/api/send-push.js` nenshkruan me te — ndaj nuk kane
+#      si te dalin me celesa te ndryshem.
+#
+# MOS e shtoni gjithashtu si Secret te paneli: dy burime per te njejtin emer.
+# Po e nderruat cift-celesave, nderroni edhe kete rresht.
+VAPID_PUBLIC_KEY = "BDHpvuL0OqgIP2--2vCt2BRlKnVxck19TlzOvwEF3L5ztqieJxYXvEZqU1-_Ywoew9ppwzJA7QSOqUhfYr-huC0"
+
+# Kontakti qe u shkon sherbimeve te push-it nese nje njoftim del problematik.
+# Jo sekret. `functions/api/send-push.js` ka te njejten vlere si rezerve.
+VAPID_SUBJECT = "mailto:qendra@referendum21.org"

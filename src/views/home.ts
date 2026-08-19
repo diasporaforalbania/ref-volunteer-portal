@@ -177,7 +177,7 @@ export async function renderPushCard(): Promise<void> {
     'not-configured': {
       line: 'Njoftimet nuk janë aktivizuar ende nga qendra.',
       hint: store.isAdmin()
-        ? 'Mungon VITE_VAPID_PUBLIC_KEY në ndërtim dhe VAPID_PRIVATE_KEY te Cloudflare. Shihni PUSH_SETUP.md.'
+        ? 'Mungojnë VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY te Cloudflare → Workers → Settings → Variables. Shihni PUSH_SETUP.md.'
         : 'Kur qendra ta përfundojë konfigurimin, butoni do të funksionojë vetvetiu.',
     },
   };
