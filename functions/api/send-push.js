@@ -5,6 +5,8 @@
  * Replaces the Supabase Deno Edge Function with native Cloudflare Edge execution.
  */
 
+import { sendWebPush } from './_webpush.js';
+
 const ALLOWED_ORIGINS = new Set([
   'https://portal.referendum21.org',
   'http://localhost:3000',
@@ -40,8 +42,30 @@ function getCorsHeaders(origin) {
   return headers;
 }
 
-const STAFF_ROLES = ['koordinator', 'jurist', 'admin'];
-const INTERNAL_ROLES = ['koordinator', 'jurist', 'admin', 'logjistike', 'burime_njerezore', 'pr_edukim', 'it'];
+export const INTERNAL_ROLES = ['koordinator', 'jurist', 'admin', 'logjistike', 'burime_njerezore', 'pr_edukim', 'it'];
+
+/**
+ * Kush e merr njoftimin. E ndarë si funksion i pastër që rregulli të jetë i
+ * lexueshëm dhe i testueshëm në një vend të vetëm:
+ *
+ *   • raportim            → qendra + koordinatorët (raporton kushdo, njoftohen ata)
+ *   • njoftim 'all'       → çdo vullnetar i miratuar
+ *   • njoftim 'staff'     → qendra + koordinatorët
+ *   • provë               → vetëm pajisjet e thirrësit
+ *
+ * `roles: null` do të thotë pa filtër roli — të gjithë të miratuarit.
+ */
+export function audienceFor(kind, row) {
+  if (kind === 'test') {
+    return { roles: null, onlyMe: true, label: 'vetëm ju' };
+  }
+  if (kind === 'announcement') {
+    return row && row.audience === 'staff'
+      ? { roles: INTERNAL_ROLES, onlyMe: false, label: 'qendra & koordinatorët' }
+      : { roles: null, onlyMe: false, label: 'të gjithë vullnetarët' };
+  }
+  return { roles: INTERNAL_ROLES, onlyMe: false, label: 'qendra & koordinatorët' };
+}
 
 function jsonResponse(data, status = 200, origin = null) {
   return new Response(JSON.stringify(data), {
@@ -137,15 +161,14 @@ export async function onRequestPost({ request, env }) {
     text = 'Njoftimet punojnë në këtë pajisje.';
     url = './#panel';
     tag = `test-${Date.now()}`;
-    onlyMe = true;
-    audienceLabel = 'vetëm ju';
+    ({ roles: audienceRoles, onlyMe, label: audienceLabel } = audienceFor('test'));
   } else if (kind === 'announcement') {
     const annRes = await fetch(`${supabaseUrl}/rest/v1/announcements?id=eq.${id}&select=id,title,body,level,audience,author_name,author_id`, {
       headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
     });
     const [a] = await annRes.json();
     if (!a) return jsonResponse({ error: 'Announcement not found' }, 404);
-    if (a.author_id !== me.id && !STAFF_ROLES.includes(me.role)) {
+    if (a.author_id !== me.id && !INTERNAL_ROLES.includes(me.role)) {
       return jsonResponse({ error: 'Forbidden' }, 403);
     }
 
@@ -154,15 +177,14 @@ export async function onRequestPost({ request, env }) {
     text = (a.body || '').slice(0, 240) || `Njoftim nga ${a.author_name || 'qendra'}`;
     url = './#news';
     tag = `ann-${a.id}`;
-    audienceRoles = a.audience === 'staff' ? INTERNAL_ROLES : null;
-    audienceLabel = a.audience === 'staff' ? 'qendra & koordinatorët' : 'të gjithë vullnetarët';
+    ({ roles: audienceRoles, onlyMe, label: audienceLabel } = audienceFor('announcement', a));
   } else {
     const repRes = await fetch(`${supabaseUrl}/rest/v1/reports?id=eq.${id}&select=id,kind,severity,title,body,reporter_id,reporter_name,location_text`, {
       headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
     });
     const [r] = await repRes.json();
     if (!r) return jsonResponse({ error: 'Report not found' }, 404);
-    if (r.reporter_id !== me.id && !STAFF_ROLES.includes(me.role)) {
+    if (r.reporter_id !== me.id && !INTERNAL_ROLES.includes(me.role)) {
       return jsonResponse({ error: 'Forbidden' }, 403);
     }
 
@@ -172,8 +194,7 @@ export async function onRequestPost({ request, env }) {
     text = `${r.title}\n${r.reporter_name || 'Vullnetar'}${r.location_text ? ' · ' + r.location_text : ''}`;
     url = './#reports';
     tag = `rep-${r.id}`;
-    audienceRoles = STAFF_ROLES;
-    audienceLabel = 'stafi';
+    ({ roles: audienceRoles, onlyMe, label: audienceLabel } = audienceFor('report', r));
   }
 
   // 3. Query push subscription targets
@@ -207,11 +228,36 @@ export async function onRequestPost({ request, env }) {
     });
   }
 
+  // 4. Encrypt per subscription and deliver. One dead phone must not hold up
+  //    the rest, so every send resolves rather than throws.
+  const payload = { title, body: text, url, tag };
+  const vapid = { publicKey: vapidPublicKey, privateKey: vapidPrivateKey, subject: vapidSubject };
+  const results = await Promise.all(subs.map(sub => sendWebPush(sub, payload, vapid)));
+
+  const sent = results.filter(r => r.ok).length;
+  const failed = results.length - sent;
+
+  // 5. Drop subscriptions the push service has retired (404/410) -- otherwise
+  //    every future send retries phones that will never answer again.
+  const goneIds = subs.filter((_, i) => results[i].gone).map(sub => sub.id);
+  let removed = 0;
+  if (goneIds.length) {
+    const delRes = await fetch(
+      `${supabaseUrl}/rest/v1/push_subscriptions?id=in.(${goneIds.join(',')})`,
+      {
+        method: 'DELETE',
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      }
+    );
+    if (delRes.ok) removed = goneIds.length;
+  }
+
   return jsonResponse({
-    sent: subs.length,
-    failed: 0,
+    sent,
+    failed,
+    removed,
     matched: subs.length,
     audience: audienceLabel,
     title,
-  });
+  }, 200, origin);
 }

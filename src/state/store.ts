@@ -24,6 +24,17 @@ export const ROLES: Record<VolunteerRole, string> = {
 export const QENDRA_ROLES: VolunteerRole[] = ['admin', 'jurist', 'logjistike', 'burime_njerezore', 'pr_edukim', 'it'];
 export const STAFF_ROLES: VolunteerRole[] = ['koordinator', 'jurist', 'admin'];
 
+/**
+ * Qendra + koordinatorët. Mirrors `vol_is_internal()` in schema.sql, and the
+ * INTERNAL_ROLES list in functions/api/send-push.js — these three must agree,
+ * or someone gets a notification for something they cannot open in the portal.
+ *
+ * Distinct from STAFF_ROLES on purpose: STAFF_ROLES is who reviews and approves
+ * (koordinator/jurist/admin), while this is who counts as "the centre" for
+ * reading internal announcements and being alerted about field reports.
+ */
+export const INTERNAL_ROLES: VolunteerRole[] = [...QENDRA_ROLES, 'koordinator'];
+
 export const ROLE_DESC: Record<Exclude<VolunteerRole, 'admin'>, string> = {
   ndihmes: 'Ndihmon në terren me mbledhjen e nënshkrimeve dhe detyra të tjera bazë.',
   mbledhes: 'I trajnuar dhe i autorizuar zyrtarisht të mbledhë nënshkrime në terren.',
@@ -111,6 +122,11 @@ export class AppState {
 
   public isQendra(): boolean {
     return !!this.ME && QENDRA_ROLES.includes(this.ME.role);
+  }
+
+  /** Qendra + koordinatorët — writes announcements, gets alerted about reports. */
+  public isInternal(): boolean {
+    return !!this.ME && INTERNAL_ROLES.includes(this.ME.role);
   }
 
   public isTeamLead(): boolean {

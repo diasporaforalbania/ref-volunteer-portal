@@ -1,8 +1,10 @@
-import { sb, DEFAULT_GOAL, VAPID_PUBLIC_KEY } from '../api/client';
+import { sb, DEFAULT_GOAL } from '../api/client';
 import { store } from '../state/store';
 import { esc } from '../utils/security';
 import { nf, fmtDate, fmtTime, daysLeft } from '../utils/format';
 import { slotsHtml } from '../components/slots';
+import { toast, fail } from '../components/toast';
+import { pushSupported, pushEnabled, enablePush, disablePush, notifyPush } from '../api/push';
 import { shiftWhen } from './shifts';
 import type { ShiftListItem } from '../types/database';
 
@@ -91,6 +93,8 @@ export async function vHome(go: (k: any) => void): Promise<void> {
       </div>
     </div>
 
+    <div id="push_card"></div>
+
     <div class="grid g2" style="margin-bottom:16px">
       <div class="card">
         <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:8px">
@@ -120,11 +124,92 @@ export async function vHome(go: (k: any) => void): Promise<void> {
       </div>
     </div>`;
 
+  renderPushCard();
+
   // Attach navigation listeners
   view.querySelectorAll<HTMLElement>('[data-nav-tab]').forEach(el => {
     el.addEventListener('click', () => {
       const tab = el.dataset.navTab;
       if (tab) go(tab);
     });
+  });
+}
+
+/** iOS only delivers push to an installed (home-screen) app, never to a Safari tab. */
+function iosNeedsInstall(): boolean {
+  const ua = navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/.test(ua);
+  if (!isIos) return false;
+  const standalone =
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  return !standalone;
+}
+
+/**
+ * Njoftimet në telefon. Shfaqet për çdo vullnetar — njoftimet e qendrës i marrin
+ * të gjithë; raportimet vetëm qendra dhe koordinatorët.
+ */
+export async function renderPushCard(): Promise<void> {
+  const host = document.getElementById('push_card');
+  if (!host) return;
+
+  if (!pushSupported()) {
+    host.innerHTML = '';
+    return;
+  }
+
+  if (iosNeedsInstall()) {
+    host.innerHTML = `
+      <div class="card wide" style="margin-bottom:16px">
+        <h3 style="margin:0">🔔 Njoftimet në telefon</h3>
+        <div class="meta" style="margin-top:4px">
+          Në iPhone njoftimet punojnë vetëm pasi portali të jetë shtuar në ekranin kryesor.
+          Hapeni me Safari → butoni i ndarjes → <b>Add to Home Screen</b>, pastaj hapeni nga ikona.
+        </div>
+      </div>`;
+    return;
+  }
+
+  const on = await pushEnabled();
+  const what = store.isInternal()
+    ? 'kur publikohet një njoftim ose kur mbërrin një raportim i ri nga terreni'
+    : 'kur qendra publikon një njoftim';
+
+  host.innerHTML = `
+    <div class="card wide" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">🔔 Njoftimet në telefon</h3>
+          <div class="meta" style="margin-top:4px">
+            ${on ? 'Kjo pajisje i merr njoftimet.' : `Merrni njoftim ${what}.`}
+          </div>
+        </div>
+        <div class="row" style="gap:8px">
+          ${on
+            ? `<button class="btn sec sm" id="push_test">Provo</button>
+               <button class="btn ghost sm" id="push_off">Çaktivizo</button>`
+            : `<button class="btn" id="push_on">Aktivizo njoftimet</button>`}
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('push_on')?.addEventListener('click', async () => {
+    const res = await enablePush();
+    if (!res.ok) return fail(res.reason || 'Njoftimet nuk u aktivizuan.');
+    toast('Njoftimet u aktivizuan në këtë pajisje.');
+    renderPushCard();
+  });
+
+  document.getElementById('push_off')?.addEventListener('click', async () => {
+    const res = await disablePush();
+    if (!res.ok) return fail(res.reason || 'Nuk u çaktivizuan.');
+    toast('Njoftimet u çaktivizuan në këtë pajisje.');
+    renderPushCard();
+  });
+
+  document.getElementById('push_test')?.addEventListener('click', async () => {
+    const res = await notifyPush('test');
+    toast(res && res.sent > 0 ? 'Njoftimi provë u dërgua.' : 'Prova nuk u dërgua — kontrolloni cilësimet.');
   });
 }

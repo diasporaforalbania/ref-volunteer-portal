@@ -6,6 +6,7 @@ import { getLocation } from '../utils/geo';
 import { shrinkImage } from '../utils/image';
 import { toast, fail } from '../components/toast';
 import { openModal, closeModal } from '../components/modal';
+import { notifyPush } from '../api/push';
 import type { ReportRow, ReportKind, ReportSeverity, ReportStatus } from '../types/database';
 
 let selectedReportKind: ReportKind = 'incident';
@@ -197,7 +198,7 @@ export async function submitReport(): Promise<void> {
     await sb.storage.from('vol-reports').upload(photo_path, photoFile);
   }
 
-  const { error } = await sb.from('reports').insert({
+  const { data, error } = await sb.from('reports').insert({
     reporter_id: store.ME?.id,
     reporter_name: store.ME?.full_name || store.ME?.volunteer_code,
     kind: selectedReportKind,
@@ -209,7 +210,7 @@ export async function submitReport(): Promise<void> {
     lng: pos?.lng ?? null,
     photo_path,
     status: 'open',
-  });
+  }).select('id').single();
 
   if (error) {
     if (btn) {
@@ -220,7 +221,12 @@ export async function submitReport(): Promise<void> {
   }
 
   closeModal();
-  toast('Raportimi u dërgua te qendra.');
+  // Çdo vullnetar raporton, por vetëm qendra dhe koordinatorët njoftohen —
+  // audienca caktohet nga serveri, jo nga këtu.
+  const res = data?.id ? await notifyPush('report', data.id) : null;
+  toast(res && res.sent > 0
+    ? `Raportimi u dërgua · u njoftuan ${res.sent} pajisje (${res.audience}).`
+    : 'Raportimi u dërgua te qendra.');
   vReports();
 }
 
