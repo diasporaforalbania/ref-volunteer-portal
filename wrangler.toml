@@ -3,12 +3,18 @@ main = "src/worker.ts"
 compatibility_date = "2026-08-16"
 compatibility_flags = ["nodejs_compat"]
 
-# Cloudflare Pages output directory
-pages_build_output_dir = "dist"
+# SHENIM: `pages_build_output_dir` u hoq me qellim. Ky projekt publikohet si
+# Worker (Workers Builds -> `portalreferendum21`), jo si Pages; me ate fushe
+# prezente wrangler-i lokal kalonte ne modalitetin Pages dhe refuzonte
+# binding-un `ASSETS`, ndaj `wrangler dev` nuk sillej si prodhimi.
 
 # Cloudflare Workers static assets directory with native SPA fallback
 [assets]
 directory = "./dist"
+# Pa `binding` Worker-i nuk e ka `env.ASSETS`, dhe `env.ASSETS.fetch()` te
+# `src/worker.ts` hidhet me perjashtim -> cdo rruge qe nuk perputhet me nje
+# skedar statik kthen "error code: 1101" ne vend te faqes SPA.
+binding = "ASSETS"
 not_found_handling = "single-page-application"
 html_handling = "auto-trailing-slash"
 

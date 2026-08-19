@@ -9,9 +9,10 @@ Ndërtuar sipas të njëjtit model si [`functions/api/count.js`](functions/api/c
 
 | Skedar | Roli |
 |---|---|
-| `sql/public-signing-points.sql` | pamja `public_signing_points` — burimi i vetëm, aplikohet një herë në Supabase |
+| `schema.sql` (seksioni *PAMJET PUBLIKE*) | pamja `public_signing_points` — burimi i vetëm, aplikohet automatikisht nga CI |
 | `functions/api/_origins.js` | allowlist-i i Origin-eve, i përbashkët |
 | `functions/api/points.js` | endpointi |
+| `src/worker.ts` | rruga `/api/points` — pa të, skedari më sipër nuk ekzekutohet kurrë |
 | `vite.config.ts` | plugin `dev-api-points` që pasqyron endpointin te `npm run dev` |
 | `tests/bridge/points-origin-cors.test.mjs` | Suita 6 — Origin, CORS, gabimet upstream |
 | `tests/bridge/points-zero-pii.test.mjs` | Suita 7 — kontrata zero-PII e daljes |
@@ -20,10 +21,13 @@ Ndërtuar sipas të njëjtit model si [`functions/api/count.js`](functions/api/c
 
 ## Vendosja
 
+Pamja rri brenda `schema.sql`, ndaj aplikohet vetvetiu nga workflow-i
+*Deploy Supabase schema* në çdo push te `main`. Nuk ka hap manual.
+
 ```bash
-# 1. Apliko pamjen (SQL Editor te Supabase, ose psql)
+# 1. (Opsionale) Aplikim i menjëhershëm, pa pritur CI-në
 psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --single-transaction \
-  --file=sql/public-signing-points.sql
+  --file=schema.sql
 
 # 2. Prova lokale
 npm run dev
