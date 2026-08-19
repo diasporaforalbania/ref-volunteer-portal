@@ -17,6 +17,12 @@ export interface NotifyResult {
   matched: number;
   audience: string;
   warning?: string;
+  /** Kodet e shërbimit të push-it kur ka dështime, p.sh. `{ '403': 1 }`. */
+  statuses?: Record<string, number>;
+  /** Mesazhi i endpoint-it kur ai s'u përgjigj me 2xx. */
+  error?: string;
+  /** Statusi HTTP i vetë endpoint-it — 0 kur kërkesa nuk doli fare. */
+  status?: number;
 }
 
 /**
@@ -230,12 +236,58 @@ export async function notifyPush(kind: PushKind, id?: string): Promise<NotifyRes
       body: JSON.stringify(id ? { kind, id } : { kind }),
     });
     if (!res.ok) {
-      console.warn('[push] endpoint-i u përgjigj me', res.status);
-      return null;
+      // Më parë kthehej `null` dhe statusi humbte, ndaj një gabim konfigurimi te
+      // serveri (500 «SUPABASE_SERVICE_ROLE_KEY is missing») dilte te përdoruesi
+      // si «kontrolloni lidhjen». Mesazhi i vërtetë kalon tani deri te ekrani.
+      const detail = await res.json().catch(() => null);
+      console.warn('[push] endpoint-i u përgjigj me', res.status, detail);
+      return {
+        sent: 0,
+        failed: 0,
+        matched: 0,
+        audience: '',
+        status: res.status,
+        error: (detail && (detail.error as string)) || `HTTP ${res.status}`,
+      };
     }
     return (await res.json()) as NotifyResult;
   } catch (err) {
     console.warn('[push] njoftimi nuk u nis:', err);
     return null;
   }
+}
+
+/**
+ * Përkthen përgjigjen e endpoint-it në një fjali të vërtetë.
+ *
+ * Ekziston sepse `sent: 0` ka të paktën katër shkaqe krejt të ndryshme, dhe
+ * mesazhi i vjetër («Kontrolloni lidhjen dhe cilësimet e njoftimeve») e dërgonte
+ * përdoruesin te vendi i gabuar në tri prej tyre.
+ */
+export function notifyResultMessage(res: NotifyResult | null): string {
+  if (!res) {
+    return 'Prova nuk u dërgua — serveri nuk u përgjigj fare. Kontrolloni lidhjen.';
+  }
+  if (res.error) {
+    return res.status === 500 && /SERVICE_ROLE/i.test(res.error)
+      ? 'Prova nuk u dërgua: serverit i mungon SUPABASE_SERVICE_ROLE_KEY te Cloudflare (Settings → Variables, si Secret).'
+      : `Prova nuk u dërgua: ${res.error}`;
+  }
+  if (res.warning) {
+    return `Prova nuk u dërgua: ${res.warning}`;
+  }
+  if (res.matched === 0) {
+    return 'Prova nuk u dërgua: kjo pajisje nuk figuron e abonuar te serveri. Çaktivizoni dhe riaktivizoni njoftimet.';
+  }
+  if (res.sent === 0) {
+    const codes = Object.keys(res.statuses || {});
+    if (codes.includes('403') || codes.includes('401')) {
+      return 'Prova nuk u dërgua: shërbimi i njoftimeve e refuzoi nënshkrimin. VAPID_PRIVATE_KEY te Cloudflare nuk i përket të njëjtit çift me VAPID_PUBLIC_KEY te wrangler.toml.';
+    }
+    if (codes.length) {
+      return `Prova nuk u dërgua: shërbimi i njoftimeve u përgjigj me ${codes.join(', ')}.`;
+    }
+    return 'Prova nuk u dërgua.';
+  }
+  return 'Njoftimi provë u dërgua — duhet të shfaqet brenda pak sekondash.';
 }

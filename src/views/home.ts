@@ -4,7 +4,7 @@ import { esc } from '../utils/security';
 import { nf, fmtDate, fmtTime, daysLeft } from '../utils/format';
 import { slotsHtml } from '../components/slots';
 import { toast, fail } from '../components/toast';
-import { pushState, enablePush, disablePush, notifyPush } from '../api/push';
+import { pushState, enablePush, disablePush, notifyPush, notifyResultMessage } from '../api/push';
 import { shiftWhen } from './shifts';
 import type { ShiftListItem } from '../types/database';
 
@@ -231,9 +231,7 @@ export async function renderPushCard(): Promise<void> {
 
   document.getElementById('push_test')?.addEventListener('click', async () => {
     const res = await notifyPush('test');
-    toast(res && res.sent > 0
-      ? 'Njoftimi provë u dërgua — duhet të shfaqet brenda pak sekondash.'
-      : 'Prova nuk u dërgua. Kontrolloni lidhjen dhe cilësimet e njoftimeve.');
+    toast(notifyResultMessage(res));
   });
 }
 

@@ -67,6 +67,25 @@ export function audienceFor(kind, row) {
   return { roles: INTERNAL_ROLES, onlyMe: false, label: 'qendra & koordinatorët' };
 }
 
+/**
+ * Grumbullon kodet e shërbimit të push-it për dërgimet e dështuara.
+ *
+ * Pa to çdo dështim duket njësoj nga jashtë, ndërsa shkaqet janë krejt të
+ * ndryshme: `403`/`401` do të thotë që VAPID_PRIVATE_KEY nuk i përket të njëjtit
+ * çift me çelësin publik me të cilin u krijua abonimi; `410` do të thotë pajisje
+ * e vdekur; `network` do të thotë që kërkesa nuk doli fare. Nga `sent: 0` i
+ * vjetër portali s'kishte si ta merrte me mend.
+ */
+export function summarizeFailures(results) {
+  const statuses = {};
+  for (const r of results || []) {
+    if (r && r.ok) continue;
+    const code = String((r && r.status) || 'network');
+    statuses[code] = (statuses[code] || 0) + 1;
+  }
+  return statuses;
+}
+
 function jsonResponse(data, status = 200, origin = null) {
   return new Response(JSON.stringify(data), {
     status,
@@ -237,6 +256,8 @@ export async function onRequestPost({ request, env }) {
   const sent = results.filter(r => r.ok).length;
   const failed = results.length - sent;
 
+  const statuses = summarizeFailures(results);
+
   // 5. Drop subscriptions the push service has retired (404/410) -- otherwise
   //    every future send retries phones that will never answer again.
   const goneIds = subs.filter((_, i) => results[i].gone).map(sub => sub.id);
@@ -259,5 +280,6 @@ export async function onRequestPost({ request, env }) {
     matched: subs.length,
     audience: audienceLabel,
     title,
+    ...(failed ? { statuses } : {}),
   }, 200, origin);
 }
