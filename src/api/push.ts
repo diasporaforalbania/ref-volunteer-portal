@@ -42,11 +42,85 @@ export function pushSupported(): boolean {
   );
 }
 
+/**
+ * Gjendja e njoftimeve për këtë pajisje. Butoni shfaqet GJITHMONË — nëse diçka
+ * mungon, arsyeja duhet të lexohet në ekran. Më parë karta fshihej pa fjalë kur
+ * çelësi VAPID mungonte, dhe përdoruesi nuk merrte vesh asgjë.
+ */
+export type PushState =
+  | 'on'              // e abonuar në këtë pajisje
+  | 'off'             // gjithçka gati, thjesht e fikur
+  | 'blocked'         // përdoruesi i ka bllokuar njoftimet te shfletuesi
+  | 'needs-install'   // iPhone: portali s'është shtuar ende në ekran
+  | 'unsupported'     // shfletuesi s'i mbështet njoftimet
+  | 'not-configured'; // qendra s'ka vendosur ende çelësin VAPID
+
+export interface PushEnv {
+  hasVapidKey: boolean;
+  hasServiceWorker: boolean;
+  hasPushManager: boolean;
+  hasNotification: boolean;
+  permission: NotificationPermission;
+  isIos: boolean;
+  isStandalone: boolean;
+  subscribed: boolean;
+}
+
+/**
+ * Vendos gjendjen nga fakte të thjeshta — pa DOM, që rregulli të jetë i
+ * testueshëm. Radha ka rëndësi: mungesa e çelësit kontrollohet e para, sepse
+ * pa të asnjë buton nuk bën punë sado i mbështetur të jetë shfletuesi.
+ */
+export function resolvePushState(env: PushEnv): PushState {
+  if (!env.hasServiceWorker || !env.hasPushManager || !env.hasNotification) return 'unsupported';
+  if (!env.hasVapidKey) return 'not-configured';
+  if (env.isIos && !env.isStandalone) return 'needs-install';
+  if (env.permission === 'denied') return 'blocked';
+  return env.subscribed && env.permission === 'granted' ? 'on' : 'off';
+}
+
+/** iOS dërgon njoftime vetëm te një aplikacion i instaluar, jo te një skedë Safari. */
+function isIosDevice(): boolean {
+  return typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+function isStandaloneDisplay(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches === true ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
+/** Gjendja aktuale, duke lexuar pajisjen. */
+export async function pushState(): Promise<PushState> {
+  const hasApis =
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window;
+
+  let subscribed = false;
+  if (hasApis && Notification.permission === 'granted') {
+    const reg = await navigator.serviceWorker.getRegistration();
+    subscribed = !!(await reg?.pushManager.getSubscription());
+  }
+
+  return resolvePushState({
+    hasVapidKey: !!VAPID_PUBLIC_KEY,
+    hasServiceWorker: hasApis,
+    hasPushManager: hasApis,
+    hasNotification: hasApis,
+    permission: hasApis ? Notification.permission : 'default',
+    isIos: isIosDevice(),
+    isStandalone: isStandaloneDisplay(),
+    subscribed,
+  });
+}
+
 /** Is this device already receiving notifications? */
 export async function pushEnabled(): Promise<boolean> {
-  if (!pushSupported() || Notification.permission !== 'granted') return false;
-  const reg = await navigator.serviceWorker.getRegistration();
-  return !!(await reg?.pushManager.getSubscription());
+  return (await pushState()) === 'on';
 }
 
 /**
