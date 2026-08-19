@@ -131,9 +131,10 @@ export function pushStateMessage(state: PushState, isAdmin = false): string {
   if (state === 'not-configured' && isAdmin) {
     // Adminit i themi saktësisht ku shkohet — ndryshe mesazhi "nga qendra" e
     // dërgon te vetja.
-    return 'Mungojnë çelësat VAPID. Cloudflare → projekti → Settings → Environment variables: '
-         + 'VITE_VAPID_PUBLIC_KEY (build) + VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, '
-         + 'SUPABASE_SERVICE_ROLE_KEY (secret), pastaj ripublikoni. Shihni PUSH_SETUP.md.';
+    return 'Mungon VAPID_PUBLIC_KEY te Cloudflare → Workers → portalreferendum21 → '
+         + 'Settings → Variables. Aty duhen edhe VAPID_PRIVATE_KEY dhe '
+         + 'SUPABASE_SERVICE_ROLE_KEY si Secret. Mjafton ripublikimi — rindërtim '
+         + 'nuk duhet. Shihni PUSH_SETUP.md.';
   }
   switch (state) {
     case 'on':
