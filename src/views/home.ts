@@ -217,6 +217,7 @@ export async function renderPushCard(): Promise<void> {
       return renderPushCard();
     }
     toast('Njoftimet u aktivizuan në këtë pajisje.');
+    window.dispatchEvent(new CustomEvent('push:changed'));
     renderPushCard();
   });
 
@@ -224,6 +225,7 @@ export async function renderPushCard(): Promise<void> {
     const res = await disablePush();
     if (!res.ok) return fail(res.reason || 'Njoftimet nuk u çaktivizuan.');
     toast('Njoftimet u çaktivizuan në këtë pajisje.');
+    window.dispatchEvent(new CustomEvent('push:changed'));
     renderPushCard();
   });
 
@@ -234,3 +236,8 @@ export async function renderPushCard(): Promise<void> {
       : 'Prova nuk u dërgua. Kontrolloni lidhjen dhe cilësimet e njoftimeve.');
   });
 }
+
+// Çelësi te koka e faqes dhe karta këtu tregojnë të njëjtën gjendje.
+window.addEventListener('push:changed', () => {
+  if (document.getElementById('push_card')) renderPushCard();
+});

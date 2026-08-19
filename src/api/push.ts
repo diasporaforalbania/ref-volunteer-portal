@@ -124,6 +124,27 @@ export async function pushEnabled(): Promise<boolean> {
 }
 
 /**
+ * Një rresht shpjegues për çdo gjendje — i përbashkët mes çelësit te koka e
+ * faqes dhe kartës te faqja kryesore, që të dy të thonë të njëjtën gjë.
+ */
+export function pushStateMessage(state: PushState): string {
+  switch (state) {
+    case 'on':
+      return 'Njoftimet janë aktive në këtë pajisje.';
+    case 'off':
+      return 'Njoftimet janë të fikura në këtë pajisje.';
+    case 'blocked':
+      return 'Njoftimet janë të bllokuara nga shfletuesi. Lejojini te cilësimet e faqes dhe rifreskoni.';
+    case 'needs-install':
+      return 'Në iPhone shtoni fillimisht portalin në ekranin kryesor (Safari → ndaje → Add to Home Screen), pastaj hapeni nga ikona.';
+    case 'unsupported':
+      return 'Ky shfletues nuk i mbështet njoftimet.';
+    case 'not-configured':
+      return 'Njoftimet nuk janë aktivizuar ende nga qendra.';
+  }
+}
+
+/**
  * Ask for permission, subscribe this device, and record it against the
  * volunteer. Returns a short Albanian reason when it cannot proceed, so the
  * caller can show it as-is.
