@@ -42,7 +42,7 @@ export async function refreshPushButton(): Promise<void> {
 
   btn.textContent = on ? '🔔' : '🔕';
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  btn.title = pushStateMessage(state);
+  btn.title = pushStateMessage(state, store.isAdmin());
   btn.dataset.state = state;
   // Të padisponueshmet zbehen, por mbeten të prekshme për të dhënë arsyen.
   btn.style.opacity = ready ? '1' : '.55';
@@ -55,7 +55,7 @@ async function togglePush(): Promise<void> {
 
   if (state !== 'on' && state !== 'off') {
     // 'blocked', 'needs-install', 'unsupported', 'not-configured'
-    return fail(pushStateMessage((state || 'unsupported') as never));
+    return fail(pushStateMessage((state || 'unsupported') as never, store.isAdmin()));
   }
 
   btn.disabled = true;
