@@ -3,7 +3,8 @@ import { sb, isConfigMissing } from './api/client';
 import { store } from './state/store';
 import { renderHeader, attachHeaderEvents } from './components/header';
 import { buildTabsHtml } from './components/tabs';
-import { renderAuth, renderGate, renderNewPassword } from './views/auth';
+import { renderAuth, renderGate, renderNewPassword, renderRecoveryPending, renderRecoveryProblem } from './views/auth';
+import { readRecoveryParams } from './api/recovery';
 import { renderVerify } from './views/verify';
 import { vHome } from './views/home';
 import { vNews } from './views/news';
@@ -69,8 +70,10 @@ export function renderShell(): void {
     ${renderHeader()}
     <nav class="tabs"><div class="tabs-inner" id="tabs_container">${tabsHtml}</div></nav>
     <main id="view"></main>
-    <div id="toast"></div>
   `;
+  // `#toast` nuk vendoset më këtu: e krijon dhe e mban `components/toast.ts` te
+  // `document.body`, që të mos zhduket me çdo rirenderim të `#root` — dhe që të
+  // ekzistojë edhe te ekrani i hyrjes, ku më parë çdo mesazh binte në heshtje.
 
   attachHeaderEvents();
 
@@ -83,16 +86,47 @@ export function renderShell(): void {
   });
 }
 
+/**
+ * Parametrat e rivendosjes, të kapur në ngarkim të modulit — jo brenda `boot()`.
+ *
+ * Kjo radhë nuk është stil, është kusht. `boot()` pritet nga `DOMContentLoaded`
+ * kur faqja ende po ngarkohet, kurse supabase-js e fshin vetë fragmentin e
+ * URL-së sapo e përpunon (`detectSessionInUrl`). Nga `boot()`, lidhja e
+ * rivendosjes shpesh ishte zhdukur para se ta lexonim: vullnetari hynte i
+ * loguar te faqja kryesore dhe formën e fjalëkalimit nuk e shihte kurrë.
+ *
+ * Vlerësimi i moduleve ES bëhet në një bllok të vetëm sinkron, ndaj ky rresht
+ * ekzekutohet me siguri para çdo mikrodetyre të supabase-js.
+ */
+const RECOVERY = readRecoveryParams();
+
+/**
+ * Shkëmben tokenin e lidhjes sonë me një sesion, dhe hap formën e fjalëkalimit.
+ *
+ * `verifyOtp()` dhe jo ridrejtim përmes `/auth/v1/verify`: ashtu tokeni
+ * harxhohet me një GET të thjeshtë, dhe skanuesit e email-it të kompanive e
+ * hapin lidhjen para njeriut. Këtu asgjë nuk konsumohet derisa ta kërkojë
+ * shprehimisht JavaScript-i i faqes.
+ */
+async function startRecovery(tokenHash: string): Promise<void> {
+  renderRecoveryPending();
+
+  const { error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+  if (error) {
+    console.warn('[auth] verifyOtp i rivendosjes dështoi:', error.message);
+    return renderRecoveryProblem(error.message);
+  }
+
+  const { data } = await sb.auth.getSession();
+  store.SESSION = data.session;
+  renderNewPassword();
+}
+
 export async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const verifyCode = params.get('v');
   if (verifyCode) {
     return renderVerify(verifyCode);
-  }
-
-  // Check if user returned from password reset link
-  if (location.hash.includes('type=recovery')) {
-    return renderNewPassword();
   }
 
   if (isConfigMissing()) {
@@ -106,19 +140,35 @@ export async function boot(): Promise<void> {
     return;
   }
 
+  // Abonimi bëhet PARA çdo `await`-i të parë.
+  //
+  // supabase-js e lëshon `PASSWORD_RECOVERY` sapo e njeh URL-në, dhe kjo ndodh
+  // ndërsa `boot()` ende s'ka arritur këtu. Më parë abonimi vinte pas leximit
+  // të sesionit — ngjarja lëshohej te bosh dhe formën e fjalëkalimit s'e hapte
+  // kush. Një abonim i regjistruar herët nuk kushton gjë; një i vonuar humbet
+  // pikërisht ngjarjen për të cilën ekziston.
+  sb.auth.onAuthStateChange(event => {
+    if (event === 'PASSWORD_RECOVERY') {
+      renderNewPassword();
+    }
+  });
+
+  // Rivendosja e fjalëkalimit i paraprin çdo gjëje tjetër: kush vjen nga
+  // email-i duhet ta vendosë fjalëkalimin, jo të hyjë te portali me sesionin e
+  // përkohshëm që sapo i dha lidhja.
+  if (RECOVERY.tokenHash) {
+    return startRecovery(RECOVERY.tokenHash);
+  }
+  if (RECOVERY.isLegacyRecovery) {
+    return renderNewPassword();
+  }
+
   // Register service worker if available
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(err => {
       console.warn('SW registration skipped:', err);
     });
   }
-
-  // Subscribe to auth state changes (e.g. password recovery)
-  sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'PASSWORD_RECOVERY') {
-      renderNewPassword();
-    }
-  });
 
   const { data: sessionData } = await sb.auth.getSession();
   store.SESSION = sessionData.session;

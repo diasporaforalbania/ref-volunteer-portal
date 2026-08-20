@@ -11,6 +11,8 @@ import { onRequestGet as handleCountGet, onRequestOptions as handleCountOptions 
 import { onRequestPost as handlePushPost, onRequestOptions as handlePushOptions } from '../functions/api/send-push.js';
 // @ts-ignore
 import { onRequestGet as handlePointsGet, onRequestOptions as handlePointsOptions } from '../functions/api/points.js';
+// @ts-ignore
+import { onRequestPost as handleResetPost, onRequestOptions as handleResetOptions } from '../functions/api/reset-password.js';
 
 export interface Env {
   ASSETS: {
@@ -20,6 +22,22 @@ export interface Env {
   SUPABASE_ANON_KEY?: string;
   DEFAULT_GOAL?: string;
   VAPID_PUBLIC_KEY?: string;
+
+  /**
+   * Rivendosja e fjalëkalimit. Të gjitha opsionale me qëllim: endpointi e thotë
+   * vetë se çfarë i mungon (`server_misconfigured`, `email_not_configured`) në
+   * vend që Worker-i të mos nisej fare.
+   */
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  PORTAL_URL?: string;
+  RESET_FROM_EMAIL?: string;
+  RESET_FROM_NAME?: string;
+  /** Cloudflare Email Sending — binding-u vendas, pa çelësa. */
+  EMAIL?: { send: (message: Record<string, unknown>) => Promise<unknown> };
+  /** Rezervë për planin falas: API-ja HTTP e Resend-it. */
+  RESEND_API_KEY?: string;
+  /** `[[ratelimits]]` te `wrangler.toml` — mungon pa dëm te `wrangler dev`. */
+  RESET_LIMITER?: { limit: (options: { key: string }) => Promise<{ success: boolean }> };
 }
 
 export interface WorkerContext {
@@ -151,7 +169,25 @@ export default {
       });
     }
 
-    // 4. Delegate all static assets and SPA routes to Cloudflare Assets
+    // 4. /api/reset-password — dërgon vetë email-in e rivendosjes së fjalëkalimit
+    //
+    // Nuk kalon nga mailer-i i Supabase-it me qëllim: ai shërbim i dërgon
+    // mesazhet vetëm anëtarëve të ekipit të projektit, ndaj për vullnetarët nuk
+    // mbërrinte kurrë asgjë. Shpjegimi i plotë te `functions/api/reset-password.js`.
+    if (url.pathname === '/api/reset-password') {
+      if (request.method === 'OPTIONS') {
+        return handleResetOptions({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      if (request.method === 'POST') {
+        return handleResetPost({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 5. Delegate all static assets and SPA routes to Cloudflare Assets
     return withRuntimeConfig(request, env);
   },
 };

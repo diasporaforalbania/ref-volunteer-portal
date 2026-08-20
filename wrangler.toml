@@ -59,3 +59,37 @@ VAPID_PUBLIC_KEY = "BDHpvuL0OqgIP2--2vCt2BRlKnVxck19TlzOvwEF3L5ztqieJxYXvEZqU1-_
 # Kontakti qe u shkon sherbimeve te push-it nese nje njoftim del problematik.
 # Jo sekret. `functions/api/send-push.js` ka te njejten vlere si rezerve.
 VAPID_SUBJECT = "mailto:qendra@referendum21.org"
+
+# Adresa nga e cila niset email-i i rivendosjes së fjalëkalimit, dhe portali te
+# i cili çon lidhja. Publike të dyja.
+#
+# `PORTAL_URL` përcakton origjinën e lidhjes në mesazh. Po e ndryshoi dikush
+# pa e ndryshuar edhe domainin e dërgimit, mesazhi vazhdon të niset — thjesht
+# lidhja çon gjetkë. Ndaj mbajini të dyja në një rresht mendimi.
+PORTAL_URL = "https://portal.referendum21.org"
+RESET_FROM_EMAIL = "noreply@portal.referendum21.org"
+RESET_FROM_NAME = "Referendumi — Portali i vullnetarëve"
+
+# Fren për `/api/reset-password`: 3 kërkesa për email në minutë.
+#
+# Endpointi është publik dhe dërgon email — pa fren, kushdo mund ta përdorte
+# për të mbytur kutinë postare të një vullnetari, ose për të shpenzuar kuotën e
+# dërgimit. Çelësi është vetë adresa, jo IP-ja: sulmuesi i ndërron IP-të lehtë,
+# kurse adresa që do të mbytet mbetet e njëjta.
+#
+# `period` pranon VETËM 10 ose 60 sekonda — çdo vlerë tjetër e rrëzon publikimin.
+[[ratelimits]]
+name = "RESET_LIMITER"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }
+
+# Cloudflare Email Sending — kanali i parë i dërgimit, pa asnjë çelës.
+#
+# RRI I KOMENTUAR ME QËLLIM. Binding-u kërkon planin Workers Paid DHE domainin e
+# regjistruar te Email Sending; po u publikua pa i pasur të dyja, publikimi
+# dështon dhe bie i gjithë portali, jo vetëm rivendosja e fjalëkalimit.
+#
+# Hapeni pasi të ketë dalë `npx wrangler email sending enable referendum21.org`.
+# Pa të, `functions/api/reset-password.js` kalon vetvetiu te `RESEND_API_KEY`.
+# [[send_email]]
+# name = "EMAIL"
