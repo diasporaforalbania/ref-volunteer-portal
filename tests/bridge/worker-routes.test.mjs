@@ -19,7 +19,7 @@ describe('Suite 8: Worker entry point routes every /api endpoint', () => {
       'Nëse `main` hiqet, ky test duhet rishikuar bashkë me rutimin.');
   });
 
-  const ENDPOINTS = ['/api/count', '/api/points', '/api/send-push', '/api/reset-password'];
+  const ENDPOINTS = ['/api/count', '/api/points', '/api/shifts', '/api/send-push', '/api/reset-password'];
 
   for (const path of ENDPOINTS) {
     it(`routes ${path}`, () => {
@@ -33,15 +33,24 @@ describe('Suite 8: Worker entry point routes every /api endpoint', () => {
   it('imports a handler for every routed endpoint', () => {
     assert.match(worker, /from '\.\.\/functions\/api\/count\.js'/);
     assert.match(worker, /from '\.\.\/functions\/api\/points\.js'/);
+    assert.match(worker, /from '\.\.\/functions\/api\/shifts\.js'/);
     assert.match(worker, /from '\.\.\/functions\/api\/send-push\.js'/);
     assert.match(worker, /from '\.\.\/functions\/api\/reset-password\.js'/);
   });
 
   it('handles OPTIONS and GET for /api/points', () => {
     const i = worker.indexOf("url.pathname === '/api/points'");
-    const block = worker.slice(i, worker.indexOf("url.pathname === '/api/send-push'"));
+    const block = worker.slice(i, worker.indexOf("url.pathname === '/api/shifts'"));
     assert.ok(block.includes('handlePointsOptions'), 'OPTIONS/preflight mungon për /api/points');
     assert.ok(block.includes('handlePointsGet'), 'GET mungon për /api/points');
+    assert.ok(block.includes('method_not_allowed'), 'metodat e tjera duhet të kthejnë 405');
+  });
+
+  it('handles OPTIONS and GET for /api/shifts', () => {
+    const i = worker.indexOf("url.pathname === '/api/shifts'");
+    const block = worker.slice(i, worker.indexOf("url.pathname === '/api/send-push'"));
+    assert.ok(block.includes('handleShiftsOptions'), 'OPTIONS/preflight mungon për /api/shifts');
+    assert.ok(block.includes('handleShiftsGet'), 'GET mungon për /api/shifts');
     assert.ok(block.includes('method_not_allowed'), 'metodat e tjera duhet të kthejnë 405');
   });
 

@@ -12,6 +12,8 @@ import { onRequestPost as handlePushPost, onRequestOptions as handlePushOptions 
 // @ts-ignore
 import { onRequestGet as handlePointsGet, onRequestOptions as handlePointsOptions } from '../functions/api/points.js';
 // @ts-ignore
+import { onRequestGet as handleShiftsGet, onRequestOptions as handleShiftsOptions } from '../functions/api/shifts.js';
+// @ts-ignore
 import { onRequestPost as handleResetPost, onRequestOptions as handleResetOptions } from '../functions/api/reset-password.js';
 
 export interface Env {
@@ -155,7 +157,21 @@ export default {
       });
     }
 
-    // 3. /api/send-push endpoint for broadcast notifications
+    // 3. /api/shifts endpoint for scheduled upcoming shifts
+    if (url.pathname === '/api/shifts') {
+      if (request.method === 'OPTIONS') {
+        return handleShiftsOptions({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      if (request.method === 'GET') {
+        return handleShiftsGet({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
+      }
+      return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 4. /api/send-push endpoint for broadcast notifications
     if (url.pathname === '/api/send-push') {
       if (request.method === 'OPTIONS') {
         return handlePushOptions({ request, env, waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) });
