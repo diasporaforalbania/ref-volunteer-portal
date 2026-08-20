@@ -1,4 +1,5 @@
 import { sb, DEFAULT_GOAL } from '../api/client';
+import { clearRecoveryParams } from '../api/recovery';
 import { store, ROLE_DESC, ROLES, SIGNUP_ROLES } from '../state/store';
 import { esc } from '../utils/security';
 import { nf } from '../utils/format';
@@ -163,17 +164,120 @@ export async function doSignup(): Promise<void> {
   window.dispatchEvent(new CustomEvent('app:authenticated'));
 }
 
+/**
+ * Shkaqet e dështimit, secili me mesazhin e vet.
+ *
+ * Njësoj si te dërgimi i njoftimeve: një «provoni sërish» i vetëm për çdo
+ * dështim e fsheh pikërisht atë që e zgjidh problemin. Këtu shumica e shkaqeve
+ * kërkojnë veprim nga qendra, jo nga vullnetari — ndaj mesazhi duhet t'i thotë
+ * vullnetarit se ku ta çojë fjalën.
+ */
+const RESET_ERRORS: Record<string, string> = {
+  invalid_email: 'Adresa e email-it nuk duket e saktë. Kontrollojeni dhe provoni sërish.',
+  rate_limited: 'U kërkua shumë shpesh për këtë adresë. Prisni një minutë dhe provoni sërish.',
+  server_misconfigured: 'Shërbimi i rivendosjes nuk është konfiguruar te serveri. Njoftoni qendrën.',
+  email_not_configured: 'Dërguesi i email-it nuk është konfiguruar ende te serveri. Njoftoni qendrën.',
+  email_send_failed: 'Email-i nuk u nis dot nga serveri. Njoftoni qendrën.',
+  upstream_unreachable: 'Serveri nuk komunikoi dot me Supabase-in. Provoni pas pak.',
+  upstream_unexpected: 'Supabase-i ktheu një përgjigje të papritur. Njoftoni qendrën.',
+  forbidden_origin: 'Kërkesa u refuzua nga serveri (origjinë e panjohur). Njoftoni qendrën.',
+};
+
 export async function doReset(): Promise<void> {
   const emailInput = document.getElementById('a_email') as HTMLInputElement | null;
   const email = (emailInput?.value || '').trim();
-  if (!email) return fail('Shkruani email-in më sipër, pastaj klikoni sërish.');
+  if (!email) {
+    emailInput?.focus();
+    return fail('Shkruani email-in më sipër, pastaj klikoni sërish.');
+  }
 
-  const redirectTo = getAuthRedirectUrl();
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo,
+  const link = document.getElementById('btn_forgot_pass');
+  const previousText = link?.textContent || 'Harrova fjalëkalimin';
+  if (link) {
+    link.textContent = 'Po dërgohet…';
+    link.setAttribute('aria-busy', 'true');
+  }
+
+  try {
+    const res = await fetch('/api/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    // Te `npm run dev` faqja shërbehet nga Vite dhe Worker-i nuk ndërhyn fare,
+    // ndaj `/api/reset-password` kthen guaskën HTML të SPA-së me status 200.
+    // Pa këtë kontroll, `res.json()` hidhet dhe dështimi duket si defekt rrjeti.
+    const contentType = res.headers.get('Content-Type') || '';
+    if (!contentType.includes('application/json')) {
+      return fail(
+        res.ok
+          ? 'Endpointi /api/reset-password nuk u gjet. Për ta provuar lokalisht përdorni `npm run pages:dev`.'
+          : `Serveri ktheu ${res.status}.`
+      );
+    }
+
+    const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+
+    if (!res.ok) {
+      const code = data?.error || '';
+      return fail(RESET_ERRORS[code] || `Rivendosja dështoi (${code || res.status}).`);
+    }
+
+    // Përgjigja është e njëjtë edhe kur adresa nuk i përket asnjë llogarie —
+    // me qëllim, që endpointi të mos tregojë se cilat adresa janë regjistruar.
+    // Prandaj mesazhi thotë «nëse … është e regjistruar», dhe jo «u dërgua».
+    toast('Nëse kjo adresë është e regjistruar, brenda pak minutash ju vjen email-i me lidhjen.');
+  } catch (err) {
+    console.error('[auth] kërkesa e rivendosjes dështoi:', err);
+    fail('Kërkesa nuk doli dot nga pajisja. Kontrolloni lidhjen dhe provoni sërish.');
+  } finally {
+    if (link) {
+      link.textContent = previousText;
+      link.removeAttribute('aria-busy');
+    }
+  }
+}
+
+/**
+ * Ekran pritjeje sa kohë shkëmbehet tokeni i lidhjes.
+ *
+ * `verifyOtp()` është një kërkesë rrjeti mbi një faqe ende bosh. Pa këtë,
+ * vullnetari që hap email-in shikon të bardhën dhe mendon se lidhja s'punoi.
+ */
+export function renderRecoveryPending(): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+  root.innerHTML = `<div class="auth-wrap"><div class="auth" style="text-align:center">
+    <h1>Po verifikohet lidhja…</h1>
+    <p class="sub">Një çast — po hapim formën e fjalëkalimit të ri.</p>
+  </div></div>`;
+}
+
+/**
+ * Lidhja nuk vlen më: e skaduar, e përdorur, ose e hapur dy herë.
+ *
+ * Ekran më vete dhe jo një njoftim kalimtar mbi ekranin e hyrjes — vullnetari
+ * këtu ka ardhur nga email-i dhe pret të vendosë fjalëkalimin; duhet t'i themi
+ * qartë pse s'po ndodh dhe si të vazhdojë.
+ */
+export function renderRecoveryProblem(detail?: string): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+
+  root.innerHTML = `<div class="auth-wrap"><div class="auth" style="text-align:center">
+    <div style="font-size:44px;line-height:1">⏱️</div>
+    <h1 style="margin-top:8px">Lidhja nuk vlen më</h1>
+    <p class="sub">Lidhjet e rivendosjes skadojnë për një orë dhe hapen vetëm një herë.
+      Kërkoni një lidhje të re — kjo e vjetra nuk prek gjë.</p>
+    ${detail ? `<p class="hint">${esc(detail)}</p>` : ''}
+    <button class="btn wide" id="rec_back">Kërko lidhje të re</button>
+  </div></div>`;
+
+  document.getElementById('rec_back')?.addEventListener('click', () => {
+    clearRecoveryParams();
+    renderAuth('login');
   });
-  if (error) return fail(error.message || String(error));
-  toast('Ju dërguam një email me lidhjen për rivendosjen e fjalëkalimit.');
 }
 
 export function renderNewPassword(): void {
@@ -209,9 +313,33 @@ export function renderNewPassword(): void {
 
     if (btn) btn.disabled = true;
     const { error } = await sb.auth.updateUser({ password: pass });
-    if (btn) btn.disabled = false;
 
-    if (error) return fail(error.message);
+    if (error) {
+      if (btn) btn.disabled = false;
+      // «Auth session missing» do të thotë që lidhja u konsumua ose skadoi —
+      // gjë që s'ka lidhje me fjalëkalimin që sapo u shkrua, ndaj mesazhi i
+      // papërkthyer i Supabase-it këtu vetëm ngatërron.
+      const expired = /session|expired|invalid/i.test(error.message || '');
+      return fail(
+        expired
+          ? 'Lidhja ka skaduar ose është përdorur njëherë. Kërkoni një lidhje të re nga «Harrova fjalëkalimin».'
+          : error.message
+      );
+    }
+
+    // KUJDES: pa këtë rresht, vullnetari e ndërron fjalëkalimin me sukses dhe
+    // menjëherë hidhet te ekrani i hyrjes. `loadUserAndStats()` niset nga
+    // `store.SESSION`, dhe në rrjedhën e rivendosjes atë s'e mbush kush —
+    // `boot()` kthehet para se ta lexojë sesionin.
+    const { data: sessionData } = await sb.auth.getSession();
+    store.SESSION = sessionData.session;
+
+    // URL-ja ende mban tokenin e rivendosjes. Po e rifreskoi faqen vullnetari,
+    // ai token tashmë i harxhuar do ta çonte sërish te ky ekran, me një gabim
+    // që nuk e shkakton ai.
+    clearRecoveryParams();
+
+    if (btn) btn.disabled = false;
     toast('Fjalëkalimi u ndryshua me sukses!');
     window.dispatchEvent(new CustomEvent('app:authenticated'));
   };

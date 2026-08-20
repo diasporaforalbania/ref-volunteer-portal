@@ -19,7 +19,7 @@ describe('Suite 8: Worker entry point routes every /api endpoint', () => {
       'Nëse `main` hiqet, ky test duhet rishikuar bashkë me rutimin.');
   });
 
-  const ENDPOINTS = ['/api/count', '/api/points', '/api/send-push'];
+  const ENDPOINTS = ['/api/count', '/api/points', '/api/send-push', '/api/reset-password'];
 
   for (const path of ENDPOINTS) {
     it(`routes ${path}`, () => {
@@ -34,6 +34,7 @@ describe('Suite 8: Worker entry point routes every /api endpoint', () => {
     assert.match(worker, /from '\.\.\/functions\/api\/count\.js'/);
     assert.match(worker, /from '\.\.\/functions\/api\/points\.js'/);
     assert.match(worker, /from '\.\.\/functions\/api\/send-push\.js'/);
+    assert.match(worker, /from '\.\.\/functions\/api\/reset-password\.js'/);
   });
 
   it('handles OPTIONS and GET for /api/points', () => {
