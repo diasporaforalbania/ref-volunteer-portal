@@ -2035,6 +2035,46 @@ grant select on public.public_signing_points to anon, authenticated;
 -- kthen 404 derisa ai të rifreskohet vetë.
 notify pgrst, 'reload schema';
 
+-- ---------------------------------------------------------------------------
+-- Turnet e ardhshme (të planifikuara, ende pa nisur) — për /api/shifts.
+--
+-- Pamje e ndarë nga `public_signing_points` me domosdo: ajo nis nga `checkins`,
+-- ndaj një turn i planifikuar (pa asnjë check-in ende) nuk prodhon rresht atje.
+-- Turnet e planifikuara nuk janë vende, janë orare — pa koordinata.
+--
+-- Zero-PII: nga `shifts` merren VETËM `starts_at` e `ends_at`. Mbeten jashtë
+-- `created_by_name` (emri i plotë i vullnetarit), `created_by`, `notes` dhe
+-- `capacity`.
+--
+-- Shih `sql/upcoming-shifts-view.sql` për të njëjtin përkufizim si skript të
+-- veçantë, bashkë me diagnostikën "pse nuk duket ky turn".
+-- ---------------------------------------------------------------------------
+create or replace view public.public_upcoming_shifts as
+select
+  left(md5(s.id::text), 16)                       as id,
+  u.code                                          as unit_code,
+  u.name                                          as unit_name,
+  nullif(trim(u.territory), '')                   as area,
+  nullif(trim(u.region), '')                      as region,
+  s.starts_at                                     as opens_at,
+  s.ends_at                                       as closes_at
+from public.shifts s
+join public.units  u on u.id = s.unit_id
+where s.closed_at is null
+  and u.is_open
+  and s.starts_at > now()
+order by s.starts_at, u.code;
+
+comment on view public.public_upcoming_shifts is
+  'Turnet e planifikuara që nuk kanë nisur, për /api/shifts dhe faqen publike. '
+  'Zero-PII: pa created_by, created_by_name, notes, capacity. Pa koordinata. '
+  'Mos e ndrysho në security_invoker — anon nuk lexon shifts as units.';
+
+revoke all on public.public_upcoming_shifts from anon, authenticated;
+grant select on public.public_upcoming_shifts to anon, authenticated;
+
+notify pgrst, 'reload schema';
+
 -- ============================ EKZEKUTIMI I FUNKSIONEVE =====================
 alter default privileges in schema public revoke execute on functions from public;
 

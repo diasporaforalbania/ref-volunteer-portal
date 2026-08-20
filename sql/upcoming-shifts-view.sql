@@ -1,0 +1,97 @@
+-- ============================================================================
+-- TURNET E ARDHSHME — pamje publike për /api/shifts dhe faqen publike
+--
+-- PSE DUHET NJË PAMJE E DYTË
+--
+-- `public_signing_points` nis nga `checkins`:
+--
+--     from public.checkins c
+--     join public.shifts   s on s.id = c.shift_id
+--     join public.units    u on u.id = c.unit_id
+--
+-- Domethënë një pikë ekziston vetëm pasi një vullnetar ka bërë check-in me GPS.
+-- Një turn i PLANIFIKUAR — rresht te `shifts` me `starts_at` në të ardhmen dhe
+-- ende asnjë check-in — nuk prodhon asnjë rresht atje, dhe nuk është çështje
+-- filtri kohor: te ajo pamje `id`-ja, koordinatat dhe `point_name` burojnë të
+-- gjitha nga check-in-e që nuk kanë ndodhur ende.
+--
+-- Prandaj kjo pamje e dytë: turnet e planifikuara nuk janë vende, janë orare.
+--
+-- ÇFARË EKSPOZOHET (dhe çfarë jo)
+--
+-- Dalja është allowlist, e ndërtuar kolonë pas kolone. Nga `shifts` merren
+-- VETËM `starts_at` dhe `ends_at`. Mbeten jashtë me qëllim:
+--
+--   • `created_by_name` — emri i plotë i vullnetarit që hapi turnin. Kjo është
+--     arsyeja kryesore pse tabela `shifts` nuk ekspozohet kurrë e drejtpërdrejtë.
+--   • `created_by`      — UUID i vullnetarit.
+--   • `notes`           — tekst i lirë i shkruar nga njeriu; mund të përmbajë
+--                         emra, numra telefoni, marrëveshje të brendshme.
+--   • `capacity`        — sa vullnetarë priten; informacion operacional i
+--                         brendshëm, pa vlerë për qytetarin.
+--
+-- Nuk ka koordinata: askush nuk ka mbërritur ende në terren, ndaj GPS nuk
+-- ekziston. Faqja publike tregon emrin e zonës dhe orarin, jo hartë.
+--
+-- ⚠️  KUJDES: `u.is_open`
+-- Filtri `u.is_open` do të thotë se një turn i planifikuar për një njësi që
+-- qendra nuk e ka hapur ende NUK do të dalë. Ky është shkaku më i mundshëm
+-- nëse një turn ekziston te portali por nuk duket te faqja. Diagnostika në
+-- fund të skedarit e tregon menjëherë. Nëse doni t'i shfaqni edhe turnet e
+-- njësive ende të pahapura, hiqni atë rresht.
+-- ============================================================================
+
+create or replace view public.public_upcoming_shifts as
+select
+  -- ID e qëndrueshme dhe e paidentifikueshme, në të njëjtin format 16-hex që
+  -- pret `cleanId()` te functions/api/shifts.js. Nuk është UUID i bazës, ndaj
+  -- nuk i vihet sondë asnjë identifikues i brendshëm.
+  left(md5(s.id::text), 16)                       as id,
+  u.code                                          as unit_code,
+  u.name                                          as unit_name,
+  -- Titulli i zonës ku do të mblidhen firmat ('Tiranë, njësia bashkiake 5').
+  nullif(trim(u.territory), '')                   as area,
+  nullif(trim(u.region), '')                      as region,
+  -- Emërtohen `opens_at`/`closes_at` që konsumatori të ketë të njëjtin
+  -- fjalor si te `/api/points` dhe të mos mbajë dy harta fushash.
+  s.starts_at                                     as opens_at,
+  s.ends_at                                       as closes_at
+from public.shifts s
+join public.units  u on u.id = s.unit_id
+where s.closed_at is null        -- turni jo i mbyllur nga udhëheqësi
+  and u.is_open                  -- njësia e hapur nga qendra (shih KUJDES më lart)
+  and s.starts_at > now()        -- VETËM ato që nuk kanë nisur ende
+order by s.starts_at, u.code;
+
+comment on view public.public_upcoming_shifts is
+  'Turnet e planifikuara që nuk kanë nisur, për /api/shifts dhe faqen publike. '
+  'Zero-PII: pa created_by, created_by_name, notes, capacity. Pa koordinata. '
+  'Mos e ndrysho në security_invoker — anon nuk lexon shifts as units.';
+
+-- Vetëm LEXIM, dhe vetëm i kësaj pamjeje. `anon` mbetet pa asnjë leje mbi
+-- `shifts` e `units` — pamja është e vetmja dritare.
+revoke all on public.public_upcoming_shifts from anon, authenticated;
+grant select on public.public_upcoming_shifts to anon, authenticated;
+
+-- PostgREST e mban skemën në kujtesë: pa këtë, `/rest/v1/public_upcoming_shifts`
+-- kthen 404 derisa ai të rifreskohet vetë.
+notify pgrst, 'reload schema';
+
+
+-- ============================================================================
+-- DIAGNOSTIKË — ekzekutojeni veç, nëse një turn nuk duket te faqja publike.
+-- Tregon çdo turn të ardhshëm dhe pse hyn ose nuk hyn te pamja.
+-- ============================================================================
+-- select
+--   u.code,
+--   u.name,
+--   s.starts_at,
+--   s.closed_at is null                    as turni_i_hapur,
+--   u.is_open                              as njesia_e_hapur,
+--   s.starts_at > now()                    as ende_pa_nisur,
+--   (s.closed_at is null and u.is_open and s.starts_at > now())
+--                                          as del_te_faqja
+-- from public.shifts s
+-- join public.units  u on u.id = s.unit_id
+-- where s.ends_at > now()
+-- order by s.starts_at;
