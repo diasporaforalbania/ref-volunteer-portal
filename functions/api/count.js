@@ -118,7 +118,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
 
   try {
     const upstream = await fetch(
-      `${supabaseUrl}/rest/v1/signature_totals?select=signatures,goal,updated`,
+      `${supabaseUrl}/rest/v1/signature_totals?select=signatures,goal,updated,week`,
       {
         headers: {
           apikey: supabaseAnonKey,
@@ -159,9 +159,13 @@ export async function onRequestGet({ request, env, waitUntil }) {
       }
     }
 
+    const rawWeek = Number(row?.week);
+    const week = Number.isFinite(rawWeek) && rawWeek >= 0 ? Math.floor(rawWeek) : 0;
+
     const payload = JSON.stringify({
       signatures,
       goal,
+      week,
       updated,
       generated_at: new Date().toISOString(),
     });
