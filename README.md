@@ -49,11 +49,11 @@ Projekti ndan variablat midis **Frontend-it (Vite)** dhe **Funksioneve Edge (Clo
 | :--- | :--- | :--- | :--- |
 | `VITE_SUPABASE_URL` | Frontend (Vite) | Publik | URL-ja e projektit Supabase (`https://xyz.supabase.co`) |
 | `VITE_SUPABASE_ANON_KEY` | Frontend (Vite) | Publik | Çelësi publik `anon` i Supabase |
-| `VITE_VAPID_PUBLIC_KEY` | Frontend (Vite) | Publik | Çelësi publik VAPID për njoftimet Push në shfletues |
+| `VITE_VAPID_PUBLIC_KEY` | Frontend (Vite) | Publik | **Opsionale** — vetëm për `npm run dev`. Në prodhim çelësin ia jep Worker-i nga `VAPID_PUBLIC_KEY` |
 | `VITE_DEFAULT_GOAL` | Frontend (Vite) | Publik | Objektivi fillestar i nënshkrimeve (`50000`) |
 | `SUPABASE_URL` | Edge Functions / Wrangler | Server | URL-ja e Supabase për `/api/count` & `/api/send-push` |
 | `SUPABASE_ANON_KEY` | Edge Functions / Wrangler | Secret | Çelësi `anon` për kërkesat e funksioneve edge te Supabase |
-| `VAPID_PUBLIC_KEY` | Edge Functions / Wrangler | Server | Çelësi publik VAPID për serverin e njoftimeve |
+| `VAPID_PUBLIC_KEY` | Worker (runtime) | Publik — **te `wrangler.toml`**, jo te paneli | Çelësi publik VAPID. E lexojnë të dyja anët: dërguesi për të nënshkruar, dhe Worker-i që ia kalon shfletuesit si `<meta name="vapid-public-key">` |
 | `VAPID_PRIVATE_KEY` | Edge Functions / Wrangler | Secret | Çelësi privat VAPID për nënshkrimin e njoftimeve Push |
 | `VAPID_SUBJECT` | Edge Functions / Wrangler | Server | Kontakti administrativ (p.sh. `mailto:admin@referendum21.org`) |
 
@@ -197,15 +197,33 @@ Te skeda **Settings** → **Environment variables** të projektit në Cloudflare
 #### 1. Variablat e Ndërtimit të Frontend-it (Build Variables):
 * `VITE_SUPABASE_URL` = `https://your-project.supabase.co`
 * `VITE_SUPABASE_ANON_KEY` = `your-anon-key`
-* `VITE_VAPID_PUBLIC_KEY` = `your-vapid-public-key`
 * `VITE_DEFAULT_GOAL` = `50000`
 
-#### 2. Variablat e Funksioneve Edge (Pages Functions Runtime):
-* `SUPABASE_URL` = `https://your-project.supabase.co` (Plain text)
-* `SUPABASE_ANON_KEY` = `your-anon-key` (**Type: Secret / Encrypted**)
-* `VAPID_PUBLIC_KEY` = `your-vapid-public-key` (Plain text)
-* `VAPID_PRIVATE_KEY` = `your-vapid-private-key` (**Type: Secret / Encrypted**)
-* `VAPID_SUBJECT` = `mailto:admin@referendum21.org` (Plain text)
+> `VITE_VAPID_PUBLIC_KEY` **nuk duhet** këtu. Çelësi publik i njoftimeve shkon te
+> shfletuesi në kohë ekzekutimi, nga `VAPID_PUBLIC_KEY` më poshtë — ndaj ndërrimi
+> i çelësit kërkon vetëm ripublikim, jo rindërtim. Më parë ai ishte variabël
+> ndërtimi, dhe po të harrohej këtu paketa dilte me çelës bosh dhe çdo vullnetar
+> lexonte «Njoftimet nuk janë aktivizuar ende nga qendra».
+
+#### 2. Variablat e Worker-it (runtime)
+
+Vetëm **dy**, dhe të dyja si **Secret**:
+
+* `VAPID_PRIVATE_KEY` (**Type: Secret**)
+* `SUPABASE_SERVICE_ROLE_KEY` (**Type: Secret**) — Supabase → Project Settings → API → `service_role`
+
+Gjithçka tjetër publike (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `DEFAULT_GOAL`,
+`VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`) jeton te `[vars]` në `wrangler.toml`.
+
+> **Pse Secret dhe jo Variable.** Me një bllok `[vars]` prezent, wrangler-i i
+> **fshin të gjitha** variablat e thjeshta përpara se të vendosë ato të
+> konfigurimit — pra një `Variable` e shtuar te paneli zhduket në publikimin e
+> radhës. Sekretet nuk preken kurrë nga një publikim. Po i vendosët këto dy si
+> `Variable`, njoftimet punojnë derisa të bëni push-in e ardhshëm, pastaj
+> ndalen pa asnjë shenjë.
+
+> Mos e shtoni `VAPID_PUBLIC_KEY` edhe te paneli: e ka `wrangler.toml`, dhe dy
+> burime për të njëjtin emër janë vetëm mënyrë për t'i parë të shkojnë jashtë sinkroni.
 
 ### Hapi 4: Vendosja e Domain-it të Personalizuar (Custom Domain)
 

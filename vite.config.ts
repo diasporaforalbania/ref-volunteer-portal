@@ -9,7 +9,10 @@ export default defineConfig(({ mode }) => {
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5bW1keWpqanZqYnlsZWFveWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3ODUzODEsImV4cCI6MjA5ODM2MTM4MX0.mxR0_mF37Ste8eFgKKEBNwFXAILVY8JdZMQo-1zbkE0';
 
   return {
-    base: './',
+    // Absolute, not './': with `not_found_handling = single-page-application`
+    // the shell can be served at any path, and relative asset URLs would then
+    // resolve to /<that-path>/assets/... and 404 into a blank page.
+    base: '/',
     build: {
       outDir: 'dist',
       assetsDir: 'assets',

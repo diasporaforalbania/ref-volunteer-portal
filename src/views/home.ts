@@ -1,8 +1,10 @@
-import { sb, DEFAULT_GOAL, VAPID_PUBLIC_KEY } from '../api/client';
+import { sb, DEFAULT_GOAL } from '../api/client';
 import { store } from '../state/store';
 import { esc } from '../utils/security';
 import { nf, fmtDate, fmtTime, daysLeft } from '../utils/format';
 import { slotsHtml } from '../components/slots';
+import { toast, fail } from '../components/toast';
+import { pushState, enablePush, disablePush, notifyPush, notifyResultMessage } from '../api/push';
 import { shiftWhen } from './shifts';
 import type { ShiftListItem } from '../types/database';
 
@@ -91,6 +93,8 @@ export async function vHome(go: (k: any) => void): Promise<void> {
       </div>
     </div>
 
+    <div id="push_card"></div>
+
     <div class="grid g2" style="margin-bottom:16px">
       <div class="card">
         <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:8px">
@@ -120,6 +124,8 @@ export async function vHome(go: (k: any) => void): Promise<void> {
       </div>
     </div>`;
 
+  renderPushCard();
+
   // Attach navigation listeners
   view.querySelectorAll<HTMLElement>('[data-nav-tab]').forEach(el => {
     el.addEventListener('click', () => {
@@ -128,3 +134,108 @@ export async function vHome(go: (k: any) => void): Promise<void> {
     });
   });
 }
+
+/**
+ * Njoftimet në telefon — çelësi ndez/fik, i dukshëm për ÇDO vullnetar.
+ *
+ * Karta shfaqet gjithmonë. Nëse njoftimet s'mund të ndizen, arsyeja shkruhet
+ * këtu: heshtja e mëparshme (karta zhdukej kur mungonte çelësi VAPID) e linte
+ * përdoruesin pa asnjë shenjë se çfarë kishte ndodhur.
+ */
+export async function renderPushCard(): Promise<void> {
+  const host = document.getElementById('push_card');
+  if (!host) return;
+
+  const state = await pushState();
+  const forReports = store.isInternal();
+
+  const copy: Record<string, { line: string; hint?: string }> = {
+    on: {
+      line: 'Njoftimet janë <b>aktive</b> në këtë pajisje.',
+      hint: forReports
+        ? 'Do të njoftoheni për njoftimet e qendrës dhe për raportimet e reja nga terreni.'
+        : 'Do të njoftoheni kur qendra publikon një njoftim.',
+    },
+    off: {
+      line: 'Njoftimet janë <b>të fikura</b> në këtë pajisje.',
+      hint: forReports
+        ? 'Ndizini për të marrë njoftimet e qendrës dhe raportimet e reja nga terreni.'
+        : 'Ndizini për të marrë njoftimet e qendrës në telefon.',
+    },
+    blocked: {
+      line: 'Njoftimet janë <b>të bllokuara</b> nga shfletuesi.',
+      hint: 'Hapni cilësimet e faqes te shfletuesi, lejoni njoftimet, dhe rifreskoni këtë faqe.',
+    },
+    'needs-install': {
+      line: 'Në iPhone duhet fillimisht <b>instalimi</b> i portalit.',
+      hint: 'Safari → butoni i ndarjes → «Add to Home Screen». Pastaj hapeni nga ikona dhe kthehuni këtu.',
+    },
+    unsupported: {
+      line: 'Ky shfletues nuk i mbështet njoftimet.',
+      hint: 'Provoni me Chrome në Android, ose me portalin e instaluar në iPhone.',
+    },
+    'not-configured': {
+      line: 'Njoftimet nuk janë aktivizuar ende nga qendra.',
+      hint: store.isAdmin()
+        ? 'Mungojnë VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY te Cloudflare → Workers → Settings → Variables. Shihni PUSH_SETUP.md.'
+        : 'Kur qendra ta përfundojë konfigurimin, butoni do të funksionojë vetvetiu.',
+    },
+  };
+
+  const c = copy[state];
+  const canToggle = state === 'on' || state === 'off';
+
+  host.innerHTML = `
+    <div class="card wide" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="min-width:220px;flex:1">
+          <div class="row" style="gap:8px;align-items:center">
+            <h3 style="margin:0">🔔 Njoftimet në telefon</h3>
+            <span class="pill ${state === 'on' ? 'ok' : state === 'off' ? 'gray' : 'amber'}">
+              ${state === 'on' ? 'Aktive' : state === 'off' ? 'Të fikura' : 'Të padisponueshme'}
+            </span>
+          </div>
+          <div class="meta" style="margin-top:5px">${c.line}</div>
+          ${c.hint ? `<div class="meta" style="margin-top:3px">${c.hint}</div>` : ''}
+        </div>
+        <div class="row" style="gap:8px">
+          ${state === 'on'
+            ? `<button class="btn sec sm" id="push_test">Provo</button>
+               <button class="btn ghost sm" id="push_off">Çaktivizo</button>`
+            : `<button class="btn" id="push_on" ${canToggle ? '' : 'disabled'}>Aktivizo njoftimet</button>`}
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('push_on')?.addEventListener('click', async () => {
+    const btn = document.getElementById('push_on') as HTMLButtonElement | null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Po aktivizohet…'; }
+    const res = await enablePush();
+    if (!res.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Aktivizo njoftimet'; }
+      fail(res.reason || 'Njoftimet nuk u aktivizuan.');
+      return renderPushCard();
+    }
+    toast('Njoftimet u aktivizuan në këtë pajisje.');
+    window.dispatchEvent(new CustomEvent('push:changed'));
+    renderPushCard();
+  });
+
+  document.getElementById('push_off')?.addEventListener('click', async () => {
+    const res = await disablePush();
+    if (!res.ok) return fail(res.reason || 'Njoftimet nuk u çaktivizuan.');
+    toast('Njoftimet u çaktivizuan në këtë pajisje.');
+    window.dispatchEvent(new CustomEvent('push:changed'));
+    renderPushCard();
+  });
+
+  document.getElementById('push_test')?.addEventListener('click', async () => {
+    const res = await notifyPush('test');
+    toast(notifyResultMessage(res));
+  });
+}
+
+// Çelësi te koka e faqes dhe karta këtu tregojnë të njëjtën gjendje.
+window.addEventListener('push:changed', () => {
+  if (document.getElementById('push_card')) renderPushCard();
+});

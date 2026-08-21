@@ -4,6 +4,7 @@ import { esc } from '../utils/security';
 import { fmtDateTime } from '../utils/format';
 import { toast, fail } from '../components/toast';
 import { openModal, closeModal } from '../components/modal';
+import { notifyPush } from '../api/push';
 import type { AnnouncementRow, AnnouncementLevel, AnnouncementAudience } from '../types/database';
 
 export async function vNews(): Promise<void> {
@@ -19,7 +20,7 @@ export async function vNews(): Promise<void> {
 
   if (error) return fail(error);
   const rows = (data || []) as AnnouncementRow[];
-  const canPost = store.isStaff();
+  const canPost = store.isInternal();
 
   view.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px">
@@ -127,7 +128,7 @@ export async function addAnn(): Promise<void> {
   if (!title) return fail('Vendosni titullin.');
   if (btn) btn.disabled = true;
 
-  const { error } = await sb.from('announcements').insert({
+  const { data, error } = await sb.from('announcements').insert({
     title,
     body,
     level,
@@ -135,7 +136,7 @@ export async function addAnn(): Promise<void> {
     pinned,
     author_id: store.ME?.id,
     author_name: store.ME?.full_name || store.ME?.volunteer_code,
-  });
+  }).select('id').single();
 
   if (error) {
     if (btn) btn.disabled = false;
@@ -143,7 +144,12 @@ export async function addAnn(): Promise<void> {
   }
 
   closeModal();
-  toast('Njoftimi u publikua.');
+  // Audienca vendoset nga serveri sipas `audience` te rreshti: 'all' shkon te
+  // çdo vullnetar i miratuar, 'staff' vetëm te qendra dhe koordinatorët.
+  const res = data?.id ? await notifyPush('announcement', data.id) : null;
+  toast(res && res.sent > 0
+    ? `Njoftimi u publikua · u njoftuan ${res.sent} pajisje (${res.audience}).`
+    : 'Njoftimi u publikua.');
   vNews();
 }
 
