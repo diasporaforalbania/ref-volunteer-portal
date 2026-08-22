@@ -42,7 +42,7 @@ Every AI agent modifying this repository **MUST** adhere to these immutable rule
 
 ### C. Edge API Bridge Integrity (`/api/count`)
 * `functions/api/count.js` is the public tally source for `referendum21.org` (`ref-landing-page`).
-* **Always sanitize payload:** Return strictly `{ signatures: integer, goal: integer, updated: string, generated_at: string }`.
+* **Always sanitize payload:** Return strictly `{ signatures: integer, goal: integer, week: integer, updated: string, generated_at: string }`. `week` is signatures closed in the last 7 days (aggregate only).
 * **Zero PII:** Never leak volunteer IDs, names, or internal database metadata through public endpoints.
 * **Origin Restriction:** Gated by dynamic CORS allowlist (`referendum21.org`, `localhost`, `*.pages.dev`).
 

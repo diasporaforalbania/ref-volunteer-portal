@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
               if (req.method === 'GET') {
                 try {
                   const upstream = await fetch(
-                    `${supabaseUrl}/rest/v1/signature_totals?select=signatures,goal,updated`,
+                    `${supabaseUrl}/rest/v1/signature_totals?select=signatures,goal,updated,week`,
                     {
                       headers: {
                         apikey: supabaseAnonKey,
@@ -70,10 +70,13 @@ export default defineConfig(({ mode }) => {
                     Number.isFinite(rawSignatures) && rawSignatures >= 0 ? Math.floor(rawSignatures) : 0;
                   const rawGoal = Number(row?.goal);
                   const goal = Number.isFinite(rawGoal) && rawGoal > 0 ? Math.floor(rawGoal) : 50000;
+                  const rawWeek = Number(row?.week);
+                  const week = Number.isFinite(rawWeek) && rawWeek >= 0 ? Math.floor(rawWeek) : 0;
 
                   const payload = {
                     signatures,
                     goal,
+                    week,
                     updated: row?.updated || new Date().toISOString(),
                     generated_at: new Date().toISOString(),
                   };

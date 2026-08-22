@@ -1932,12 +1932,19 @@ create policy volrep_delete on storage.objects for delete to authenticated
 
 -- ============================ PAMJET PUBLIKE ================================
 -- Pamja e totalit të nënshkrimeve për faqen publike dhe funksionin /api/count.
--- Nuk përmban të dhëna personale.
+-- Nuk përmban të dhëna personale. `week` = firma të mbyllura në 7 ditët e fundit.
 create or replace view public.signature_totals as
 select
   coalesce(sum(c.signatures), 0)::bigint as signatures,
   (select coalesce(goal, 50000) from public.campaign where id = 1) as goal,
-  coalesce(max(c.ended_at), max(c.started_at), now()) as updated
+  coalesce(max(c.ended_at), max(c.started_at), now()) as updated,
+  coalesce(
+    sum(c.signatures) filter (
+      where c.ended_at is not null
+        and c.ended_at >= (now() - interval '7 days')
+    ),
+    0
+  )::bigint as week
 from public.checkins c;
 
 grant select on public.signature_totals to anon, authenticated;
