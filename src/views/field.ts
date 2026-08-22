@@ -7,6 +7,7 @@ import { toast, fail } from '../components/toast';
 import { slotsHtml } from '../components/slots';
 import { initMap, mapZoom } from '../map/slippyMap';
 import { shiftWhen, joinShift, leaveShift } from './shifts';
+import { signedQrStripHtml, attachSignedQr } from '../components/signedQr';
 import type { ActiveFieldCollector, MyCheckinItem, ShiftListItem, CheckinRow } from '../types/database';
 
 export const CHECKIN_GRACE_MIN = 30;
@@ -163,6 +164,7 @@ export function fieldTopCardHtml(cur: CheckinRow | null, sh: ShiftListItem | nul
     if (lead) {
       return `<div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
         ${head}
+        ${signedQrStripHtml()}
         <label>Sa nënshkrime mblodhi ekipi gjithsej? *</label>
         <input id="co_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
                value="${cur.signatures || ''}">
@@ -179,6 +181,7 @@ export function fieldTopCardHtml(cur: CheckinRow | null, sh: ShiftListItem | nul
 
     return `<div class="card" style="margin-bottom:18px;border-color:var(--teal-l);box-shadow:0 0 0 3px #d5f2ee">
       ${head}
+      ${signedQrStripHtml()}
       <div class="notice" style="margin:12px 0 0">Turnin e mbyll
         <b>${esc(sh?.created_by_name || 'koordinatori ose mbledhësi që e hapi')}</b> —
         atëherë dilni automatikisht nga terreni dhe numri i nënshkrimeve ju shfaqet
@@ -258,6 +261,7 @@ export function attachFieldTopCardEvents(cur: CheckinRow | null, sh: ShiftListIt
   });
 
   if (cur) {
+    attachSignedQr();
     const linked = !!cur.shift_id;
     const lead = !linked || (sh && sh.id === cur.shift_id && sh.i_am_lead);
     if (lead) {
