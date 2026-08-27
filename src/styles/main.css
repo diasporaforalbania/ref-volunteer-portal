@@ -62,6 +62,46 @@ header.app {
   opacity: .92;
 }
 
+.site-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.site-switcher-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: 1px solid #d8ddd9;
+  border-radius: 999px;
+  background: #ecefeb;
+  color: #4f5752;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.site-switcher-link:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.site-switcher-link:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, .8);
+  outline-offset: 2px;
+}
+
+.site-switcher-link.active {
+  border-color: transparent;
+  background: #1b5e3a;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 8px 20px -8px rgba(27, 94, 58, .6);
+}
+
 .who {
   display: flex;
   align-items: center;
@@ -575,6 +615,14 @@ a.link {
   padding: 28px;
   width: 100%;
   max-width: 430px;
+}
+
+.auth-site-switcher {
+  margin-bottom: 20px;
+}
+
+.auth-site-switcher .site-switcher-link {
+  flex: 1;
 }
 
 .auth h1 {
@@ -1849,8 +1897,21 @@ table.tbl tr:last-child td {
 }
 
 @media (max-width: 560px) {
+  header.app {
+    padding: 14px;
+  }
+  .h-row {
+    gap: 12px;
+  }
   .brand h1 {
     font-size: 19px;
+  }
+  .site-switcher {
+    order: 3;
+    width: 100%;
+  }
+  .site-switcher-link {
+    flex: 1;
   }
   main {
     padding: 16px 14px 90px;

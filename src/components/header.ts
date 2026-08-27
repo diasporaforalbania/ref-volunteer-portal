@@ -4,6 +4,7 @@ import { avatarHtml } from '../api/storage';
 import { doLogout } from '../views/auth';
 import { toast, fail } from '../components/toast';
 import { pushState, pushStateMessage, enablePush, disablePush } from '../api/push';
+import { siteSwitcherHtml } from './siteSwitcher';
 
 export function renderHeader(): string {
   if (!store.ME) return '';
@@ -14,6 +15,7 @@ export function renderHeader(): string {
   return `
   <header class="app"><div class="h-row">
     <div class="brand"><h1>Referendumi</h1><span class="tag">Portali i vullnetarëve</span></div>
+    ${siteSwitcherHtml()}
     <div class="who">
       ${avatarHtml(store.ME.photo_path, store.ME.full_name, 'av')}
       <div><div class="nm">${esc(store.ME.full_name || email)}</div>

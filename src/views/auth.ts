@@ -4,6 +4,7 @@ import { store, ROLE_DESC, ROLES, SIGNUP_ROLES } from '../state/store';
 import { esc } from '../utils/security';
 import { nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
+import { siteSwitcherHtml } from '../components/siteSwitcher';
 import type { VolunteerRole } from '../types/database';
 
 /**
@@ -27,6 +28,7 @@ export function renderAuth(mode: 'login' | 'signup'): void {
 
   root.innerHTML = `
   <div class="auth-wrap"><div class="auth">
+    <div class="auth-site-switcher">${siteSwitcherHtml()}</div>
     <h1>Referendumi</h1>
     <p class="sub">Portali i vullnetarëve · mbledhja e ${nf(DEFAULT_GOAL)} nënshkrimeve</p>
 
