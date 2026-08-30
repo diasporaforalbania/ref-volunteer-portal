@@ -30,11 +30,18 @@ const ROLE_CLASS: Record<string, string> = {
 
 let detach: (() => void) | null = null;
 
+// Which units are folded shut (collectors + helpers hidden, coordinator kept).
+// Module-level so the choice survives the board's own re-renders after a drop.
+const collapsed = new Set<string>();
+
 export function unitBoardHtml(): string {
   return `
     <div class="board-bar">
       <div class="board-hint" id="board_hint"></div>
-      <div class="board-log" id="board_log" role="status" aria-live="polite"></div>
+      <div class="board-right">
+        <button type="button" class="btn ghost sm" id="board_collapse_all" aria-pressed="false" hidden>Palos të gjitha</button>
+        <div class="board-log" id="board_log" role="status" aria-live="polite"></div>
+      </div>
     </div>
     <div class="board" id="board_grid"></div>`;
 }
@@ -204,9 +211,13 @@ export function renderUnitBoard(rootId: string, units: UnitTotalItem[], team: Vo
 
     const cards = ordered.map(u => {
       const shut = !u.is_open;
+      const isCollapsed = collapsed.has(u.id);
 
       const coordList = (coordOf.get(u.id) || []).map(id => marble(id, 'coord', u.id)).join('');
-      const collectors = [...unitOf.entries()].filter(([, unitId]) => unitId === u.id).map(([cid]) => {
+      const collectorEntries = [...unitOf.entries()].filter(([, unitId]) => unitId === u.id);
+      const helperCount = collectorEntries.reduce(
+        (n, [cid]) => n + [...supOf.values()].filter(sid => sid === cid).length, 0);
+      const collectors = collectorEntries.map(([cid]) => {
         const helpers = [...supOf.entries()]
           .filter(([, sid]) => sid === cid)
           .map(([hid]) => marble(hid, 'help', cid))
@@ -219,17 +230,25 @@ export function renderUnitBoard(rootId: string, units: UnitTotalItem[], team: Vo
 
       const pc = u.target > 0 ? Math.min(100, Math.round((u.signatures / u.target) * 100)) : 0;
 
-      return `<div class="unit${shut ? ' shut' : ''}">
+      return `<div class="unit${shut ? ' shut' : ''}${isCollapsed ? ' collapsed' : ''}">
         ${zone('coord', u.id, 'Koordinatorët',
           coordList || `<div class="zone-void">${shut ? '—' : 'Lësho një koordinator këtu'}</div>`)}
         <div class="plaque">
           <div class="plaque-top">
             <span class="ucode">${esc(u.code)}</span>
             <span class="pill ${u.is_open ? 'ok' : 'gray'}">${u.is_open ? 'hapur' : 'mbyllur'}</span>
+            <button type="button" class="ucollapse" data-collapse="${esc(u.id)}"
+              aria-expanded="${isCollapsed ? 'false' : 'true'}"
+              aria-label="${isCollapsed ? 'Shpalos njësinë' : 'Palos njësinë'}"
+              title="${isCollapsed ? 'Shpalos' : 'Palos'}">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
           </div>
           <div class="uname">${esc(u.name)}</div>
           <div class="bar" style="margin:8px 0 0"><span style="width:${pc}%"></span></div>
           <div class="ufigs"><span>${nf(u.signatures)} firma</span><span>${pc}% e ${nf(u.target)}</span></div>
+          <div class="ucollapsed-note">${nf(collectorEntries.length)} mbledhës${
+            helperCount ? ` · ${nf(helperCount)} ndihmës` : ''}</div>
         </div>
         ${zone('collect', u.id, 'Mbledhësit e autorizuar',
           collectors || `<div class="zone-void">${shut ? '—' : 'Lësho një mbledhës këtu'}</div>`)}
@@ -239,6 +258,25 @@ export function renderUnitBoard(rootId: string, units: UnitTotalItem[], team: Vo
     grid!.innerHTML = `${rail}<div class="units">${
       cards || '<div class="empty">Ende pa njësi organizative.</div>'
     }</div>`;
+    syncCollapseAll();
+  }
+
+  // ---- expand / collapse ---------------------------------------------------
+  // Coordinators sit above the plaque and are never hidden; folding a unit only
+  // tucks away its authorized collectors and their helpers.
+  function unitIdsInView(): string[] {
+    return [...grid!.querySelectorAll<HTMLElement>('[data-collapse]')]
+      .map(b => b.dataset.collapse || '')
+      .filter(Boolean);
+  }
+  function syncCollapseAll(): void {
+    const btn = document.getElementById('board_collapse_all');
+    if (!btn) return;
+    const ids = unitIdsInView();
+    const allShut = ids.length > 0 && ids.every(id => collapsed.has(id));
+    btn.textContent = allShut ? 'Shpalos të gjitha' : 'Palos të gjitha';
+    btn.setAttribute('aria-pressed', allShut ? 'true' : 'false');
+    btn.toggleAttribute('hidden', ids.length < 2);
   }
 
   // ---- status line ---------------------------------------------------------
@@ -375,6 +413,25 @@ export function renderUnitBoard(rootId: string, units: UnitTotalItem[], team: Vo
   // ---- wire up -------------------------------------------------------------
   render();
   say(interactive ? 'Asnjë ndryshim ende.' : '');
+
+  // Folding is a view convenience, open to everyone — it changes nothing on the
+  // server. Delegated on the grid so it keeps working across re-renders.
+  grid.addEventListener('click', e => {
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-collapse]');
+    if (!btn || !grid.contains(btn)) return;
+    const id = btn.dataset.collapse || '';
+    if (!id) return;
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    render();
+  });
+
+  document.getElementById('board_collapse_all')?.addEventListener('click', () => {
+    const ids = unitIdsInView();
+    const allShut = ids.length > 0 && ids.every(id => collapsed.has(id));
+    if (allShut) ids.forEach(id => collapsed.delete(id));
+    else ids.forEach(id => collapsed.add(id));
+    render();
+  });
 
   if (!interactive) return;
 

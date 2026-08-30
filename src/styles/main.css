@@ -1372,6 +1372,13 @@ table.tbl tr:last-child td {
   color: var(--red);
 }
 
+.board-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .board {
   display: grid;
   grid-template-columns: 232px 1fr;
@@ -1504,6 +1511,67 @@ table.tbl tr:last-child td {
   font-size: 10.5px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- palos / shpalos njësinë ---- */
+.ucollapse {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color .12s, color .12s, background .12s;
+}
+
+.ucollapse:hover {
+  border-color: var(--teal);
+  color: var(--teal-d);
+}
+
+.ucollapse:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.ucollapse svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .15s ease;
+}
+
+.unit.collapsed .ucollapse svg {
+  transform: rotate(-90deg);
+}
+
+/* Fold the unit shut: the collectors + helpers go away, the coordinator (top
+   zone) and the plaque stay put. */
+.unit.collapsed .zone.bottom {
+  display: none;
+}
+
+.ucollapsed-note {
+  display: none;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.unit.collapsed .ucollapsed-note {
+  display: block;
 }
 
 /* ---- vendet ku lëshohen vullnetarët ---- */
