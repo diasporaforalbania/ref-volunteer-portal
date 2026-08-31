@@ -74,5 +74,45 @@ create policy vol_priv_read on public.volunteer_private for select to authentica
        )
   );
 
--- 6. Rifreskimi i cache-it të PostgREST
+-- 6. Rregullimi i lejeve për planifikimin e turneve (Admin + Koordinator)
+create or replace function public.vol_coordinates_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.unit_coordinators
+     where unit_id = p_unit and volunteer_id = auth.uid()
+    union
+    select 1 from public.volunteers
+     where id = auth.uid() and role = 'koordinator' and unit_id = p_unit
+  );
+$$;
+
+create or replace function public.vol_my_unit_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select unit_id from public.unit_coordinators where volunteer_id = auth.uid()
+  union
+  select unit_id from public.volunteers where id = auth.uid() and unit_id is not null and role = 'koordinator';
+$$;
+
+create or replace function public.vol_can_plan_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_approved()
+     and (
+       public.vol_is_admin()
+       or case public.vol_role()
+            when 'koordinator' then public.vol_coordinates_unit(p_unit)
+            when 'mbledhes'    then exists (select 1 from public.volunteers
+                                             where id = auth.uid() and unit_id = p_unit)
+            else false
+          end
+     );
+$$;
+
+-- Sinkronizimi i koordinatorëve ekzistues te unit_coordinators
+insert into public.unit_coordinators (unit_id, volunteer_id)
+select unit_id, id
+from public.volunteers
+where role = 'koordinator' and unit_id is not null and status = 'approved'
+on conflict (unit_id, volunteer_id) do nothing;
+
+-- 7. Rifreskimi i cache-it të PostgREST
 notify pgrst, 'reload schema';
