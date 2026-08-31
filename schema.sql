@@ -415,13 +415,20 @@ $$;
 -- Zonat që mban koordinatori aktual. Baza e gjithë kufizimit të hierarkisë.
 create or replace function public.vol_my_unit_ids() returns setof uuid
 language sql stable security definer set search_path = public as $$
-  select unit_id from public.unit_coordinators where volunteer_id = auth.uid();
+  select unit_id from public.unit_coordinators where volunteer_id = auth.uid()
+  union
+  select unit_id from public.volunteers where id = auth.uid() and unit_id is not null and role = 'koordinator';
 $$;
 
 create or replace function public.vol_coordinates_unit(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.unit_coordinators
-                  where unit_id = p_unit and volunteer_id = auth.uid());
+  select exists (
+    select 1 from public.unit_coordinators
+     where unit_id = p_unit and volunteer_id = auth.uid()
+    union
+    select 1 from public.volunteers
+     where id = auth.uid() and role = 'koordinator' and unit_id = p_unit
+  );
 $$;
 
 -- A është njësia e hapur për mbledhje? Përdoret te kontrolli i check-in-it.
@@ -435,6 +442,8 @@ $$;
 -- (vetëm admin + jurist, që kanë të drejta shkrimi), kjo përgjigjet pyetjes
 -- "a i përket ky person ndonjë ekipi terreni?" — dhe përgjigjja është jo:
 -- qendra i sheh turnet, por nuk planifikon dhe nuk bën check-in.
+--
+-- Përjashtim: admini mund të planifikojë turne për çdo zonë nëse nevojitet operacionalisht.
 create or replace function public.vol_is_qendra() returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce(public.vol_role() in
@@ -482,13 +491,8 @@ language sql stable security definer set search_path = public as $$
   select public.vol_is_qendra() or public.vol_is_coordinator();
 $$;
 
--- Kush planifikon turne, dhe ku: koordinatori VETËM te zonat që mban, mbledhësi
--- i autorizuar VETËM te zona e vet. Askush tjetër — as qendra. Ndarja sipas
--- rolit mbahet e rreptë me qëllim: ndryshe një koordinator i caktuar rastësisht
--- në një zonë do të planifikonte turne në territorin e një kolegu.
--- Kush i vendos njerëzit rreth një njësie te tabela e Panelit: qendra kudo,
--- koordinatori vetëm te njësitë që mban. Mbledhësi nuk hyn këtu — ai prek
--- vetëm ekipin e vet, dhe atë e kontrollon `unit_assign_helper` veç e veç.
+-- Kush planifikon turne, dhe ku: admini kudo, koordinatori te zonat që mban,
+-- mbledhësi i autorizuar te zona e vet.
 create or replace function public.vol_can_staff_unit(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.vol_is_admin()
@@ -498,13 +502,15 @@ $$;
 create or replace function public.vol_can_plan_unit(p_unit uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.vol_is_approved()
-     and coalesce(
-           case public.vol_role()
-             when 'koordinator' then public.vol_coordinates_unit(p_unit)
-             when 'mbledhes'    then exists (select 1 from public.volunteers
-                                              where id = auth.uid() and unit_id = p_unit)
-             else false
-           end, false);
+     and (
+       public.vol_is_admin()
+       or case public.vol_role()
+            when 'koordinator' then public.vol_coordinates_unit(p_unit)
+            when 'mbledhes'    then exists (select 1 from public.volunteers
+                                             where id = auth.uid() and unit_id = p_unit)
+            else false
+          end
+     );
 $$;
 
 
@@ -874,6 +880,7 @@ end $$;
 -- të veta; qendra kudo.
 create or replace function public.vol_set_unit(p_id uuid, p_unit uuid)
 returns void language plpgsql security definer set search_path = public as $$
+declare v_role text;
 begin
   if not public.vol_is_staff() then
     raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
@@ -887,6 +894,13 @@ begin
     end if;
   end if;
   update public.volunteers set unit_id = p_unit where id = p_id;
+
+  select role into v_role from public.volunteers where id = p_id;
+  if v_role = 'koordinator' and p_unit is not null then
+    insert into public.unit_coordinators (unit_id, volunteer_id, assigned_by)
+    values (p_unit, p_id, auth.uid())
+    on conflict (unit_id, volunteer_id) do nothing;
+  end if;
 end $$;
 
 -- I TRASHËGUAR. `supervisor_id` tani mban vetëm lidhjen Mbledhës → Ndihmës;
