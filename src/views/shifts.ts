@@ -1,7 +1,7 @@
 import { sb } from '../api/client';
 import { store } from '../state/store';
 import { esc } from '../utils/security';
-import { fmtDate, fmtTime, toLocalInput } from '../utils/format';
+import { fmtDate, fmtTime, toLocalInput, nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
 import { openModal, closeModal } from '../components/modal';
 import { slotsHtml } from '../components/slots';
@@ -72,14 +72,34 @@ export async function vShifts(): Promise<void> {
       if (id) delShift(id);
     });
   });
+
+  view.querySelectorAll<HTMLElement>('[data-edit-shift]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = shifts.find(x => x.id === btn.dataset.editShift);
+      if (s) openEditShiftModal(s, units);
+    });
+  });
+
+  view.querySelectorAll<HTMLElement>('[data-close-shift]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = shifts.find(x => x.id === btn.dataset.closeShift);
+      if (s) openAdminCloseModal(s);
+    });
+  });
 }
 
 export function shiftCardHtml(s: ShiftListItem): string {
   const over = Date.now() > new Date(s.ends_at).getTime();
-  const canDel = s.created_by === store.ME?.id || store.isAdmin();
+  const closed = !!s.closed_at;
+  const admin = store.isAdmin();
+  const canDel = s.created_by === store.ME?.id || admin;
+  // Adminët redaktojnë çdo turn dhe mbyllin çdo turn ende të hapur — pa u kufizuar
+  // nga cila njësi është apo nga kush ka bërë check-in brenda.
+  const canEdit = admin && !closed;
+  const canClose = admin && !closed;
 
   return `
-  <div class="card" style="${over ? 'opacity:.75' : ''}">
+  <div class="card" style="${over || closed ? 'opacity:.75' : ''}">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <div>
         <div class="row" style="gap:8px;align-items:center">
@@ -93,14 +113,18 @@ export function shiftCardHtml(s: ShiftListItem): string {
           Hapur nga <b>${esc(s.created_by_name || '—')}</b>
           ${s.notes ? ` · <i>${esc(s.notes)}</i>` : ''}
           ${!s.unit_is_open ? ' · <span class="pill amber">zona e mbyllur</span>' : ''}
+          ${closed ? ' · <span class="pill gray">i mbyllur</span>'
+            : s.checked_in_count ? ` · <span class="pill ok">${s.checked_in_count} në terren</span>` : ''}
         </div>
       </div>
       <div class="row" style="gap:6px">
-        ${!over && store.isTeamRole() ? (
+        ${!over && !closed && store.isTeamRole() ? (
           s.i_am_in
             ? `<button class="btn red sm" data-leave-shift="${s.id}">Hiqem</button>`
             : `<button class="btn sec sm" data-join-shift="${s.id}">Regjistrohu</button>`
         ) : ''}
+        ${canClose ? `<button class="btn red sm" data-close-shift="${s.id}">Mbyll turnin</button>` : ''}
+        ${canEdit ? `<button class="btn ghost sm" data-edit-shift="${s.id}" title="Ndrysho turnin">✎</button>` : ''}
         ${canDel ? `<button class="btn ghost sm" data-del-shift="${s.id}" title="Fshi turnin">✕</button>` : ''}
       </div>
     </div>
@@ -187,6 +211,125 @@ export async function saveShift(): Promise<void> {
 
   closeModal();
   toast('Turni u planifikua.');
+  vShifts();
+}
+
+export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
+  const unit = units.find(u => u.id === s.unit_id);
+  const unitLabel = `${unit?.code || s.unit_code || '—'} · ${unit?.name || s.unit_name || ''}`;
+
+  openModal(`
+  <div class="modal">
+    <button class="modal-x" id="modal_close_btn">✕</button>
+    <h3>Ndrysho turnin</h3>
+    <label>Zona / Njësia</label>
+    <input value="${esc(unitLabel)}" disabled>
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1">
+        <label>Fillon *</label>
+        <input id="esh_start" type="datetime-local" value="${toLocalInput(new Date(s.starts_at))}">
+      </div>
+      <div style="flex:1">
+        <label>Mbaron *</label>
+        <input id="esh_end" type="datetime-local" value="${toLocalInput(new Date(s.ends_at))}">
+      </div>
+    </div>
+    <label>Kapaciteti (sa veta kërkohen, 0 = pa kufi)</label>
+    <input id="esh_cap" type="number" min="0" value="${s.capacity}">
+    <label>Shënime (vendi i saktë, pika e takimit)</label>
+    <textarea id="esh_notes" placeholder="p.sh. Te hyrja kryesore e parkut…">${esc(s.notes || '')}</textarea>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" id="esh_save_btn">Ruaj ndryshimet</button>
+      <button class="btn ghost" id="esh_cancel_btn">Anulo</button>
+    </div>
+  </div>`);
+
+  document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+  document.getElementById('esh_cancel_btn')?.addEventListener('click', closeModal);
+  document.getElementById('esh_save_btn')?.addEventListener('click', () => saveShiftEdit(s.id));
+}
+
+export async function saveShiftEdit(id: string): Promise<void> {
+  const startInput = document.getElementById('esh_start') as HTMLInputElement | null;
+  const endInput = document.getElementById('esh_end') as HTMLInputElement | null;
+  const capInput = document.getElementById('esh_cap') as HTMLInputElement | null;
+  const notesInput = document.getElementById('esh_notes') as HTMLTextAreaElement | null;
+  const btn = document.getElementById('esh_save_btn') as HTMLButtonElement | null;
+
+  const starts_at = startInput?.value;
+  const ends_at = endInput?.value;
+  const capacity = parseInt(capInput?.value || '0', 10) || 0;
+  const notes = (notesInput?.value || '').trim() || null;
+
+  if (!starts_at || !ends_at) return fail('Plotësoni orarin e turnit.');
+  if (new Date(ends_at) <= new Date(starts_at)) return fail('Mbarimi duhet të jetë pas fillimit.');
+
+  if (btn) btn.disabled = true;
+
+  const { error } = await sb.from('shifts').update({
+    starts_at: new Date(starts_at).toISOString(),
+    ends_at: new Date(ends_at).toISOString(),
+    capacity,
+    notes,
+  }).eq('id', id);
+
+  if (error) {
+    if (btn) btn.disabled = false;
+    return fail(error);
+  }
+
+  closeModal();
+  toast('Turni u përditësua.');
+  vShifts();
+}
+
+export function openAdminCloseModal(s: ShiftListItem): void {
+  openModal(`
+  <div class="modal">
+    <button class="modal-x" id="modal_close_btn">✕</button>
+    <h3>Mbyll turnin</h3>
+    <div class="meta" style="margin-bottom:10px;text-transform:capitalize">
+      ${esc((s.unit_code || '—') + ' · ' + (s.unit_name || ''))} · ${esc(shiftWhen(s))}
+      ${s.checked_in_count ? ` · <b>${s.checked_in_count} në terren tani</b>` : ''}
+    </div>
+    <div class="notice warn" style="margin-bottom:12px">Po e mbyllni si administrator.
+      Dalin nga terreni të gjithë ata të ekipit që bënë check-in te ky turn.</div>
+    <label>Sa nënshkrime mblodhi ekipi gjithsej? *</label>
+    <input id="ash_sig" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
+           value="${s.signatures || ''}">
+    <label>Shënime (opsionale)</label>
+    <textarea id="ash_notes" placeholder="si shkoi, çfarë duhet ditur…"></textarea>
+    <div class="row" style="margin-top:16px">
+      <button class="btn red" id="ash_save_btn">Mbyll turnin</button>
+      <button class="btn ghost" id="ash_cancel_btn">Anulo</button>
+    </div>
+  </div>`);
+
+  document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+  document.getElementById('ash_cancel_btn')?.addEventListener('click', closeModal);
+  document.getElementById('ash_save_btn')?.addEventListener('click', () => adminCloseShift(s.id));
+}
+
+export async function adminCloseShift(id: string): Promise<void> {
+  const sigInput = document.getElementById('ash_sig') as HTMLInputElement | null;
+  const notesInput = document.getElementById('ash_notes') as HTMLTextAreaElement | null;
+  const btn = document.getElementById('ash_save_btn') as HTMLButtonElement | null;
+
+  const sig = parseInt(sigInput?.value || '', 10);
+  if (isNaN(sig) || sig < 0) return fail('Shkruani sa nënshkrime u mblodhën (0 nëse asnjë).');
+
+  if (btn) btn.disabled = true;
+  const { error } = await sb.rpc('shift_check_out', {
+    p_shift: id,
+    p_signatures: sig,
+    p_notes: (notesInput?.value || '').trim() || null,
+  });
+  if (btn) btn.disabled = false;
+
+  if (error) return fail(error);
+
+  closeModal();
+  toast(`Turni u mbyll · ${nf(sig)} nënshkrime.`);
   vShifts();
 }
 

@@ -267,6 +267,7 @@ export interface ShiftListItem {
   closed_at: string | null;
   signed_count: number;
   checked_in_count: number;
+  signatures?: number;
   i_am_in: boolean;
   i_am_lead: boolean;
   signed: Array<{ id: string; name: string; role: VolunteerRole; photo: string | null }>;

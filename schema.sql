@@ -729,6 +729,10 @@ revoke all on public.shifts from anon, authenticated;
 grant select, delete on public.shifts to authenticated;
 grant insert (unit_id, starts_at, ends_at, capacity, notes, created_by, created_by_name)
   on public.shifts to authenticated;
+-- Redaktimi i një turni të planifikuar — vetëm ora dhe kapaciteti/shënimet.
+-- Njësia dhe autorësia (created_by*) mbeten të pandryshueshme; kush e mund e
+-- kontrollon `sh_update`.
+grant update (starts_at, ends_at, capacity, notes) on public.shifts to authenticated;
 
 drop policy if exists sh_read on public.shifts;
 create policy sh_read on public.shifts for select to authenticated
@@ -740,10 +744,17 @@ create policy sh_read on public.shifts for select to authenticated
 drop policy if exists sh_write on public.shifts;
 drop policy if exists sh_insert on public.shifts;
 drop policy if exists sh_delete on public.shifts;
+drop policy if exists sh_update on public.shifts;
 create policy sh_insert on public.shifts for insert to authenticated
   with check (created_by = auth.uid() and public.vol_can_plan_unit(unit_id));
 create policy sh_delete on public.shifts for delete to authenticated
   using (created_by = auth.uid() or public.vol_is_admin());
+-- Adminët redaktojnë çdo turn të vendosur (data, ora, kapaciteti, shënimet).
+-- Askush tjetër — as koordinatori/mbledhësi që e hapi — që orari i një turni të
+-- mos i ndryshohet nën këmbë vetëm nga qendra.
+create policy sh_update on public.shifts for update to authenticated
+  using (public.vol_is_admin())
+  with check (public.vol_is_admin());
 
 -- Regjistrimi në turn kalon nga `shift_join` (kontrollon ekipin dhe kapacitetin).
 revoke all on public.shift_signups from anon, authenticated;
@@ -1620,7 +1631,10 @@ language sql stable security definer set search_path = public as $$
    where public.vol_is_approved()
      and ( public.vol_is_qendra()
            or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = s.created_by) )
-     and s.ends_at >= coalesce(p_from, now() - interval '12 hours')
+     -- Adminët i shohin edhe turnet e hapura e të harruara nga çdo kohë, që të
+     -- mund t'i mbyllin; të tjerët vetëm dritaren e zakonshme 12-orëshe + tutje.
+     and ( s.ends_at >= coalesce(p_from, now() - interval '12 hours')
+           or (public.vol_is_admin() and s.closed_at is null) )
    order by s.starts_at;
 $$;
 
@@ -1738,22 +1752,26 @@ end $$;
 grant execute on function public.shift_check_in(uuid, double precision, double precision, text, text)
   to authenticated;
 
--- Mbyllja e turnit — vetëm koordinatori/mbledhësi që e hapi. Ai raporton sa
+-- Mbyllja e turnit — koordinatori/mbledhësi që e hapi, ose çdo admin (i cili
+-- mbyll çdo turn, në çdo njësi, edhe kur ka ekip brenda). Raportohet sa
 -- nënshkrime mblodhi EKIPI, dhe në atë çast turni mbaron për të gjithë.
 --
--- Numri rri i tëri te rreshti i tij; rreshtat e ekipit mbyllen me 0. Kështu
+-- Numri rri i tëri te rreshti i udhëheqësit; rreshtat e ekipit mbyllen me 0. Kështu
 -- "Turnet e mia" i tregon secilit totalin e turnit (shih `my_checkins`), ndërsa
 -- "Progresi i fushatës" — që mbledh `checkins.signatures` — e numëron një herë.
 create or replace function public.shift_check_out(
   p_shift uuid, p_signatures integer, p_notes text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare s public.shifts; v public.volunteers; v_open uuid;
+        v_admin boolean; reporter uuid; reporter_name text;
 begin
   select * into v from public.volunteers where id = auth.uid();
   if v.id is null or v.status <> 'approved' then
     raise exception 'Vetëm vullnetarët e miratuar mbyllin turne.';
   end if;
-  if v.role not in ('koordinator','mbledhes') then
+  v_admin := public.vol_is_admin();
+  -- Adminët mbyllin çdo turn, në çdo njësi. Të tjerët vetëm si udhëheqës terreni.
+  if not v_admin and v.role not in ('koordinator','mbledhes') then
     raise exception 'Turnin e mbyllin vetëm koordinatorët dhe mbledhësit e autorizuar.';
   end if;
   if p_signatures is null or p_signatures < 0 then
@@ -1762,21 +1780,29 @@ begin
 
   select * into s from public.shifts where id = p_shift for update;
   if not found then raise exception 'Ky turn nuk ekziston.'; end if;
-  if s.created_by is distinct from auth.uid() then
+  if not v_admin and s.created_by is distinct from auth.uid() then
     raise exception 'Turnin e mbyll vetëm ai që e hapi.';
   end if;
   if s.closed_at is not null then raise exception 'Ky turn është mbyllur tashmë.'; end if;
 
+  -- Nënshkrimet i regjistrohen udhëheqësit që e hapi turnin. Kur admini mbyll
+  -- turnin e dikujt tjetër, numri i mbetet po atij udhëheqësi — jo adminit që
+  -- shtyu butonin. Pa krijues të njohur, bien te ai që po e mbyll.
+  reporter := coalesce(s.created_by, auth.uid());
+  select full_name into reporter_name from public.volunteers where id = reporter;
+  reporter_name := coalesce(nullif(reporter_name,''), s.created_by_name, 'Vullnetar');
+
   select id into v_open from public.checkins
-   where shift_id = p_shift and volunteer_id = auth.uid() and ended_at is null
+   where shift_id = p_shift and volunteer_id = reporter and ended_at is null
    order by started_at limit 1;
 
   if v_open is null then
-    -- Udhëheqësi mund ta ketë harruar check-in-in e vet. Turni ndodhi
-    -- gjithsesi, ndaj nënshkrimet duhet të kenë ku të shkojnë.
+    -- Udhëheqësi mund ta ketë harruar check-in-in e vet, ose turnin po e mbyll
+    -- admini pa qenë vetë në terren. Turni ndodhi gjithsesi, ndaj nënshkrimet
+    -- duhet të kenë ku të shkojnë.
     insert into public.checkins (volunteer_id, volunteer_name, unit_id, shift_id,
                                  location_name, started_at, ended_at, signatures, notes)
-    values (auth.uid(), v.full_name, s.unit_id, s.id,
+    values (reporter, reporter_name, s.unit_id, s.id,
             coalesce(nullif(s.notes,''), ''), s.starts_at, now(), p_signatures,
             nullif(trim(p_notes),''));
   else
