@@ -115,6 +115,7 @@ export function openShiftModal(units: UnitRow[]): void {
   const now = new Date();
   const defStart = new Date(now.getTime() + 3600000);
   const defEnd = new Date(now.getTime() + 3 * 3600000);
+  const myUnitId = store.ME?.unit_id;
 
   openModal(`
   <div class="modal">
@@ -123,7 +124,7 @@ export function openShiftModal(units: UnitRow[]): void {
     <label>Zona / Njësia *</label>
     <select id="sh_unit">
       ${(openUnits.length ? openUnits : units).map(u => `
-        <option value="${u.id}">${esc(u.code)} · ${esc(u.name)}${!u.is_open ? ' (e mbyllur)' : ''}</option>
+        <option value="${u.id}" ${u.id === myUnitId ? 'selected' : ''}>${esc(u.code)} · ${esc(u.name)}${!u.is_open ? ' (e mbyllur)' : ''}</option>
       `).join('')}
     </select>
     <div class="row" style="margin-top:8px">
