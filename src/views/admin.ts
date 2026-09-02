@@ -4,7 +4,168 @@ import { esc } from '../utils/security';
 import { fmtDateTime } from '../utils/format';
 import { avatarHtml } from '../api/storage';
 import { toast, fail } from '../components/toast';
-import type { VolunteerRow, ChangeRequestRow, VolunteerRole, UnitRow } from '../types/database';
+import { closeModal, openModal } from '../components/modal';
+import type { VolunteerRow, ChangeRequestRow, VolunteerPrivateRow, VolunteerRole, UnitRow } from '../types/database';
+
+function contactAvatarBtn(v: VolunteerRow): string {
+  const name = v.full_name || 'vullnetarit';
+  return `<button type="button" class="adm-av-btn" data-vol-contact="${v.id}" aria-label="Shiko kontaktin e ${esc(name)}">${avatarHtml(v.photo_path, v.full_name, 'mini-av')}</button>`;
+}
+
+function contactValueHtml(kind: 'email' | 'tel', value: string | null | undefined): string {
+  const v = (value || '').trim();
+  if (!v) return '—';
+  const href = kind === 'email' ? `mailto:${v}` : `tel:${v}`;
+  return `<a href="${esc(href)}">${esc(v)}</a>`;
+}
+
+async function showVolunteerContact(id: string, name: string, code: string): Promise<void> {
+  const { data, error } = await sb
+    .from('volunteer_private')
+    .select('phone,email')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    fail(error);
+    return;
+  }
+
+  const priv = data as Pick<VolunteerPrivateRow, 'phone' | 'email'> | null;
+  openModal(`
+    <div class="modal">
+      <button class="modal-x" id="modal_close_btn" type="button" aria-label="Mbyll">✕</button>
+      <h3>${esc(name || 'Vullnetar')}</h3>
+      <p class="sub" style="margin:0 0 14px">${esc(code || '')}</p>
+      <div class="row" style="justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">
+        <div>
+          <div class="meta">Email</div>
+          <b>${contactValueHtml('email', priv?.email)}</b>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;padding:10px 0">
+        <div>
+          <div class="meta">Numri i telefonit</div>
+          <b>${contactValueHtml('tel', priv?.phone)}</b>
+        </div>
+      </div>
+    </div>`);
+  document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+}
+
+function csvCell(value: string | number | null | undefined): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: UnitRow[]): Promise<void> {
+  if (!registered.length) {
+    fail('Nuk ka vullnetarë për të shkarkuar.');
+    return;
+  }
+
+  const { data, error } = await sb
+    .from('volunteer_private')
+    .select('id,phone,email')
+    .in('id', registered.map(v => v.id));
+
+  if (error) {
+    fail(error);
+    return;
+  }
+
+  const privById = new Map(
+    ((data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone' | 'email'>[]).map(p => [p.id, p])
+  );
+
+  const headers = ['Emri', 'Kodi', 'Qyteti', 'Roli', 'Zona', 'Email', 'Telefon'];
+  const lines = [
+    headers.join(','),
+    ...registered.map(v => {
+      const roleSel = document.getElementById(`registered_role_${v.id}`) as HTMLSelectElement | null;
+      const unitSel = document.getElementById(`registered_unit_${v.id}`) as HTMLSelectElement | null;
+      const role = (roleSel?.value || v.role) as VolunteerRole;
+      const unitId = unitSel?.value || v.unit_id || '';
+      const unit = units.find(u => u.id === unitId);
+      const priv = privById.get(v.id);
+      return [
+        csvCell(v.full_name),
+        csvCell(v.volunteer_code),
+        csvCell(v.city),
+        csvCell(ROLES[role] || role),
+        csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
+        csvCell(priv?.email),
+        csvCell(priv?.phone),
+      ].join(',');
+    }),
+  ];
+
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `vullnetaret_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast('Lista u shkarkua.');
+}
+
+function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): VolunteerRow[] {
+  const role = (document.getElementById('reg_filter_role') as HTMLSelectElement | null)?.value || '';
+  const unit = (document.getElementById('reg_filter_unit') as HTMLSelectElement | null)?.value || '';
+  const sort = (document.getElementById('reg_sort') as HTMLSelectElement | null)?.value || 'name';
+
+  const unitLabel = (id: string | null | undefined) => {
+    if (!id) return '\uffff';
+    const u = units.find(x => x.id === id);
+    return u ? `${u.code} ${u.name}` : '\uffff';
+  };
+
+  return registered
+    .filter(v => {
+      if (role && v.role !== role) return false;
+      if (unit === '__none__' && v.unit_id) return false;
+      if (unit && unit !== '__none__' && v.unit_id !== unit) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sort === 'role') {
+        return (ROLES[a.role] || a.role).localeCompare(ROLES[b.role] || b.role, 'sq');
+      }
+      if (sort === 'unit') {
+        return unitLabel(a.unit_id).localeCompare(unitLabel(b.unit_id), 'sq');
+      }
+      return (a.full_name || '').localeCompare(b.full_name || '', 'sq');
+    });
+}
+
+function applyRegisteredFilters(registered: VolunteerRow[], units: UnitRow[]): void {
+  const visible = currentRegisteredView(registered, units);
+  const visibleIds = new Set(visible.map(v => v.id));
+  const list = document.getElementById('registered_list');
+  const none = document.getElementById('registered_none');
+  const count = document.getElementById('registered_count');
+  if (!list) return;
+
+  const rows = [...list.querySelectorAll<HTMLElement>('.adm-row')];
+  rows.forEach(row => {
+    const id = row.dataset.volId || '';
+    row.classList.toggle('is-hidden', !visibleIds.has(id));
+  });
+  visible.forEach(v => {
+    const row = rows.find(r => r.dataset.volId === v.id);
+    if (row) list.appendChild(row);
+  });
+  if (none) list.appendChild(none);
+
+  if (count) {
+    count.textContent = visible.length === registered.length
+      ? String(registered.length)
+      : `${visible.length}/${registered.length}`;
+  }
+  if (none) none.hidden = visible.length > 0 || registered.length === 0;
+}
 
 export async function vAdmin(): Promise<void> {
   const view = document.getElementById('view');
@@ -42,7 +203,7 @@ export async function vAdmin(): Promise<void> {
       <div style="margin-top:12px">
         ${vols.length ? vols.map(v => `
           <div class="adm-row">
-            ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
+            ${contactAvatarBtn(v)}
             <div class="adm-info">
               <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')}</div>
               <div class="meta">${esc(v.city || '—')} · kërkoi <b>${esc(ROLES[v.requested_role || 'ndihmes'])}</b> · regjistruar ${fmtDateTime(v.created_at)}</div>
@@ -76,13 +237,42 @@ export async function vAdmin(): Promise<void> {
     </div>
 
     <div class="card" style="margin-bottom:18px">
-      <h3 style="margin:0">Vullnetarët e regjistruar <span class="pill blue">${registered.length}</span></h3>
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">Vullnetarët e regjistruar <span class="pill blue" id="registered_count">${registered.length}</span></h3>
+        <button class="btn sec sm" id="btn_export_vols" ${registered.length ? '' : 'disabled'}>📥 Shkarko</button>
+      </div>
       <div class="meta" style="margin-top:4px">Lista e vullnetarëve të miratuar dhe të pezulluar, me rolet dhe njësitë e tyre.</div>
+      ${registered.length ? `
+      <div class="adm-filters">
+        <label class="adm-filter">
+          <span>Roli</span>
+          <select id="reg_filter_role" aria-label="Filtro sipas rolit">
+            <option value="">Të gjitha rolet</option>
+            ${roleKeys.map(r => `<option value="${r}">${esc(ROLES[r])}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Njësia</span>
+          <select id="reg_filter_unit" aria-label="Filtro sipas njësisë">
+            <option value="">Të gjitha njësitë</option>
+            <option value="__none__">(Pa njësi)</option>
+            ${units.map(u => `<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Rendit</span>
+          <select id="reg_sort" aria-label="Rendit listën">
+            <option value="name">Emri</option>
+            <option value="role">Roli</option>
+            <option value="unit">Njësia</option>
+          </select>
+        </label>
+      </div>` : ''}
 
-      <div style="margin-top:12px">
+      <div style="margin-top:12px" id="registered_list">
         ${registered.length ? registered.map(v => `
-          <div class="adm-row">
-            ${avatarHtml(v.photo_path, v.full_name, 'mini-av')}
+          <div class="adm-row" data-vol-id="${v.id}">
+            ${contactAvatarBtn(v)}
             <div class="adm-info">
               <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')} <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span></div>
               <div class="meta">${esc(v.volunteer_code)}</div>
@@ -112,6 +302,7 @@ export async function vAdmin(): Promise<void> {
             </div>
           </div>
         `).join('') : '<div class="empty">Nuk ka ende vullnetarë të regjistruar.</div>'}
+        <div class="empty" id="registered_none" hidden>Asnjë vullnetar nuk përputhet me filtrin.</div>
       </div>
     </div>
 
@@ -140,6 +331,29 @@ export async function vAdmin(): Promise<void> {
     </div>`;
 
   document.getElementById('btn_refresh_admin')?.addEventListener('click', vAdmin);
+  document.getElementById('btn_export_vols')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn_export_vols') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      await downloadRegisteredVolunteers(currentRegisteredView(registered, units), units);
+    } finally {
+      if (btn && registered.length) btn.disabled = false;
+    }
+  });
+
+  const applyFilters = () => applyRegisteredFilters(registered, units);
+  document.getElementById('reg_filter_role')?.addEventListener('change', applyFilters);
+  document.getElementById('reg_filter_unit')?.addEventListener('change', applyFilters);
+  document.getElementById('reg_sort')?.addEventListener('change', applyFilters);
+
+  view.querySelectorAll<HTMLButtonElement>('[data-vol-contact]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.volContact;
+      if (!id) return;
+      const row = [...vols, ...registered].find(v => v.id === id);
+      showVolunteerContact(id, row?.full_name || 'Vullnetar', row?.volunteer_code || '');
+    });
+  });
 
   // Attach volunteer approve/reject listeners
   view.querySelectorAll<HTMLElement>('[data-approve-vol]').forEach(btn => {

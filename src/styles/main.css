@@ -1079,6 +1079,23 @@ table.tbl tr:last-child td {
   flex: none;
 }
 
+.adm-av-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  flex: none;
+  line-height: 0;
+}
+.adm-av-btn .mini-av { pointer-events: none; }
+.adm-av-btn:hover .mini-av,
+.adm-av-btn:focus-visible .mini-av {
+  box-shadow: 0 0 0 2px var(--teal, #2a8f7c);
+}
+
 .avrow {
   display: flex;
   align-items: center;
@@ -1093,6 +1110,30 @@ table.tbl tr:last-child td {
   border-bottom: 1px solid var(--line);
 }
 
+.adm-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 12px;
+}
+.adm-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.adm-filter span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #5b7377);
+}
+.adm-filter select {
+  font-size: 14px;
+  height: 40px;
+  padding: 8px 10px;
+}
+
 .adm-row {
   display: flex;
   flex-wrap: wrap;
@@ -1101,6 +1142,7 @@ table.tbl tr:last-child td {
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
 }
+.adm-row.is-hidden { display: none; }
 
 .adm-row:last-child {
   border-bottom: none;
