@@ -42,10 +42,17 @@ export async function vField(go: (k: any) => void): Promise<void> {
   const shared = mine.some(r => r.team_size > 1);
 
   view.innerHTML = `
-    <h2 class="sec">Terreni</h2>
-    <p class="sub">${qendra
-      ? 'Kush është në terren pikërisht tani dhe ku. Turnet planifikohen dhe shihen te Turni.'
-      : 'Turni i radhës i ekipit tuaj. Check-in-i hapet kur i vjen ora turnit, dhe turni mbyllet nga koordinatori ose mbledhësi që e hapi.'}</p>
+    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2 class="sec" style="margin:0">Terreni</h2>
+        <p class="sub" style="margin:0">${qendra
+          ? 'Kush është në terren pikërisht tani dhe ku. Turnet planifikohen dhe shihen te Turni.'
+          : 'Turni i radhës i ekipit tuaj. Check-in-i hapet kur i vjen ora turnit, dhe turni mbyllet nga koordinatori ose mbledhësi që e hapi.'}</p>
+      </div>
+      <a class="btn ghost sm" href="https://referendum21.org/skeptik" target="_blank" rel="noopener" style="text-decoration:none;font-size:12.5px;color:var(--text-meta)">
+        🧠 Përgjigje për skeptikët ↗
+      </a>
+    </div>
 
     ${fieldTopCardHtml(cur, sh, qendra)}
 

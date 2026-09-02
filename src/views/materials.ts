@@ -38,6 +38,25 @@ export async function vMaterials(): Promise<void> {
       ${canUpload ? `<button class="btn" id="btn_upload_mat">📤 Ngarko material</button>` : ''}
     </div>
 
+    <div class="card" style="margin-bottom:16px;padding:12px 16px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:12px">
+        <div class="row" style="gap:10px;align-items:center;min-width:0">
+          <span style="font-size:18px;opacity:.85">🧠</span>
+          <div style="min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text)">
+              Ndihmësi i xhepit: Përgjigje për skeptikët
+            </div>
+            <div class="meta" style="font-size:12.5px;margin-top:2px">
+              Argumente dhe përgjigje të shpejta për pyetjet e qytetarëve në terren.
+            </div>
+          </div>
+        </div>
+        <a class="btn sec sm" href="https://referendum21.org/skeptik" target="_blank" rel="noopener" style="white-space:nowrap">
+          Hap udhëzuesin ↗
+        </a>
+      </div>
+    </div>
+
     ${rows.length ? `
       <div class="grid" style="gap:16px">
         ${catKeys.filter(k => byCat[k]?.length).map(cat => `

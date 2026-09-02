@@ -5,6 +5,7 @@ import { doLogout } from '../views/auth';
 import { toast, fail } from '../components/toast';
 import { pushState, pushStateMessage, enablePush, disablePush } from '../api/push';
 import { siteSwitcherHtml } from './siteSwitcher';
+import { openFeedbackModal } from './feedbackModal';
 
 export function renderHeader(): string {
   if (!store.ME) return '';
@@ -20,6 +21,9 @@ export function renderHeader(): string {
       ${avatarHtml(store.ME.photo_path, store.ME.full_name, 'av')}
       <div><div class="nm">${esc(store.ME.full_name || email)}</div>
            <div class="rl">${roleName}${unitName}</div></div>
+      <button class="btn ghost sm" id="btn_feedback"
+              style="color:#fff;border:1px solid rgba(255,255,255,.5)"
+              title="Sugjero një ide ose raporto">💡 Ide</button>
       <button class="btn ghost sm push-toggle" id="btn_push"
               style="color:#fff;border:1px solid rgba(255,255,255,.5)"
               aria-pressed="false" title="Njoftimet">🔕</button>
@@ -82,6 +86,7 @@ async function togglePush(): Promise<void> {
 export function attachHeaderEvents(): void {
   document.getElementById('btn_logout')?.addEventListener('click', doLogout);
   document.getElementById('btn_push')?.addEventListener('click', togglePush);
+  document.getElementById('btn_feedback')?.addEventListener('click', openFeedbackModal);
   refreshPushButton();
 }
 

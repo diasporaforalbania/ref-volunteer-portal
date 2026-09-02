@@ -38,8 +38,13 @@ export async function vPanel(): Promise<void> {
     </div>
 
     <div class="card">
-      <h3>Njësitë organizative</h3>
-      <div class="meta">Zonat e mbledhjes së nënshkrimeve, objektivat dhe progresi.</div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <h3 style="margin:0">Njësitë organizative</h3>
+          <div class="meta">Zonat e mbledhjes së nënshkrimeve, objektivat dhe progresi.</div>
+        </div>
+        <button class="btn sec sm" id="btn_export_units_csv">📥 Eksporto Zonat (CSV)</button>
+      </div>
       <div class="scroll-x" style="margin-top:10px">
         <table class="tbl">
           <thead>
@@ -173,4 +178,40 @@ export async function vPanel(): Promise<void> {
       vPanel();
     });
   });
+
+  document.getElementById('btn_export_units_csv')?.addEventListener('click', () => exportUnitsCsv(units));
 }
+
+export function exportUnitsCsv(units: UnitTotalItem[]): void {
+  if (!units.length) return fail('Nuk ka njësi për të eksportuar.');
+
+  const headers = ['Kodi', 'Emri', 'Rajoni', 'Territori', 'Statusi', 'Firma_Mbledhur', 'Objektivi', 'Progresi_Perqindje', 'Koordinatoret'];
+  const csvContent = [
+    headers.join(','),
+    ...units.map(u => {
+      const pc = u.target > 0 ? Math.min(100, Math.round((u.signatures / u.target) * 100)) : 0;
+      const coords = (u.coordinators || []).map(c => c.name).join('; ');
+      return [
+        `"${u.code}"`,
+        `"${(u.name || '').replace(/"/g, '""')}"`,
+        `"${(u.region || '').replace(/"/g, '""')}"`,
+        `"${(u.territory || '').replace(/"/g, '""')}"`,
+        `"${u.is_open ? 'Hapur' : 'Mbyllur'}"`,
+        u.signatures || 0,
+        u.target || 0,
+        `"${pc}%"`,
+        `"${coords.replace(/"/g, '""')}"`,
+      ].join(',');
+    }),
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `zonat_referendumi_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+

@@ -116,6 +116,10 @@ export class AppState {
     return !!this.ME && this.ME.role === 'admin';
   }
 
+  public isFeedbackAdmin(): boolean {
+    return !!this.ME && (this.ME.role === 'admin' || this.ME.role === 'it');
+  }
+
   public isField(): boolean {
     return !!this.ME && ['ndihmes', 'mbledhes'].includes(this.ME.role);
   }

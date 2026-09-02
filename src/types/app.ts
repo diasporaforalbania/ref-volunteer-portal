@@ -17,7 +17,8 @@ export type TabKey =
   | 'reports'
   | 'badge'
   | 'panel'
-  | 'admin';
+  | 'admin'
+  | 'feedback';
 
 export interface BadgeState {
   priv: VolunteerPrivateRow | null;

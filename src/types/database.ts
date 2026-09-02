@@ -296,3 +296,22 @@ export interface HistorySummaryResult {
   open_shifts: number;
   active_units: number;
 }
+
+export type FeedbackCategory = 'feature' | 'improvement' | 'bug';
+export type FeedbackStatus = 'new' | 'reviewed' | 'planned' | 'done';
+
+export interface FeedbackRow {
+  id: string;
+  volunteer_id: string | null;
+  volunteer_name: string | null;
+  volunteer_role: string | null;
+  unit_code: string | null;
+  category: FeedbackCategory;
+  title: string;
+  description: string;
+  page_route: string | null;
+  device_info: string | null;
+  status: FeedbackStatus;
+  closed_at: string | null;
+  created_at: string;
+}

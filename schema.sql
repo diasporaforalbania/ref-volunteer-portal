@@ -165,6 +165,24 @@ create table if not exists public.reports (
   updated_at    timestamptz not null default now()
 );
 
+-- Sugjerimet dhe mendimet e vullnetarëve për përmirësimin e portalit
+create table if not exists public.feedback (
+  id             uuid primary key default gen_random_uuid(),
+  volunteer_id   uuid references public.volunteers(id) on delete set null,
+  volunteer_name text,
+  volunteer_role text,
+  unit_code      text,
+  category       text not null check (category in ('feature', 'improvement', 'bug')),
+  title          text not null,
+  description    text not null,
+  page_route     text,
+  device_info    text,
+  status         text not null default 'new' check (status in ('new', 'reviewed', 'planned', 'done')),
+  closed_at      timestamptz,
+  created_at     timestamptz not null default now()
+);
+create index if not exists feedback_status_idx on public.feedback (status, created_at desc);
+
 -- Check-in në terren: një turn mbledhjeje nënshkrimesh.
 create table if not exists public.checkins (
   id            uuid primary key default gen_random_uuid(),
@@ -369,6 +387,7 @@ begin
   end if;
 end $$;
 create index if not exists checkins_shift_idx on public.checkins (shift_id);
+alter table public.feedback add column if not exists closed_at timestamptz;
 
 
 -- ============================ NDIHMËSIT E ROLEVE ============================
@@ -703,6 +722,23 @@ create policy rep_update on public.reports for update to authenticated
 drop policy if exists rep_delete on public.reports;
 create policy rep_delete on public.reports for delete to authenticated
   using (public.vol_is_admin());
+
+-- ---- feedback -------------------------------------------------------------
+alter table public.feedback enable row level security;
+revoke all on public.feedback from anon, authenticated;
+grant select, insert, update on public.feedback to authenticated;
+
+drop policy if exists fb_read on public.feedback;
+create policy fb_read on public.feedback for select to authenticated
+  using (volunteer_id = auth.uid() or public.vol_is_admin() or public.vol_role() = 'it');
+
+drop policy if exists fb_insert on public.feedback;
+create policy fb_insert on public.feedback for insert to authenticated
+  with check (volunteer_id = auth.uid() and public.vol_is_approved());
+
+drop policy if exists fb_update on public.feedback;
+create policy fb_update on public.feedback for update to authenticated
+  using (public.vol_is_admin() or public.vol_role() = 'it');
 
 -- ---- checkins -------------------------------------------------------------
 -- Të gjithë të miratuarit shohin kush është në terren tani (kjo është pika).
@@ -1501,7 +1537,7 @@ language sql stable security definer set search_path = public as $$
     left join public.units      u on u.id = c.unit_id
     left join public.volunteers v on v.id = c.volunteer_id
     left join public.shifts     s on s.id = c.shift_id
-   where public.vol_is_admin()
+   where (public.vol_is_admin() or public.vol_is_staff() or public.vol_is_center())
    order by c.started_at desc;
 $$;
 
@@ -1526,7 +1562,7 @@ language sql stable security definer set search_path = public as $$
     left join public.units      u on u.id = c.unit_id
     left join public.volunteers v on v.id = c.volunteer_id
     left join public.shifts     s on s.id = c.shift_id
-   where public.vol_is_admin()
+   where (public.vol_is_admin() or public.vol_is_staff() or public.vol_is_center())
      and (p_unit is null or c.unit_id = p_unit)
      and (p_from is null or (c.started_at at time zone 'Europe/Tirane')::date >= p_from)
      and (p_to   is null or (c.started_at at time zone 'Europe/Tirane')::date <= p_to)
@@ -1546,7 +1582,7 @@ language sql stable security definer set search_path = public as $$
   with filtered as (
     select c.id, c.unit_id, c.signatures, c.ended_at
       from public.checkins c
-     where public.vol_is_admin()
+     where (public.vol_is_admin() or public.vol_is_staff() or public.vol_is_center())
        and (p_unit is null or c.unit_id = p_unit)
        and (p_from is null or (c.started_at at time zone 'Europe/Tirane')::date >= p_from)
        and (p_to   is null or (c.started_at at time zone 'Europe/Tirane')::date <= p_to)

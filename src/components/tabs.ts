@@ -12,8 +12,14 @@ export function tabList(): Array<[TabKey, string]> {
     ['badge', 'Karta ime'],
     ['panel', 'Paneli'],
   ];
+  if (store.isAdmin() || store.isStaff()) {
+    t.push(['history', 'Historiku']);
+  }
   if (store.isAdmin()) {
-    t.push(['admin', 'Admin'], ['history', 'Historiku']);
+    t.push(['admin', 'Admin']);
+  }
+  if (store.isFeedbackAdmin()) {
+    t.push(['feedback', 'Idetë']);
   }
   return t;
 }
