@@ -77,7 +77,7 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
     ((data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone' | 'email'>[]).map(p => [p.id, p])
   );
 
-  const headers = ['Emri', 'Kodi', 'Roli', 'Zona', 'Email', 'Telefon'];
+  const headers = ['Emri', 'Kodi', 'Qyteti', 'Roli', 'Zona', 'Email', 'Telefon'];
   const lines = [
     headers.join(','),
     ...registered.map(v => {
@@ -90,6 +90,7 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
       return [
         csvCell(v.full_name),
         csvCell(v.volunteer_code),
+        csvCell(v.city),
         csvCell(ROLES[role] || role),
         csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
         csvCell(priv?.email),
