@@ -5,7 +5,7 @@ import { fmtDateTime } from '../utils/format';
 import { avatarHtml } from '../api/storage';
 import { toast, fail } from '../components/toast';
 import { closeModal, openModal } from '../components/modal';
-import type { VolunteerRow, ChangeRequestRow, VolunteerPrivateRow, VolunteerRole, UnitRow } from '../types/database';
+import type { VolunteerRow, ChangeRequestRow, VolunteerPrivateRow, VolunteerRole, UnitRow, FeedbackRow, FeedbackStatus } from '../types/database';
 
 function contactAvatarBtn(v: VolunteerRow): string {
   const name = v.full_name || 'vullnetarit';
@@ -172,11 +172,12 @@ export async function vAdmin(): Promise<void> {
   if (!view) return;
   view.innerHTML = '<div class="empty">Po ngarkohet paneli i administratorit…</div>';
 
-  const [pendingVols, registeredVols, pendingReqs, allUnits] = await Promise.all([
+  const [pendingVols, registeredVols, pendingReqs, allUnits, feedbackRes] = await Promise.all([
     sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').eq('status', 'pending').order('created_at'),
     sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').in('status', ['approved', 'suspended']).order('full_name'),
     sb.from('change_requests').select('*, volunteers(full_name, volunteer_code)').eq('status', 'pending').order('created_at'),
     sb.from('units').select('id,code,name').order('code'),
+    sb.from('feedback').select('*').order('created_at', { ascending: false }).limit(50),
   ]);
 
   if (pendingVols.error) return fail(pendingVols.error);
@@ -187,6 +188,7 @@ export async function vAdmin(): Promise<void> {
   const registered = (registeredVols.data || []) as VolunteerRow[];
   const reqs = (pendingReqs.data || []) as Array<ChangeRequestRow & { volunteers?: { full_name: string; volunteer_code: string } }>;
   const units = (allUnits.data || []) as UnitRow[];
+  const feedbacks = (feedbackRes?.data || []) as FeedbackRow[];
   const roleKeys = Object.keys(ROLES) as VolunteerRole[];
 
   view.innerHTML = `
@@ -328,9 +330,59 @@ export async function vAdmin(): Promise<void> {
           </div>
         `).join('') : '<div class="empty">Nuk ka kërkesa për ndryshime në pritje.</div>'}
       </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <h3 style="margin:0">💡 Sugjerimet & Idetë e Vullnetarëve <span class="pill blue">${feedbacks.length}</span></h3>
+          <div class="meta" style="margin-top:4px">Mendimet dhe raportimet e dërguara nga vullnetarët nëpërmjet butonit “Ide”.</div>
+        </div>
+        <button class="btn sec sm" id="btn_go_feedback_tab">Hap skedën e dedikuar të Ideve ↗</button>
+      </div>
+
+      <div style="margin-top:12px">
+        ${feedbacks.length ? feedbacks.map(f => `
+          <div class="adm-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px">
+            <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px">
+              <div>
+                <div class="row" style="gap:6px;align-items:center">
+                  <span class="pill ${f.category === 'bug' ? 'red' : f.category === 'improvement' ? 'amber' : 'teal'}">
+                    ${f.category === 'bug' ? '🐞 Problem' : f.category === 'improvement' ? '⚡ Përmirësim' : '💡 Veçori'}
+                  </span>
+                  <b>${esc(f.title)}</b>
+                </div>
+                <div class="meta" style="margin-top:4px">
+                  nga <b>${esc(f.volunteer_name || 'Anonim')}</b>
+                  ${f.volunteer_role ? ` (${esc(ROLES[f.volunteer_role as VolunteerRole] || f.volunteer_role)})` : ''}
+                  ${f.unit_code ? ` · Njësia ${esc(f.unit_code)}` : ''}
+                  · ${fmtDateTime(f.created_at)}
+                  ${f.page_route ? ` · Faqja: <code>${esc(f.page_route)}</code>` : ''}
+                </div>
+              </div>
+              <div class="row" style="gap:6px;align-items:center">
+                <select class="sm" data-fb-status="${f.id}">
+                  <option value="new" ${f.status === 'new' ? 'selected' : ''}>E re</option>
+                  <option value="reviewed" ${f.status === 'reviewed' ? 'selected' : ''}>Shqyrtuar</option>
+                  <option value="planned" ${f.status === 'planned' ? 'selected' : ''}>Planifikuar</option>
+                  <option value="done" ${f.status === 'done' ? 'selected' : ''}>Përfunduar</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:14px;white-space:pre-wrap;color:var(--text);background:var(--bg-card);padding:8px 10px;border-radius:6px;border:1px solid var(--line)">
+              ${esc(f.description)}
+            </div>
+            ${f.device_info ? `<div class="meta" style="font-size:11px;opacity:0.7">${esc(f.device_info)}</div>` : ''}
+          </div>
+        `).join('') : '<div class="empty">Nuk ka ende sugjerime nga vullnetarët.</div>'}
+      </div>
     </div>`;
 
   document.getElementById('btn_refresh_admin')?.addEventListener('click', vAdmin);
+  document.getElementById('btn_go_feedback_tab')?.addEventListener('click', () => {
+    const tabBtn = document.querySelector<HTMLElement>('.tab[data-tab="feedback"]');
+    if (tabBtn) tabBtn.click();
+  });
   document.getElementById('btn_export_vols')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn_export_vols') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
@@ -453,6 +505,20 @@ export async function vAdmin(): Promise<void> {
       if (error) return fail(error);
       toast('Kërkesa u refuzua.');
       vAdmin();
+    });
+  });
+
+  // Attach feedback status update listeners
+  view.querySelectorAll<HTMLSelectElement>('[data-fb-status]').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const id = sel.dataset.fbStatus;
+      const status = sel.value as FeedbackStatus;
+      if (!id) return;
+      sel.disabled = true;
+      const { error } = await sb.from('feedback').update({ status }).eq('id', id);
+      sel.disabled = false;
+      if (error) return fail(error);
+      toast('Statusi i sugjerimit u përditësua.');
     });
   });
 }

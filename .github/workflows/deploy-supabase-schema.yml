@@ -33,8 +33,9 @@ jobs:
             exit 1
           fi
 
-      - name: Apply schema atomically
+      - name: Apply schema
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           PGSSLMODE: require
-        run: psql "$SUPABASE_DB_URL" --no-password --set=ON_ERROR_STOP=1 --single-transaction --file=schema.sql
+          PGOPTIONS: "-c lock_timeout=15000"
+        run: psql "$SUPABASE_DB_URL" --no-password --set=ON_ERROR_STOP=1 --file=schema.sql

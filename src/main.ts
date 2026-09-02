@@ -16,6 +16,7 @@ import { vBadge } from './views/myBadge';
 import { vPanel } from './views/panel';
 import { vAdmin } from './views/admin';
 import { vHistory } from './views/history';
+import { vFeedback } from './views/feedback';
 import { slotPop } from './components/slots';
 import type { TabKey } from './types/app';
 import type { VolunteerRow } from './types/database';
@@ -54,6 +55,9 @@ export async function go(tab: TabKey): Promise<void> {
       break;
     case 'history':
       await vHistory();
+      break;
+    case 'feedback':
+      await vFeedback();
       break;
     default:
       await vHome(go);

@@ -9,7 +9,7 @@ import type { HistoryRowItem, HistorySummaryResult, UnitTotalItem } from '../typ
 
 export async function vHistory(): Promise<void> {
   const view = document.getElementById('view');
-  if (!view || !store.isAdmin()) return;
+  if (!view || (!store.isAdmin() && !store.isStaff())) return;
   view.innerHTML = '<div class="empty">Po ngarkohet historiku…</div>';
 
   store.HIST.page = 1;
@@ -167,10 +167,11 @@ export function renderHistory(): void {
                 </td>
                 <td class="meta">${esc(truncate(r.notes, 28) || '—')}</td>
                 <td style="text-align:right">
+                  ${store.isAdmin() ? `
                   <div class="row" style="justify-content:flex-end;gap:4px">
                     <button class="btn ghost sm" data-edit-chk="${r.id}" title="Ndrysho">✏️</button>
                     <button class="btn ghost sm" data-del-chk="${r.id}" title="Fshi">✕</button>
-                  </div>
+                  </div>` : '—'}
                 </td>
               </tr>
             `).join('')}
