@@ -1136,10 +1136,19 @@ table.tbl tr:last-child td {
   font-weight: 700;
   color: var(--muted, #5b7377);
 }
-.adm-filter select {
+.adm-filter select,
+.adm-filter input {
   font-size: 14px;
   height: 40px;
   padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card, #fff);
+  color: var(--text);
+  box-sizing: border-box;
+}
+.adm-filter.search-filter {
+  flex: 2 1 220px;
 }
 
 .adm-row {
@@ -1183,18 +1192,40 @@ table.tbl tr:last-child td {
   flex: 0 0 auto;
 }
 
+.btn.dirty {
+  background: var(--teal, #2a8f7c) !important;
+  color: #fff !important;
+  border-color: var(--teal, #2a8f7c) !important;
+  box-shadow: 0 0 0 2px rgba(42, 143, 124, 0.25);
+  font-weight: 700;
+}
+
 @media (max-width: 700px) {
   .adm-row {
-    gap: 9px;
+    gap: 10px;
+    padding: 12px 0;
   }
-  .adm-info, .adm-sel, .adm-acts {
+  .adm-row > .adm-av-btn {
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+  .adm-info {
+    flex: 1 1 calc(100% - 46px);
+  }
+  .adm-sel {
     flex: 1 1 100%;
+  }
+  .adm-acts {
+    flex: 1 1 100%;
+    margin-top: 2px;
   }
   .adm-acts .btn {
     flex: 1;
+    height: 38px;
   }
   .adm-sel select {
-    height: 44px;
+    height: 40px;
+    width: 100%;
   }
 }
 
