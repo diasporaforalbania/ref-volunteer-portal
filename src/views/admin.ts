@@ -12,18 +12,11 @@ function contactAvatarBtn(v: VolunteerRow): string {
   return `<button type="button" class="adm-av-btn" data-vol-contact="${v.id}" aria-label="Shiko kontaktin e ${esc(name)}">${avatarHtml(v.photo_path, v.full_name, 'mini-av')}</button>`;
 }
 
-function contactValueHtml(kind: 'email' | 'tel', value: string | null | undefined): string {
-  const v = (value || '').trim();
-  if (!v) return '—';
-  const href = kind === 'email' ? `mailto:${v}` : `tel:${v}`;
-  return `<a href="${esc(href)}">${esc(v)}</a>`;
-}
-
-async function showVolunteerContact(id: string, name: string, code: string): Promise<void> {
+async function showVolunteerContact(vol: VolunteerRow, units: UnitRow[]): Promise<void> {
   const { data, error } = await sb
     .from('volunteer_private')
-    .select('phone,email')
-    .eq('id', id)
+    .select('phone,email,emergency_contact,note')
+    .eq('id', vol.id)
     .maybeSingle();
 
   if (error) {
@@ -31,26 +24,118 @@ async function showVolunteerContact(id: string, name: string, code: string): Pro
     return;
   }
 
-  const priv = data as Pick<VolunteerPrivateRow, 'phone' | 'email'> | null;
+  const priv = data as VolunteerPrivateRow | null;
+  const unit = units.find(u => u.id === vol.unit_id);
+  const roleTitle = ROLES[vol.role] || ROLES[vol.requested_role || 'ndihmes'] || vol.role;
+  const isPending = vol.status === 'pending';
+  const statusPill = isPending
+    ? '<span class="pill amber">në pritje</span>'
+    : vol.status === 'approved'
+      ? '<span class="pill ok">aktiv</span>'
+      : '<span class="pill gray">pezulluar</span>';
+
+  const phone = (priv?.phone || '').trim();
+  const email = (priv?.email || '').trim();
+  const emergency = (priv?.emergency_contact || '').trim();
+  const note = (priv?.note || '').trim();
+
   openModal(`
-    <div class="modal">
+    <div class="modal" style="max-width:520px">
       <button class="modal-x" id="modal_close_btn" type="button" aria-label="Mbyll">✕</button>
-      <h3>${esc(name || 'Vullnetar')}</h3>
-      <p class="sub" style="margin:0 0 14px">${esc(code || '')}</p>
-      <div class="row" style="justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">
-        <div>
-          <div class="meta">Email</div>
-          <b>${contactValueHtml('email', priv?.email)}</b>
+
+      <div class="row" style="gap:16px;align-items:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)">
+        <div style="width:62px;height:62px;border-radius:50%;overflow:hidden;border:2px solid var(--line);flex:none;background:#eef7f6;display:flex;align-items:center;justify-content:center">
+          ${avatarHtml(vol.photo_path, vol.full_name, 'modal-av-img')}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <h3 style="margin:0;font-size:19px;line-height:1.2">${esc(vol.full_name || 'Vullnetar')}</h3>
+            ${statusPill}
+          </div>
+          <div class="row" style="gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <span class="badge-code" style="font-size:13px;margin:0">${esc(vol.volunteer_code)}</span>
+            <span class="meta">·</span>
+            <span class="meta" style="font-weight:600">${esc(roleTitle)}</span>
+            ${vol.city ? `<span class="meta">· ${esc(vol.city)}</span>` : ''}
+          </div>
+          <div class="meta" style="margin-top:3px;font-size:12px">
+            Zona: <b>${esc(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi të caktuar)')}</b>
+          </div>
         </div>
       </div>
-      <div class="row" style="justify-content:space-between;padding:10px 0">
-        <div>
-          <div class="meta">Numri i telefonit</div>
-          <b>${contactValueHtml('tel', priv?.phone)}</b>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="card" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;box-shadow:none;margin:0">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+            <div style="min-width:0;flex:1">
+              <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Adresa Email</div>
+              <div style="font-weight:600;font-size:14.5px;margin-top:2px;word-break:break-all">
+                ${email ? `<a href="mailto:${esc(email)}" style="color:var(--teal-d);text-decoration:none">${esc(email)}</a>` : '<span class="meta">—</span>'}
+              </div>
+            </div>
+            ${email ? `
+            <div class="row" style="gap:6px;flex:none">
+              <button class="btn sec sm" type="button" data-copy-val="${esc(email)}" title="Kopjo email">📋 Kopjo</button>
+              <a class="btn sm" href="mailto:${esc(email)}">✉️ Shkruaj</a>
+            </div>` : ''}
+          </div>
+        </div>
+
+        <div class="card" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;box-shadow:none;margin:0">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+            <div style="min-width:0;flex:1">
+              <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Numri i Telefonit</div>
+              <div style="font-weight:600;font-size:15px;margin-top:2px">
+                ${phone ? `<a href="tel:${esc(phone)}" style="color:var(--teal-d);text-decoration:none">${esc(phone)}</a>` : '<span class="meta">—</span>'}
+              </div>
+            </div>
+            ${phone ? `
+            <div class="row" style="gap:6px;flex:none">
+              <button class="btn sec sm" type="button" data-copy-val="${esc(phone)}" title="Kopjo numrin">📋 Kopjo</button>
+              <a class="btn sm" href="tel:${esc(phone)}">📞 Telefono</a>
+            </div>` : ''}
+          </div>
+        </div>
+
+        ${emergency ? `
+        <div class="card" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;box-shadow:none;margin:0">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+            <div style="min-width:0;flex:1">
+              <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Kontakt Emergjence</div>
+              <div style="font-weight:600;font-size:14px;margin-top:2px">${esc(emergency)}</div>
+            </div>
+            <button class="btn sec sm" type="button" data-copy-val="${esc(emergency)}" title="Kopjo kontaktin e emergjencës">📋 Kopjo</button>
+          </div>
+        </div>` : ''}
+
+        ${note ? `
+        <div class="card" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;box-shadow:none;margin:0">
+          <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Shënim i brendshëm</div>
+          <div style="font-size:13.5px;margin-top:4px;color:var(--text);line-height:1.4">${esc(note)}</div>
+        </div>` : ''}
+
+        <div class="row" style="justify-content:space-between;align-items:center;padding:6px 2px 0">
+          <div class="meta" style="font-size:12px">Regjistruar më: <b>${fmtDateTime(vol.created_at)}</b></div>
+          <button class="btn ghost sm" id="modal_done_btn" type="button">Mbyll</button>
         </div>
       </div>
     </div>`);
+
   document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+  document.getElementById('modal_done_btn')?.addEventListener('click', closeModal);
+
+  document.querySelectorAll<HTMLButtonElement>('[data-copy-val]').forEach(copyBtn => {
+    copyBtn.addEventListener('click', async () => {
+      const val = copyBtn.dataset.copyVal || '';
+      if (!val) return;
+      try {
+        await navigator.clipboard.writeText(val);
+        toast('U kopjua në clipboard.');
+      } catch {
+        toast('Nuk u kopjua dot.');
+      }
+    });
+  });
 }
 
 function csvCell(value: string | number | null | undefined): string {
@@ -569,7 +654,9 @@ export async function vAdmin(): Promise<void> {
       const id = btn.dataset.volContact;
       if (!id) return;
       const row = [...vols, ...registered].find(v => v.id === id);
-      showVolunteerContact(id, row?.full_name || 'Vullnetar', row?.volunteer_code || '');
+      if (row) {
+        showVolunteerContact(row, units);
+      }
     });
   });
 
