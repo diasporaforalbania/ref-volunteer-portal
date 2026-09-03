@@ -17,9 +17,11 @@
  *   3. KAPAK MË I VOGËL. `MAX_SHIFTS` është 50, jo 200: faqja publike tregon 3,
  *      dhe asnjë konsumator nuk ka arsye të marrë një kalendar të tërë.
  *
- * ZERO PII: pamja nuk përmban `created_by`, `created_by_name`, `notes` as
- * `capacity`, dhe `SELECT`-i më poshtë është i fiksuar — nuk merr parametra nga
- * kërkesa. Shih `sql/upcoming-shifts-view.sql`.
+ * PII: pamja nuk përmban `created_by`, `created_by_name` as `capacity`, dhe
+ * `SELECT`-i më poshtë është i fiksuar — nuk merr parametra nga kërkesa.
+ * PËRJASHTIM I QËLLIMSHËM: `spot` (= shifts.notes) është pika e saktë e
+ * takimit dhe shfaqet PUBLIKISHT në faqe. Vullnetari paralajmërohet për këtë
+ * te forma e turnit. Shih `sql/upcoming-shifts-view.sql`.
  */
 
 import { isOriginAllowed, getCorsHeaders, forbiddenOrigin } from './_origins.js';
@@ -38,13 +40,13 @@ const MAX_SHIFTS = 50;
 const UPSTREAM_TIMEOUT_MS = 4000;
 
 /** Gjatësitë maksimale të fushave tekst, pas prerjes. */
-const MAX_LEN = { unit_code: 12, unit_name: 120, area: 160, region: 80 };
+const MAX_LEN = { unit_code: 12, unit_name: 120, area: 160, region: 80, spot: 200 };
 
 /**
  * Kolonat që kërkohen upstream — të fiksuara, nuk vijnë nga kërkesa. Pa `select`
  * eksplicit PostgREST kthen `*`, dhe `*` do të thotë "çfarëdo që ka pamja nesër".
  */
-const UPSTREAM_SELECT = 'id,unit_code,unit_name,area,region,opens_at,closes_at';
+const UPSTREAM_SELECT = 'id,unit_code,unit_name,area,region,opens_at,closes_at,spot';
 
 /**
  * Tekst i pabesuar → tekst i sigurt për t'u renderuar. Identik me `points.js`:
@@ -101,6 +103,9 @@ export function sanitizeShift(row) {
     region: cleanText(row.region, MAX_LEN.region),
     opens_at,
     closes_at: cleanTimestamp(row.closes_at),
+    // Pika e saktë e takimit (shifts.notes). Tekst i shkruar nga njeriu ->
+    // sanitizohet si `area`; konsumatori DUHET gjithsesi ta escape-ojë.
+    spot: cleanText(row.spot, MAX_LEN.spot),
   };
 }
 

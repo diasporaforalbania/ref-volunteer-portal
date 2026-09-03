@@ -163,8 +163,9 @@ export function openShiftModal(units: UnitRow[]): void {
     </div>
     <label>Kapaciteti (sa veta kërkohen, 0 = pa kufi)</label>
     <input id="sh_cap" type="number" min="0" value="4">
-    <label>Shënime (vendi i saktë, pika e takimit)</label>
+    <label>Pika e saktë e takimit</label>
     <textarea id="sh_notes" placeholder="p.sh. Te hyrja kryesore e parkut…"></textarea>
+    <div class="notice warn" style="margin-top:6px">⚠️ Ky tekst shfaqet <b>publikisht</b> te faqja e referendumit, si vendi ku qytetarët vijnë të nënshkruajnë. Mos shkruani emra, numra telefoni apo shënime të brendshme.</div>
     <div class="row" style="margin-top:16px">
       <button class="btn" id="sh_save_btn">Ruaj turnin</button>
       <button class="btn ghost" id="sh_cancel_btn">Anulo</button>
@@ -237,8 +238,9 @@ export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
     </div>
     <label>Kapaciteti (sa veta kërkohen, 0 = pa kufi)</label>
     <input id="esh_cap" type="number" min="0" value="${s.capacity}">
-    <label>Shënime (vendi i saktë, pika e takimit)</label>
+    <label>Pika e saktë e takimit</label>
     <textarea id="esh_notes" placeholder="p.sh. Te hyrja kryesore e parkut…">${esc(s.notes || '')}</textarea>
+    <div class="notice warn" style="margin-top:6px">⚠️ Ky tekst shfaqet <b>publikisht</b> te faqja e referendumit, si vendi ku qytetarët vijnë të nënshkruajnë. Mos shkruani emra, numra telefoni apo shënime të brendshme.</div>
     <div class="row" style="margin-top:16px">
       <button class="btn" id="esh_save_btn">Ruaj ndryshimet</button>
       <button class="btn ghost" id="esh_cancel_btn">Anulo</button>

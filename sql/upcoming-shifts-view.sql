@@ -20,18 +20,24 @@
 -- ÇFARË EKSPOZOHET (dhe çfarë jo)
 --
 -- Dalja është allowlist, e ndërtuar kolonë pas kolone. Nga `shifts` merren
--- VETËM `starts_at` dhe `ends_at`. Mbeten jashtë me qëllim:
+-- `starts_at`, `ends_at` dhe `notes` (si `spot`). Mbeten jashtë me qëllim:
 --
 --   • `created_by_name` — emri i plotë i vullnetarit që hapi turnin. Kjo është
 --     arsyeja kryesore pse tabela `shifts` nuk ekspozohet kurrë e drejtpërdrejtë.
 --   • `created_by`      — UUID i vullnetarit.
---   • `notes`           — tekst i lirë i shkruar nga njeriu; mund të përmbajë
---                         emra, numra telefoni, marrëveshje të brendshme.
 --   • `capacity`        — sa vullnetarë priten; informacion operacional i
 --                         brendshëm, pa vlerë për qytetarin.
 --
+-- ⚠️  `notes` → `spot` ËSHTË PUBLIK. Është pika e saktë e takimit që qytetari
+-- sheh në faqe (p.sh. "te hyrja kryesore e parkut"). Portali e paralajmëron
+-- vullnetarin te forma e turnit se ky tekst shfaqet publikisht, ndaj aty NUK
+-- duhet të shkruhen emra, numra telefoni apo marrëveshje të brendshme. Nëse
+-- doni ta mbyllni sërish, hiqni kolonën `spot` më poshtë dhe fushën `notes`
+-- te `functions/api/shifts.js`.
+--
 -- Nuk ka koordinata: askush nuk ka mbërritur ende në terren, ndaj GPS nuk
--- ekziston. Faqja publike tregon emrin e zonës dhe orarin, jo hartë.
+-- ekziston. Faqja publike tregon emrin e zonës, pikën e takimit dhe orarin,
+-- jo hartë.
 --
 -- ⚠️  KUJDES: `u.is_open`
 -- Filtri `u.is_open` do të thotë se një turn i planifikuar për një njësi që
@@ -55,7 +61,9 @@ select
   -- Emërtohen `opens_at`/`closes_at` që konsumatori të ketë të njëjtin
   -- fjalor si te `/api/points` dhe të mos mbajë dy harta fushash.
   s.starts_at                                     as opens_at,
-  s.ends_at                                       as closes_at
+  s.ends_at                                       as closes_at,
+  -- Pika e saktë e takimit, e shkruar nga vullnetari te portali. PUBLIKE.
+  nullif(trim(s.notes), '')                       as spot
 from public.shifts s
 join public.units  u on u.id = s.unit_id
 where s.closed_at is null        -- turni jo i mbyllur nga udhëheqësi
@@ -65,7 +73,8 @@ order by s.starts_at, u.code;
 
 comment on view public.public_upcoming_shifts is
   'Turnet e planifikuara që nuk kanë nisur, për /api/shifts dhe faqen publike. '
-  'Zero-PII: pa created_by, created_by_name, notes, capacity. Pa koordinata. '
+  'Ekspozon `spot` (= shifts.notes, pika e takimit) si tekst PUBLIK; pa '
+  'created_by, created_by_name, capacity. Pa koordinata. '
   'Mos e ndrysho në security_invoker — anon nuk lexon shifts as units.';
 
 -- Vetëm LEXIM, dhe vetëm i kësaj pamjeje. `anon` mbetet pa asnjë leje mbi

@@ -2125,9 +2125,15 @@ notify pgrst, 'reload schema';
 -- ndaj një turn i planifikuar (pa asnjë check-in ende) nuk prodhon rresht atje.
 -- Turnet e planifikuara nuk janë vende, janë orare — pa koordinata.
 --
--- Zero-PII: nga `shifts` merren VETËM `starts_at` e `ends_at`. Mbeten jashtë
--- `created_by_name` (emri i plotë i vullnetarit), `created_by`, `notes` dhe
--- `capacity`.
+-- Zero-PII për vullnetarin: nga `shifts` merren `starts_at`, `ends_at` dhe
+-- `notes`. Mbeten jashtë `created_by_name` (emri i plotë i vullnetarit),
+-- `created_by` dhe `capacity`.
+--
+-- ⚠️  `notes` ËSHTË PUBLIK. Ekspozohet si `spot` — pika e saktë e takimit që
+-- qytetari sheh në faqe (p.sh. "te hyrja kryesore e parkut"). Portali e
+-- paralajmëron vullnetarin te forma e turnit se ky tekst shfaqet publikisht,
+-- ndaj aty NUK duhet të shkruhen emra, numra telefoni apo marrëveshje të
+-- brendshme. Nëse doni ta mbyllni sërish, hiqeni kolonën `spot` më poshtë.
 --
 -- Shih `sql/upcoming-shifts-view.sql` për të njëjtin përkufizim si skript të
 -- veçantë, bashkë me diagnostikën "pse nuk duket ky turn".
@@ -2140,7 +2146,9 @@ select
   nullif(trim(u.territory), '')                   as area,
   nullif(trim(u.region), '')                      as region,
   s.starts_at                                     as opens_at,
-  s.ends_at                                       as closes_at
+  s.ends_at                                       as closes_at,
+  -- Pika e saktë e takimit, e shkruar nga vullnetari te portali. PUBLIKE.
+  nullif(trim(s.notes), '')                       as spot
 from public.shifts s
 join public.units  u on u.id = s.unit_id
 where s.closed_at is null
@@ -2150,7 +2158,8 @@ order by s.starts_at, u.code;
 
 comment on view public.public_upcoming_shifts is
   'Turnet e planifikuara që nuk kanë nisur, për /api/shifts dhe faqen publike. '
-  'Zero-PII: pa created_by, created_by_name, notes, capacity. Pa koordinata. '
+  'Ekspozon `spot` (= shifts.notes, pika e takimit) si tekst PUBLIK; pa '
+  'created_by, created_by_name, capacity. Pa koordinata. '
   'Mos e ndrysho në security_invoker — anon nuk lexon shifts as units.';
 
 revoke all on public.public_upcoming_shifts from anon, authenticated;
