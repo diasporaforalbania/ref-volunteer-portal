@@ -2040,19 +2040,115 @@ table.tbl tr:last-child td {
   }
 }
 
+.print-only {
+  display: none !important;
+}
+
 @media print {
-  body {
-    background: #fff;
+  @page {
+    size: auto;
+    margin: 12mm;
   }
-  header.app, nav.tabs, .fab, .no-print, .foot {
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  header.app, nav.tabs, .fab, .no-print, .foot, #toast, .modal-bg {
     display: none !important;
   }
   main {
-    padding: 0;
+    padding: 0 !important;
+    margin: 0 !important;
   }
-  .badge {
-    box-shadow: none;
-    border: 1px solid #999;
+  .print-only {
+    display: block !important;
+  }
+
+  /* 1. Default Badge Printing (when not explicitly in struct mode) */
+  body:not(.print-struct-mode):has(.badge) header.app,
+  body:not(.print-struct-mode):has(.badge) nav.tabs,
+  body:not(.print-struct-mode):has(.badge) .crumbs,
+  body:not(.print-struct-mode):has(.badge) h2,
+  body:not(.print-struct-mode):has(.badge) p.sub,
+  body:not(.print-struct-mode):has(.badge) .card,
+  body:not(.print-struct-mode):has(.badge) .notice,
+  body:not(.print-struct-mode):has(.badge) .fab,
+  body:not(.print-struct-mode):has(.badge) .foot,
+  body:not(.print-struct-mode):has(.badge) #toast,
+  body:not(.print-struct-mode):has(.badge) .modal-bg {
+    display: none !important;
+  }
+  body:not(.print-struct-mode):has(.badge) .grid {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body:not(.print-struct-mode) .badge {
+    box-shadow: none !important;
+    border: 1px solid #0f766e !important;
     page-break-inside: avoid;
+    break-inside: avoid;
+    margin: 10mm auto 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body:not(.print-struct-mode) .badge-top,
+  body:not(.print-struct-mode) .badge-top *,
+  body:not(.print-struct-mode) .badge-body,
+  body:not(.print-struct-mode) .badge-body *,
+  body:not(.print-struct-mode) .badge-foot,
+  body:not(.print-struct-mode) .badge-foot * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 2. Structure Instructions Printing */
+  body.print-struct-mode header.app,
+  body.print-struct-mode nav.tabs,
+  body.print-struct-mode .crumbs,
+  body.print-struct-mode h2,
+  body.print-struct-mode p.sub,
+  body.print-struct-mode .grid,
+  body.print-struct-mode .badge,
+  body.print-struct-mode .notice,
+  body.print-struct-mode .card:not(#struct_card),
+  body.print-struct-mode .fab,
+  body.print-struct-mode .foot,
+  body.print-struct-mode #toast,
+  body.print-struct-mode .modal-bg {
+    display: none !important;
+  }
+  body.print-struct-mode #struct_card {
+    display: block !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    margin: 0 !important;
+    padding: 16px 20px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.print-struct-mode #struct_card * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.print-struct-mode .struct-rules {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+    margin-top: 14px !important;
+  }
+  body.print-struct-mode .struct-rule {
+    border: 1px solid #cbd5e1 !important;
+    border-top-width: 3px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  body.print-struct-mode .struct-me {
+    border: 1px solid #cbd5e1 !important;
+    background: #eefaf8 !important;
   }
 }
+
+
