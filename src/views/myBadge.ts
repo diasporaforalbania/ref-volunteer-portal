@@ -42,8 +42,8 @@ export async function vBadge(): Promise<void> {
   const phReq = store.BADGE.reqs.photo;
 
   view.innerHTML = `
-    <h2 class="sec">Karta ime</h2>
-    <p class="sub">Karta juaj dixhitale e identifikimit, të dhënat e profilit dhe kërkesat për ndryshim.</p>
+    <h2 class="sec no-print">Karta ime</h2>
+    <p class="sub no-print">Karta juaj dixhitale e identifikimit, të dhënat e profilit dhe kërkesat për ndryshim.</p>
 
     <div class="grid g2" style="align-items:start">
       <div style="display:flex;flex-direction:column;align-items:center">
@@ -53,10 +53,10 @@ export async function vBadge(): Promise<void> {
           <button class="btn ghost sm" id="btn_upload_badge_photo">📷 Ndrysho foton</button>
           <input id="input_badge_photo" type="file" accept="image/*" style="display:none">
         </div>
-        ${phReq ? `<div class="notice warn" style="margin-top:10px">Kërkesa për foto të re është në shqyrtim nga qendra.</div>` : ''}
+        ${phReq ? `<div class="notice warn no-print" style="margin-top:10px">Kërkesa për foto të re është në shqyrtim nga qendra.</div>` : ''}
       </div>
 
-      <div class="card">
+      <div class="card no-print">
         <h3>Të dhënat e mia</h3>
         <div class="meta">Ndryshimet shqyrtohen nga qendra para se të miratohen.</div>
 
@@ -86,9 +86,13 @@ export async function vBadge(): Promise<void> {
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px">
-      <h3>Si funksionon struktura</h3>
-      <div class="meta">
+    <div class="card" id="struct_card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Si funksionon struktura</h3>
+        <button class="btn sec sm no-print" id="btn_print_struct">🖨️ Printo udhëzimet</button>
+      </div>
+      <div class="meta print-only" style="font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--teal-d);margin-top:6px">Referendumi — Udhëzuesi i organizimit</div>
+      <div class="meta" style="margin-top:4px">
         Njësia është qendra e gjithçkaje. Njerëzit vendosen rreth saj, dhe vendi tregon
         se kush i përgjigjet kujt.
       </div>
@@ -131,7 +135,22 @@ export async function vBadge(): Promise<void> {
 
   renderBadgeQr('my_badge_qr', verifyUrl);
 
-  document.getElementById('btn_print_badge')?.addEventListener('click', () => window.print());
+  const printSection = (mode: 'print-badge-mode' | 'print-struct-mode'): void => {
+    document.body.classList.remove('print-badge-mode', 'print-struct-mode');
+    document.body.classList.add(mode);
+
+    const cleanup = (): void => {
+      document.body.classList.remove('print-badge-mode', 'print-struct-mode');
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    setTimeout(cleanup, 1000);
+  };
+
+  document.getElementById('btn_print_badge')?.addEventListener('click', () => printSection('print-badge-mode'));
+  document.getElementById('btn_print_struct')?.addEventListener('click', () => printSection('print-struct-mode'));
   document.getElementById('btn_upload_badge_photo')?.addEventListener('click', () => {
     document.getElementById('input_badge_photo')?.click();
   });
