@@ -111,6 +111,126 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
   toast('Lista u shkarkua.');
 }
 
+async function downloadPendingVolunteers(pending: VolunteerRow[], units: UnitRow[]): Promise<void> {
+  if (!pending.length) {
+    fail('Nuk ka vullnetarë në pritje për të shkarkuar.');
+    return;
+  }
+
+  const { data, error } = await sb
+    .from('volunteer_private')
+    .select('id,phone,email')
+    .in('id', pending.map(v => v.id));
+
+  if (error) {
+    fail(error);
+    return;
+  }
+
+  const privById = new Map(
+    ((data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone' | 'email'>[]).map(p => [p.id, p])
+  );
+
+  const headers = ['Emri', 'Kodi', 'Qyteti', 'Roli_i_Kerkuar', 'Zona_e_Zgjedhur', 'Email', 'Telefon', 'Data_Regjistrimit'];
+  const lines = [
+    headers.join(','),
+    ...pending.map(v => {
+      const roleSel = document.getElementById(`adm_role_${v.id}`) as HTMLSelectElement | null;
+      const unitSel = document.getElementById(`adm_unit_${v.id}`) as HTMLSelectElement | null;
+      const role = (roleSel?.value || v.requested_role || 'ndihmes') as VolunteerRole;
+      const unitId = unitSel?.value || v.unit_id || '';
+      const unit = units.find(u => u.id === unitId);
+      const priv = privById.get(v.id);
+      return [
+        csvCell(v.full_name),
+        csvCell(v.volunteer_code),
+        csvCell(v.city),
+        csvCell(ROLES[role] || role),
+        csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
+        csvCell(priv?.email),
+        csvCell(priv?.phone),
+        csvCell(v.created_at),
+      ].join(',');
+    }),
+  ];
+
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `vullnetaret_ne_pritje_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast('Lista e vullnetarëve në pritje u shkarkua.');
+}
+
+function currentPendingView(pending: VolunteerRow[], units: UnitRow[]): VolunteerRow[] {
+  const role = (document.getElementById('pending_filter_role') as HTMLSelectElement | null)?.value || '';
+  const unit = (document.getElementById('pending_filter_unit') as HTMLSelectElement | null)?.value || '';
+  const sort = (document.getElementById('pending_sort') as HTMLSelectElement | null)?.value || 'date';
+
+  const unitLabel = (id: string | null | undefined) => {
+    if (!id) return '\uffff';
+    const u = units.find(x => x.id === id);
+    return u ? `${u.code} ${u.name}` : '\uffff';
+  };
+
+  return pending
+    .filter(v => {
+      const reqRole = v.requested_role || 'ndihmes';
+      if (role && reqRole !== role) return false;
+      if (unit === '__none__' && v.unit_id) return false;
+      if (unit && unit !== '__none__' && v.unit_id !== unit) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sort === 'date') {
+        return (a.created_at || '').localeCompare(b.created_at || '');
+      }
+      if (sort === 'date_desc') {
+        return (b.created_at || '').localeCompare(a.created_at || '');
+      }
+      if (sort === 'role') {
+        const rA = ROLES[a.requested_role || 'ndihmes'] || '';
+        const rB = ROLES[b.requested_role || 'ndihmes'] || '';
+        return rA.localeCompare(rB, 'sq');
+      }
+      if (sort === 'unit') {
+        return unitLabel(a.unit_id).localeCompare(unitLabel(b.unit_id), 'sq');
+      }
+      return (a.full_name || '').localeCompare(b.full_name || '', 'sq');
+    });
+}
+
+function applyPendingFilters(pending: VolunteerRow[], units: UnitRow[]): void {
+  const visible = currentPendingView(pending, units);
+  const visibleIds = new Set(visible.map(v => v.id));
+  const list = document.getElementById('pending_list');
+  const none = document.getElementById('pending_none');
+  const count = document.getElementById('pending_count');
+  if (!list) return;
+
+  const rows = [...list.querySelectorAll<HTMLElement>('.adm-row')];
+  rows.forEach(row => {
+    const id = row.dataset.volId || '';
+    row.classList.toggle('is-hidden', !visibleIds.has(id));
+  });
+  visible.forEach(v => {
+    const row = rows.find(r => r.dataset.volId === v.id);
+    if (row) list.appendChild(row);
+  });
+  if (none) list.appendChild(none);
+
+  if (count) {
+    count.textContent = visible.length === pending.length
+      ? String(pending.length)
+      : `${visible.length}/${pending.length}`;
+  }
+  if (none) none.hidden = visible.length > 0 || pending.length === 0;
+}
+
 function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): VolunteerRow[] {
   const role = (document.getElementById('reg_filter_role') as HTMLSelectElement | null)?.value || '';
   const unit = (document.getElementById('reg_filter_unit') as HTMLSelectElement | null)?.value || '';
@@ -196,15 +316,45 @@ export async function vAdmin(): Promise<void> {
     <p class="sub">Miratimi i vullnetarëve të rinj, shqyrtimi i kërkesave për ndryshime dhe caktimi i roleve.</p>
 
     <div class="card" style="margin-bottom:18px">
-      <div class="row" style="justify-content:space-between;align-items:baseline">
-        <h3 style="margin:0">Vullnetarë në pritje të miratimit <span class="pill amber">${vols.length}</span></h3>
-        <button class="btn sec sm" id="btn_refresh_admin">↻ Rifresko</button>
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Vullnetarë në pritje të miratimit <span class="pill amber" id="pending_count">${vols.length}</span></h3>
+        <div class="row" style="gap:8px">
+          <button class="btn sec sm" id="btn_export_pending_vols" ${vols.length ? '' : 'disabled'}>📥 Shkarko</button>
+          <button class="btn sec sm" id="btn_refresh_admin">↻ Rifresko</button>
+        </div>
       </div>
       <div class="meta" style="margin-top:4px">Zgjidhni rolin dhe njësinë e vullnetarit para se ta miratoni.</div>
+      ${vols.length ? `
+      <div class="adm-filters">
+        <label class="adm-filter">
+          <span>Roli i kërkuar</span>
+          <select id="pending_filter_role" aria-label="Filtro sipas rolit të kërkuar">
+            <option value="">Të gjitha rolet</option>
+            ${roleKeys.map(r => `<option value="${r}">${esc(ROLES[r])}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Zona</span>
+          <select id="pending_filter_unit" aria-label="Filtro sipas zonës">
+            <option value="">Të gjitha njësitë</option>
+            <option value="__none__">(Pa njësi)</option>
+            ${units.map(u => `<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Rendit</span>
+          <select id="pending_sort" aria-label="Rendit listën në pritje">
+            <option value="date">Data (më të vjetrit)</option>
+            <option value="date_desc">Data (më të rinjtë)</option>
+            <option value="name">Emri</option>
+            <option value="role">Roli</option>
+          </select>
+        </label>
+      </div>` : ''}
 
-      <div style="margin-top:12px">
+      <div style="margin-top:12px" id="pending_list">
         ${vols.length ? vols.map(v => `
-          <div class="adm-row">
+          <div class="adm-row" data-vol-id="${v.id}">
             ${contactAvatarBtn(v)}
             <div class="adm-info">
               <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')}</div>
@@ -235,6 +385,7 @@ export async function vAdmin(): Promise<void> {
             </div>
           </div>
         `).join('') : '<div class="empty">Nuk ka vullnetarë në pritje të miratimit.</div>'}
+        <div class="empty" id="pending_none" hidden>Asnjë vullnetar në pritje nuk përputhet me filtrat e zgjedhur.</div>
       </div>
     </div>
 
@@ -383,6 +534,21 @@ export async function vAdmin(): Promise<void> {
     const tabBtn = document.querySelector<HTMLElement>('.tab[data-tab="feedback"]');
     if (tabBtn) tabBtn.click();
   });
+  document.getElementById('btn_export_pending_vols')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn_export_pending_vols') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      await downloadPendingVolunteers(currentPendingView(vols, units), units);
+    } finally {
+      if (btn && vols.length) btn.disabled = false;
+    }
+  });
+
+  const applyPending = () => applyPendingFilters(vols, units);
+  document.getElementById('pending_filter_role')?.addEventListener('change', applyPending);
+  document.getElementById('pending_filter_unit')?.addEventListener('change', applyPending);
+  document.getElementById('pending_sort')?.addEventListener('change', applyPending);
+
   document.getElementById('btn_export_vols')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn_export_vols') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
