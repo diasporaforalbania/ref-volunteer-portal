@@ -3,6 +3,7 @@ import { store } from '../state/store';
 import { esc, truncate } from '../utils/security';
 import { nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import { renderUnitBoard } from '../components/unitBoard';
 import type { UnitTotalItem, VolunteerRow } from '../types/database';
 
@@ -65,32 +66,34 @@ export async function vPanel(): Promise<void> {
               const coords = u.coordinators || [];
               return `
                 <tr>
-                  <td><b>${esc(u.code)}</b></td>
-                  <td>${esc(u.name)}</td>
+                  <td><span class="unit-tag" style="font-size:12px;padding:2px 8px;font-weight:700">${esc(u.code)}</span></td>
+                  <td style="font-weight:600;color:var(--ink)">${esc(u.name)}</td>
                   <td>
                     ${coords.length
-                      ? coords.map(c => `<span class="chip">${esc(truncate(c.name || c.code || '—', 22))}</span>`).join(' ')
+                      ? coords.map(c => `<span class="chip" style="font-size:11px">${esc(truncate(c.name || c.code || '—', 22))}</span>`).join(' ')
                       : '<span class="meta">—</span>'}
                   </td>
                   <td>
                     ${isAdm ? `
-                      <button class="btn sm ${u.is_open ? 'sec' : 'green'}" data-toggle-open="${u.id}" data-is-open="${u.is_open}">
+                      <button class="btn sm ${u.is_open ? 'sec' : 'green'}" data-toggle-open="${u.id}" data-is-open="${u.is_open}" style="font-size:11.5px;padding:3px 8px">
                         ${u.is_open ? 'Mbyll' : 'Hap'}
                       </button>
                     ` : (u.is_open ? '<span class="pill ok">hapur</span>' : '<span class="pill gray">mbyllur</span>')}
                   </td>
-                  <td style="text-align:right"><b>${nf(u.signatures)}</b></td>
-                  <td style="text-align:right">${nf(u.target)}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)"><b>${nf(u.signatures)}</b></td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)">${nf(u.target)}</td>
                   <td style="text-align:right">
                     <div style="display:inline-flex;align-items:center;gap:6px">
-                      <div class="bar" style="width:50px;height:8px;margin:0"><span style="width:${pc}%"></span></div>
-                      <span class="meta">${pc}%</span>
+                      <div class="bar" style="width:54px;height:9px;margin:0;border-radius:5px"><span style="width:${pc}%"></span></div>
+                      <span class="meta" style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:12px">${pc}%</span>
                     </div>
                   </td>
                   ${isAdm ? `
                     <td style="text-align:right">
-                      <button class="btn ghost sm" data-edit-unit-target="${u.id}" data-target-val="${u.target}">🎯</button>
-                      <button class="btn red sm" data-delete-unit="${u.id}" data-unit-name="${esc(u.name)}">Fshi</button>
+                      <div class="row" style="justify-content:flex-end;gap:4px">
+                        <button class="btn ghost sm" data-edit-unit-target="${u.id}" data-target-val="${u.target}" data-unit-name="${esc(u.name)}" title="Ndrysho objektivin">🎯</button>
+                        <button class="btn red sm" data-delete-unit="${u.id}" data-unit-name="${esc(u.name)}" style="font-size:11.5px;padding:3px 7px">Fshi</button>
+                      </div>
                     </td>
                   ` : ''}
                 </tr>`;
@@ -102,34 +105,68 @@ export async function vPanel(): Promise<void> {
 
   renderUnitBoard('board_box', units, team);
 
-  document.getElementById('btn_add_unit')?.addEventListener('click', async () => {
-    const codeInput = prompt('Kodi i njësisë (p.sh. A1):');
-    if (codeInput == null) return;
-    const code = codeInput.trim().toUpperCase();
-    if (!code) return fail('Kodi i njësisë është i detyrueshëm.');
+  document.getElementById('btn_add_unit')?.addEventListener('click', () => {
+    openModal(`
+    <div class="modal">
+      <button class="modal-x" id="modal_close_btn">✕</button>
+      <h3>Shto njësi të re</h3>
+      <label>Kodi i njësisë *</label>
+      <input id="nu_code" placeholder="p.sh. A1" style="text-transform:uppercase">
+      <label>Emri i njësisë *</label>
+      <input id="nu_name" placeholder="p.sh. Qendër - Tiranë">
+      <div class="row" style="margin-top:8px">
+        <div style="flex:1">
+          <label>Rajoni (opsionale)</label>
+          <input id="nu_region" placeholder="p.sh. Qarku Tiranë">
+        </div>
+        <div style="flex:1">
+          <label>Territori (opsionale)</label>
+          <input id="nu_territory" placeholder="p.sh. Bashkia Tiranë">
+        </div>
+      </div>
+      <label>Objektivi i nënshkrimeve</label>
+      <input id="nu_target" type="number" min="0" value="1000">
+      <div class="row" style="margin-top:16px">
+        <button class="btn green" id="nu_save_btn">Krijo njësinë</button>
+        <button class="btn ghost" id="nu_cancel_btn">Anulo</button>
+      </div>
+    </div>`);
 
-    const nameInput = prompt('Emri i njësisë:');
-    if (nameInput == null) return;
-    const name = nameInput.trim();
-    if (!name) return fail('Emri i njësisë është i detyrueshëm.');
+    document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+    document.getElementById('nu_cancel_btn')?.addEventListener('click', closeModal);
+    document.getElementById('nu_save_btn')?.addEventListener('click', async () => {
+      const codeInput = document.getElementById('nu_code') as HTMLInputElement | null;
+      const nameInput = document.getElementById('nu_name') as HTMLInputElement | null;
+      const regInput = document.getElementById('nu_region') as HTMLInputElement | null;
+      const terInput = document.getElementById('nu_territory') as HTMLInputElement | null;
+      const tarInput = document.getElementById('nu_target') as HTMLInputElement | null;
+      const saveBtn = document.getElementById('nu_save_btn') as HTMLButtonElement | null;
 
-    const region = prompt('Rajoni (opsionale):')?.trim() || null;
-    const territory = prompt('Territori (opsionale):')?.trim() || null;
-    const targetInput = prompt('Objektivi i nënshkrimeve:', '0');
-    if (targetInput == null) return;
-    const target = Number.parseInt(targetInput, 10);
-    if (!Number.isInteger(target) || target < 0) return fail('Objektivi duhet të jetë numër zero ose pozitiv.');
+      const code = (codeInput?.value || '').trim().toUpperCase();
+      const name = (nameInput?.value || '').trim();
+      const region = (regInput?.value || '').trim() || null;
+      const territory = (terInput?.value || '').trim() || null;
+      const target = parseInt(tarInput?.value || '0', 10);
 
-    const { error } = await sb.rpc('unit_create', {
-      p_code: code,
-      p_name: name,
-      p_region: region,
-      p_territory: territory,
-      p_target: target,
+      if (!code) return fail('Kodi i njësisë është i detyrueshëm.');
+      if (!name) return fail('Emri i njësisë është i detyrueshëm.');
+      if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër zero ose pozitiv.');
+
+      if (saveBtn) saveBtn.disabled = true;
+      const { error } = await sb.rpc('unit_create', {
+        p_code: code,
+        p_name: name,
+        p_region: region,
+        p_territory: territory,
+        p_target: target,
+      });
+      if (saveBtn) saveBtn.disabled = false;
+
+      if (error) return fail(error);
+      closeModal();
+      toast('Njësia u shtua.');
+      vPanel();
     });
-    if (error) return fail(error);
-    toast('Njësia u shtua.');
-    vPanel();
   });
 
   // Attach toggle open/close handlers
@@ -151,18 +188,42 @@ export async function vPanel(): Promise<void> {
 
   // Attach edit target handler
   view.querySelectorAll<HTMLElement>('[data-edit-unit-target]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const unitId = btn.dataset.editUnitTarget;
+      const unitName = btn.dataset.unitName || 'njësi';
       const oldVal = btn.dataset.targetVal || '0';
-      const input = prompt('Vendosni objektivin e ri të nënshkrimeve për këtë njësi:', oldVal);
-      if (input == null) return;
-      const target = parseInt(input, 10);
-      if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër pozitiv.');
+      if (!unitId) return;
 
-      const { error } = await sb.from('units').update({ target }).eq('id', unitId);
-      if (error) return fail(error);
-      toast('Objektivi u përditësua.');
-      vPanel();
+      openModal(`
+      <div class="modal">
+        <button class="modal-x" id="modal_close_btn">✕</button>
+        <h3>Përditëso objektivin</h3>
+        <div class="meta" style="margin-bottom:12px">Njësia: <b>${esc(unitName)}</b></div>
+        <label>Objektivi i ri i nënshkrimeve *</label>
+        <input id="ut_target" type="number" min="0" value="${oldVal}">
+        <div class="row" style="margin-top:16px">
+          <button class="btn" id="ut_save_btn">Ruaj objektivin</button>
+          <button class="btn ghost" id="ut_cancel_btn">Anulo</button>
+        </div>
+      </div>`);
+
+      document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+      document.getElementById('ut_cancel_btn')?.addEventListener('click', closeModal);
+      document.getElementById('ut_save_btn')?.addEventListener('click', async () => {
+        const inp = document.getElementById('ut_target') as HTMLInputElement | null;
+        const saveBtn = document.getElementById('ut_save_btn') as HTMLButtonElement | null;
+        const target = parseInt(inp?.value || '0', 10);
+        if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër pozitiv.');
+
+        if (saveBtn) saveBtn.disabled = true;
+        const { error } = await sb.from('units').update({ target }).eq('id', unitId);
+        if (saveBtn) saveBtn.disabled = false;
+
+        if (error) return fail(error);
+        closeModal();
+        toast('Objektivi u përditësua.');
+        vPanel();
+      });
     });
   });
 
@@ -170,7 +231,16 @@ export async function vPanel(): Promise<void> {
     btn.addEventListener('click', async () => {
       const unitId = btn.dataset.deleteUnit;
       const unitName = btn.dataset.unitName || 'kjo njësi';
-      if (!unitId || !confirm(`Të fshihet “${unitName}”? Vullnetarët e saj do të mbeten pa njësi dhe turnet e lidhura do të fshihen.`)) return;
+      if (!unitId) return;
+
+      const ok = await confirmAction({
+        title: 'Fshi njësinë',
+        message: `Të fshihet “${unitName}”? Vullnetarët e saj do të mbeten pa njësi dhe turnet e lidhura do të fshihen.`,
+        confirmText: 'Fshi njësinë',
+        confirmClass: 'btn-danger',
+        icon: '🗑️'
+      });
+      if (!ok) return;
 
       const { error } = await sb.rpc('unit_delete', { p_unit: unitId });
       if (error) return fail(error);

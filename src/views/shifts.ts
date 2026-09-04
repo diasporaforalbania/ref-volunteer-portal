@@ -3,7 +3,7 @@ import { store } from '../state/store';
 import { esc } from '../utils/security';
 import { fmtDate, fmtTime, toLocalInput, nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
-import { openModal, closeModal } from '../components/modal';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import { slotsHtml } from '../components/slots';
 import type { ShiftListItem, UnitRow } from '../types/database';
 
@@ -13,6 +13,9 @@ export function shiftWhen(s: ShiftListItem): string {
   const d = new Date(s.starts_at);
   return `${DAYS_SQ[d.getDay()]}, ${fmtDate(s.starts_at)} · ${fmtTime(s.starts_at)} – ${fmtTime(s.ends_at)}`;
 }
+
+export type ShiftFilter = 'all' | 'mine' | 'upcoming' | 'open';
+let currentShiftFilter: ShiftFilter = 'all';
 
 export async function vShifts(): Promise<void> {
   const view = document.getElementById('view');
@@ -30,62 +33,137 @@ export async function vShifts(): Promise<void> {
 
   const canPlan = store.isTeamLead() || store.isAdmin();
 
-  view.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px">
-      <div>
-        <h2 class="sec">Turnet</h2>
-        <p class="sub" style="margin:0">Turnet e planifikuara të ekipit. Regjistrohuni që koordinatori të dijë sa veta do të jenë.</p>
+  function renderView() {
+    if (!view) return;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const endOfTomorrow = todayStart + 2 * 86400000;
+
+    const countAll = shifts.length;
+    const countMine = shifts.filter(s => s.i_am_in).length;
+    const countUpcoming = shifts.filter(s => {
+      const t = new Date(s.starts_at).getTime();
+      return t >= todayStart && t < endOfTomorrow;
+    }).length;
+    const countOpen = shifts.filter(s => {
+      const isOver = Date.now() > new Date(s.ends_at).getTime();
+      const isClosed = !!s.closed_at;
+      const isFull = s.capacity > 0 && (s.signed?.length || 0) >= s.capacity;
+      return !isOver && !isClosed && !isFull;
+    }).length;
+
+    const filtered = shifts.filter(s => {
+      if (currentShiftFilter === 'mine') return s.i_am_in;
+      if (currentShiftFilter === 'upcoming') {
+        const t = new Date(s.starts_at).getTime();
+        return t >= todayStart && t < endOfTomorrow;
+      }
+      if (currentShiftFilter === 'open') {
+        const isOver = Date.now() > new Date(s.ends_at).getTime();
+        const isClosed = !!s.closed_at;
+        const isFull = s.capacity > 0 && (s.signed?.length || 0) >= s.capacity;
+        return !isOver && !isClosed && !isFull;
+      }
+      return true;
+    });
+
+    view.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2 class="sec">Turnet</h2>
+          <p class="sub" style="margin:0">Turnet e planifikuara të ekipit. Regjistrohuni që koordinatori të dijë sa veta do të jenë.</p>
+        </div>
+        ${canPlan ? `<button class="btn" id="btn_plan_shift">➕ Planifiko turn</button>` : ''}
       </div>
-      ${canPlan ? `<button class="btn" id="btn_plan_shift">➕ Planifiko turn</button>` : ''}
-    </div>
 
-    ${shifts.length ? `
-      <div class="grid" style="gap:14px">
-        ${shifts.map(s => shiftCardHtml(s)).join('')}
-      </div>` : '<div class="empty">Nuk ka turne të planifikuara për ditët në vijim.</div>'}`;
+      <div class="filter-bar">
+        <button class="filter-chip ${currentShiftFilter === 'all' ? 'active' : ''}" data-shift-filter="all">
+          Të gjitha <span class="count">${countAll}</span>
+        </button>
+        <button class="filter-chip ${currentShiftFilter === 'mine' ? 'active' : ''}" data-shift-filter="mine">
+          Turnet e mia <span class="count">${countMine}</span>
+        </button>
+        <button class="filter-chip ${currentShiftFilter === 'upcoming' ? 'active' : ''}" data-shift-filter="upcoming">
+          Sot & Nesër <span class="count">${countUpcoming}</span>
+        </button>
+        <button class="filter-chip ${currentShiftFilter === 'open' ? 'active' : ''}" data-shift-filter="open">
+          Kërkojnë ndihmë <span class="count">${countOpen}</span>
+        </button>
+      </div>
 
-  document.getElementById('btn_plan_shift')?.addEventListener('click', () => openShiftModal(units));
+      ${filtered.length ? `
+        <div class="grid" style="gap:14px">
+          ${filtered.map(s => shiftCardHtml(s)).join('')}
+        </div>` : `
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">🗓️</div>
+          <div class="empty-state-title">Nuk ka turne për këtë përzgjedhje</div>
+          <div class="empty-state-desc">
+            ${currentShiftFilter === 'mine'
+              ? 'Nuk jeni regjistruar ende në asnjë turn. Zgjidhni një turn nga lista dhe bashkohuni me ekipin!'
+              : currentShiftFilter === 'upcoming'
+              ? 'Nuk ka turne të planifikuara për sot ose nesër.'
+              : currentShiftFilter === 'open'
+              ? 'Të gjitha turnet aktive janë të plotësuara me mbledhës.'
+              : 'Nuk ka turne të planifikuara për ditët në vijim.'}
+          </div>
+          ${canPlan ? `<button class="btn" id="btn_plan_shift_empty">➕ Planifiko një turn të ri</button>` : ''}
+        </div>`}
+    `;
 
-  view.querySelectorAll<HTMLElement>('[data-join-shift]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.joinShift;
-      if (id) {
-        await joinShift(id);
-        vShifts();
-      }
+    document.getElementById('btn_plan_shift')?.addEventListener('click', () => openShiftModal(units));
+    document.getElementById('btn_plan_shift_empty')?.addEventListener('click', () => openShiftModal(units));
+
+    view.querySelectorAll<HTMLElement>('[data-shift-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentShiftFilter = (btn.dataset.shiftFilter || 'all') as ShiftFilter;
+        renderView();
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-leave-shift]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.leaveShift;
-      if (id) {
-        await leaveShift(id);
-        vShifts();
-      }
+    view.querySelectorAll<HTMLElement>('[data-join-shift]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.joinShift;
+        if (id) {
+          await joinShift(id);
+          vShifts();
+        }
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-del-shift]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.delShift;
-      if (id) delShift(id);
+    view.querySelectorAll<HTMLElement>('[data-leave-shift]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.leaveShift;
+        if (id) {
+          await leaveShift(id);
+          vShifts();
+        }
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-edit-shift]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const s = shifts.find(x => x.id === btn.dataset.editShift);
-      if (s) openEditShiftModal(s, units);
+    view.querySelectorAll<HTMLElement>('[data-del-shift]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.delShift;
+        if (id) delShift(id);
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-close-shift]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const s = shifts.find(x => x.id === btn.dataset.closeShift);
-      if (s) openAdminCloseModal(s);
+    view.querySelectorAll<HTMLElement>('[data-edit-shift]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = shifts.find(x => x.id === btn.dataset.editShift);
+        if (s) openEditShiftModal(s, units);
+      });
     });
-  });
+
+    view.querySelectorAll<HTMLElement>('[data-close-shift]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = shifts.find(x => x.id === btn.dataset.closeShift);
+        if (s) openAdminCloseModal(s);
+      });
+    });
+  }
+
+  renderView();
 }
 
 export function shiftCardHtml(s: ShiftListItem): string {
@@ -99,36 +177,41 @@ export function shiftCardHtml(s: ShiftListItem): string {
   const canClose = admin && !closed;
 
   return `
-  <div class="card" style="${over || closed ? 'opacity:.75' : ''}">
-    <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div>
-        <div class="row" style="gap:8px;align-items:center">
-          <span class="unit-tag ${s.unit_is_open ? 'ok' : ''}">${esc(s.unit_code || '—')}</span>
+  <div class="card" style="${closed ? 'border-color:var(--line);' : ''}">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div class="row" style="gap:10px;align-items:center">
+          <span class="unit-tag ${s.unit_is_open ? 'ok' : ''}" style="font-weight:700;font-size:12px;padding:3px 9px">${esc(s.unit_code || '—')}</span>
           <div>
-            <h3 style="margin:0">${esc(s.unit_name || '')}</h3>
-            <div class="meta" style="text-transform:capitalize">${esc(shiftWhen(s))}</div>
+            <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--ink)">${esc(s.unit_name || '')}</h3>
+            <div class="meta" style="text-transform:capitalize;display:flex;align-items:center;gap:5px;margin-top:2px">
+              <span class="stat-icon" style="width:18px;height:18px;border-radius:4px;font-size:11px" aria-hidden="true">🗓️</span>
+              <span>${esc(shiftWhen(s))}</span>
+            </div>
           </div>
         </div>
-        <div class="meta" style="margin-top:5px">
+        <div class="meta" style="margin-top:8px;font-size:12.5px;line-height:1.5">
           Hapur nga <b>${esc(s.created_by_name || '—')}</b>
-          ${s.notes ? ` · <i>${esc(s.notes)}</i>` : ''}
+          ${s.notes ? ` · <i style="color:var(--text)">${esc(s.notes)}</i>` : ''}
           ${!s.unit_is_open ? ' · <span class="pill amber">zona e mbyllur</span>' : ''}
           ${closed ? ' · <span class="pill gray">i mbyllur</span>'
-            : s.checked_in_count ? ` · <span class="pill ok">${s.checked_in_count} në terren</span>` : ''}
+            : over ? ' · <span class="pill amber">ka përfunduar</span>'
+            : s.checked_in_count ? ` · <span class="pill ok">● ${s.checked_in_count} në terren</span>` : ''}
+          ${closed && s.signatures != null ? ` · <b>${nf(s.signatures)} firma</b>` : ''}
         </div>
       </div>
-      <div class="row" style="gap:6px">
+      <div class="row" style="gap:6px;align-items:center">
         ${!over && !closed && store.isTeamRole() ? (
           s.i_am_in
-            ? `<button class="btn red sm" data-leave-shift="${s.id}">Hiqem</button>`
-            : `<button class="btn sec sm" data-join-shift="${s.id}">Regjistrohu</button>`
+            ? `<button class="btn red sm" data-leave-shift="${s.id}">✕ Hiqem</button>`
+            : `<button class="btn sec sm" data-join-shift="${s.id}">✓ Bashkohu</button>`
         ) : ''}
         ${canClose ? `<button class="btn red sm" data-close-shift="${s.id}">Mbyll turnin</button>` : ''}
         ${canEdit ? `<button class="btn ghost sm" data-edit-shift="${s.id}" title="Ndrysho turnin">✎</button>` : ''}
         ${canDel ? `<button class="btn ghost sm" data-del-shift="${s.id}" title="Fshi turnin">✕</button>` : ''}
       </div>
     </div>
-    <div style="margin-top:10px">
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
       ${slotsHtml(s.id, s.signed, s.capacity)}
     </div>
   </div>`;
@@ -349,7 +432,14 @@ export async function leaveShift(shiftId: string): Promise<void> {
 }
 
 export async function delShift(id: string): Promise<void> {
-  if (!confirm('Të fshihet ky turn i planifikuar?')) return;
+  const ok = await confirmAction({
+    title: 'Fshi turnin',
+    message: 'A jeni i sigurt që dëshironi të fshini këtë turn të planifikuar?',
+    confirmText: 'Fshi turnin',
+    confirmClass: 'btn-danger',
+    icon: '🗑️'
+  });
+  if (!ok) return;
   const { error } = await sb.from('shifts').delete().eq('id', id);
   if (error) return fail(error);
   toast('Turni u fshi.');

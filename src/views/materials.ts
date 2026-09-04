@@ -4,7 +4,7 @@ import { esc, safeUrl } from '../utils/security';
 import { fmtDate, fmtSize } from '../utils/format';
 import { matUrl } from '../api/storage';
 import { toast, fail } from '../components/toast';
-import { openModal, closeModal } from '../components/modal';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import type { MaterialRow, MaterialCategory } from '../types/database';
 
 export async function vMaterials(): Promise<void> {
@@ -30,28 +30,28 @@ export async function vMaterials(): Promise<void> {
   const catKeys = Object.keys(CATS) as MaterialCategory[];
 
   view.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px;gap:8px">
       <div>
         <h2 class="sec">Materiale & Dokumente</h2>
         <p class="sub" style="margin:0">Manuali i vullnetarit, fletë-palosjet, formularët ligjorë dhe materialet e trajnimit.</p>
       </div>
-      ${canUpload ? `<button class="btn" id="btn_upload_mat">📤 Ngarko material</button>` : ''}
+      ${canUpload ? `<button class="btn" id="btn_upload_mat"><span aria-hidden="true">📤</span> Ngarko material</button>` : ''}
     </div>
 
-    <div class="card" style="margin-bottom:16px;padding:12px 16px">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:12px">
-        <div class="row" style="gap:10px;align-items:center;min-width:0">
-          <span style="font-size:18px;opacity:.85">🧠</span>
-          <div style="min-width:0">
-            <div style="font-size:14px;font-weight:600;color:var(--text)">
+    <div class="card" style="margin-bottom:16px;padding:14px 18px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+        <div class="row" style="gap:12px;align-items:center;min-width:0;flex:1">
+          <span class="stat-icon" style="width:42px;height:42px;font-size:22px" aria-hidden="true">🧠</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:14.5px;font-weight:700;color:var(--ink)">
               Ndihmësi i xhepit: Përgjigje për skeptikët
             </div>
-            <div class="meta" style="font-size:12.5px;margin-top:2px">
-              Argumente dhe përgjigje të shpejta për pyetjet e qytetarëve në terren.
+            <div class="meta" style="font-size:13px;margin-top:2px">
+              Argumente dhe përgjigje të shpejta për pyetjet më të shpeshta të qytetarëve në terren.
             </div>
           </div>
         </div>
-        <a class="btn sec sm" href="https://referendum21.org/skeptik" target="_blank" rel="noopener" style="white-space:nowrap">
+        <a class="btn sec sm" href="https://referendum21.org/skeptik" target="_blank" rel="noopener" style="white-space:nowrap;font-weight:600">
           Hap udhëzuesin ↗
         </a>
       </div>
@@ -61,14 +61,26 @@ export async function vMaterials(): Promise<void> {
       <div class="grid" style="gap:16px">
         ${catKeys.filter(k => byCat[k]?.length).map(cat => `
           <div class="card">
-            <h3>${CATS[cat][0]} ${CATS[cat][1]}</h3>
-            <div style="margin-top:10px">
+            <div class="row" style="gap:10px;align-items:center;margin-bottom:12px">
+              <span class="stat-icon" style="width:36px;height:36px;font-size:18px" aria-hidden="true">${CATS[cat][0]}</span>
+              <h3 style="margin:0;font-size:16px">${esc(CATS[cat][1])}</h3>
+            </div>
+            <div>
               ${byCat[cat].map(m => materialItemHtml(m)).join('')}
             </div>
           </div>`).join('')}
-      </div>` : '<div class="empty">Ende pa materiale të ngarkuara.</div>'}`;
+      </div>` : `
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">📚</div>
+          <div class="empty-state-title">Ende pa materiale të ngarkuara</div>
+          <div class="empty-state-desc">
+            Udhëzuesit ligjorë, fletëpalosjet dhe formularët zyrtarë do të shfaqen këtu për shkarkim.
+          </div>
+          ${canUpload ? `<button class="btn" id="btn_upload_mat_empty">➕ Ngarko material të ri</button>` : ''}
+        </div>`}`;
 
   document.getElementById('btn_upload_mat')?.addEventListener('click', openMaterialModal);
+  document.getElementById('btn_upload_mat_empty')?.addEventListener('click', openMaterialModal);
 
   view.querySelectorAll<HTMLElement>('[data-del-mat]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -85,21 +97,21 @@ export function materialItemHtml(m: MaterialRow): string {
   const canDel = store.isStaff();
 
   return `
-  <div class="file-item">
-    <div class="file-ic">${CATS[m.category]?.[0] || '📎'}</div>
+  <div class="file-item" style="padding:12px 0;align-items:center">
+    <div class="file-ic" aria-hidden="true" style="font-size:20px">${CATS[m.category]?.[0] || '📎'}</div>
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:14.5px">
         ${url ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener">${esc(m.title)}</a>` : esc(m.title)}
       </div>
       ${m.description ? `<div class="meta" style="margin-top:2px">${esc(m.description)}</div>` : ''}
-      <div class="meta" style="margin-top:2px">
-        ${m.size ? fmtSize(m.size) + ' · ' : ''}ngarkuar ${fmtDate(m.created_at)}
-        ${m.uploader_name ? ` nga ${esc(m.uploader_name)}` : ''}
+      <div class="meta" style="margin-top:2px;font-size:12px">
+        ${m.size ? `<span class="pill gray" style="font-size:10.5px;padding:1px 6px;margin-right:4px">${fmtSize(m.size)}</span>` : ''}ngarkuar ${fmtDate(m.created_at)}
+        ${m.uploader_name ? ` nga <b>${esc(m.uploader_name)}</b>` : ''}
       </div>
     </div>
-    <div class="row" style="gap:6px">
-      ${url ? `<a class="btn sec sm" href="${esc(url)}" target="_blank" rel="noopener" download>Shkarko ↗</a>` : ''}
-      ${canDel ? `<button class="btn ghost sm" data-del-mat="${m.id}" data-mat-path="${esc(m.file_path || '')}" title="Fshi">✕</button>` : ''}
+    <div class="row" style="gap:8px">
+      ${url ? `<a class="btn sec sm" href="${esc(url)}" target="_blank" rel="noopener" download style="font-weight:600">Shkarko ↗</a>` : ''}
+      ${canDel ? `<button class="btn ghost sm" data-del-mat="${m.id}" data-mat-path="${esc(m.file_path || '')}" title="Fshi materialin" style="color:var(--muted)">✕</button>` : ''}
     </div>
   </div>`;
 }
@@ -204,7 +216,14 @@ export async function uploadMat(): Promise<void> {
 }
 
 export async function delMat(id: string, path: string | null): Promise<void> {
-  if (!confirm('Të fshihet ky material?')) return;
+  const ok = await confirmAction({
+    title: 'Fshi materialin',
+    message: 'A jeni i sigurt që dëshironi të fshini këtë material? Ky veprim nuk mund të kthehet mbrapa.',
+    confirmText: 'Fshi materialin',
+    confirmClass: 'btn-danger',
+    icon: '🗑️'
+  });
+  if (!ok) return;
   if (path) {
     await sb.storage.from('vol-materials').remove([path]);
   }

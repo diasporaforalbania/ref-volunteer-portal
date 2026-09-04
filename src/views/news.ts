@@ -3,7 +3,7 @@ import { store } from '../state/store';
 import { esc } from '../utils/security';
 import { fmtDateTime } from '../utils/format';
 import { toast, fail } from '../components/toast';
-import { openModal, closeModal } from '../components/modal';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import { notifyPush } from '../api/push';
 import type { AnnouncementRow, AnnouncementLevel, AnnouncementAudience } from '../types/database';
 
@@ -23,12 +23,12 @@ export async function vNews(): Promise<void> {
   const canPost = store.isInternal();
 
   view.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px;gap:8px">
       <div>
         <h2 class="sec">Njoftimet</h2>
         <p class="sub" style="margin:0">Udhëzimet zyrtare, njoftimet ditore dhe lajmet e fushatës.</p>
       </div>
-      ${canPost ? `<button class="btn" id="btn_new_ann">📣 Njoftim i ri</button>` : ''}
+      ${canPost ? `<button class="btn" id="btn_new_ann"><span aria-hidden="true">📣</span> Njoftim i ri</button>` : ''}
     </div>
 
     ${rows.length ? `
@@ -49,25 +49,28 @@ export async function vNews(): Promise<void> {
 export function annCardHtml(a: AnnouncementRow): string {
   const isUrgent = a.level === 'urgent';
   const isImportant = a.level === 'important';
-  const levelClass = isUrgent ? 'danger' : isImportant ? 'warn' : '';
-  const levelIcon = isUrgent ? '🚨' : isImportant ? '❗' : '📣';
   const isAuthorOrAdmin = a.author_id === store.ME?.id || store.isAdmin();
 
   return `
-  <div class="card" style="border-left:5px solid ${isUrgent ? 'var(--red)' : isImportant ? 'var(--amber)' : 'var(--teal)'}">
-    <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div>
-        <h3 style="margin:0">
-          ${a.pinned ? '📌 ' : ''}${levelIcon} ${esc(a.title)}
+  <div class="card" style="border-left:4px solid ${isUrgent ? 'var(--red)' : isImportant ? 'var(--amber)' : 'var(--teal)'};transition:box-shadow .15s ease">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div class="row" style="gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+          ${a.pinned ? '<span class="pill gray" style="font-size:11px;padding:2px 8px"><span aria-hidden="true">📌</span> I fiksuar</span>' : ''}
+          ${isUrgent ? '<span class="pill red" style="font-size:11px;padding:2px 8px"><span aria-hidden="true">🚨</span> URGJENTE</span>' : ''}
+          ${isImportant ? '<span class="pill amber" style="font-size:11px;padding:2px 8px"><span aria-hidden="true">❗</span> E RËNDËSISHME</span>' : ''}
+          ${a.audience === 'staff' ? '<span class="pill blue" style="font-size:11px;padding:2px 8px">Vetëm stafi & koordinatorët</span>' : ''}
+        </div>
+        <h3 style="margin:4px 0 2px;font-size:16.5px;font-weight:700;color:var(--ink)">
+          ${esc(a.title)}
         </h3>
         <div class="meta" style="margin-top:3px">
           Nga <b>${esc(a.author_name || 'Qendra')}</b> · ${fmtDateTime(a.created_at)}
-          ${a.audience === 'staff' ? ' · <span class="pill blue">Vetëm qendra & koordinatorët</span>' : ''}
         </div>
       </div>
-      ${isAuthorOrAdmin ? `<button class="btn ghost sm" data-del-ann="${a.id}" title="Fshi njoftimin">✕</button>` : ''}
+      ${isAuthorOrAdmin ? `<button class="btn ghost sm" data-del-ann="${a.id}" title="Fshi njoftimin" style="color:var(--muted)">✕</button>` : ''}
     </div>
-    <div style="margin-top:12px;white-space:pre-wrap;line-height:1.6">${esc(a.body)}</div>
+    <div style="margin-top:12px;white-space:pre-wrap;line-height:1.65;font-size:14.5px;color:var(--ink)">${esc(a.body)}</div>
   </div>`;
 }
 
@@ -154,7 +157,15 @@ export async function addAnn(): Promise<void> {
 }
 
 export async function delAnn(id: string): Promise<void> {
-  if (!confirm('Të fshihet ky njoftim?')) return;
+  const ok = await confirmAction({
+    title: 'Fshi njoftimin',
+    message: 'Jeni të sigurt që dëshironi të fshini këtë njoftim? Ky veprim nuk mund të kthehet mbrapsht.',
+    confirmText: '✕ Po, fshi',
+    confirmClass: 'btn red sm',
+    icon: '🗑️',
+  });
+  if (!ok) return;
+
   const { error } = await sb.from('announcements').delete().eq('id', id);
   if (error) return fail(error);
   toast('Njoftimi u fshi.');
