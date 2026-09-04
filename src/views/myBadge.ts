@@ -60,27 +60,42 @@ export async function vBadge(): Promise<void> {
         <h3>Të dhënat e mia</h3>
         <div class="meta">Ndryshimet shqyrtohen nga qendra para se të miratohen.</div>
 
-        <div style="margin-top:14px">
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-            <div><div class="meta">Emri i plotë</div><b>${esc(store.ME.full_name)}</b></div>
-            ${pReq ? '<span class="pill amber">në shqyrtim</span>' : `<button class="btn ghost sm" id="btn_edit_profile">Ndrysho</button>`}
+        <div style="margin-top:14px;display:flex;flex-direction:column">
+          <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+            <div>
+              <div class="meta" style="font-size:12px">Emri i plotë</div>
+              <div style="font-weight:700;color:var(--ink);margin-top:2px">${esc(store.ME.full_name)}</div>
+            </div>
+            ${pReq ? '<span class="pill amber" style="font-size:11px">● në shqyrtim</span>' : `<button class="btn ghost sm" id="btn_edit_profile">Ndrysho</button>`}
           </div>
 
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-            <div><div class="meta">Zona / Njësia</div><b>${esc(store.ME.units?.name || 'Pa zonë të caktuar')}</b></div>
-            ${zReq ? '<span class="pill amber">në shqyrtim</span>' : `<button class="btn ghost sm" id="btn_edit_zone">Ndrysho</button>`}
+          <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+            <div>
+              <div class="meta" style="font-size:12px">Zona / Njësia</div>
+              <div style="font-weight:700;color:var(--ink);margin-top:2px">${esc(store.ME.units?.name || 'Pa zonë të caktuar')}</div>
+            </div>
+            ${zReq ? '<span class="pill amber" style="font-size:11px">● në shqyrtim</span>' : `<button class="btn ghost sm" id="btn_edit_zone">Ndrysho</button>`}
           </div>
 
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-            <div><div class="meta">Qyteti</div><b>${esc(store.ME.city || '—')}</b></div>
+          <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+            <div>
+              <div class="meta" style="font-size:12px">Qyteti</div>
+              <div style="font-weight:600;color:var(--ink);margin-top:2px">${esc(store.ME.city || '—')}</div>
+            </div>
           </div>
 
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-            <div><div class="meta">Numri i telefonit</div><b>${esc(store.BADGE.priv?.phone || '—')}</b></div>
+          <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+            <div>
+              <div class="meta" style="font-size:12px">Numri i telefonit</div>
+              <div style="font-weight:600;font-family:var(--mono);color:var(--ink);margin-top:2px">${esc(store.BADGE.priv?.phone || '—')}</div>
+            </div>
           </div>
 
-          <div class="row" style="justify-content:space-between;padding:8px 0">
-            <div><div class="meta">Email</div><b>${esc(store.SESSION?.user?.email || '—')}</b></div>
+          <div class="row" style="justify-content:space-between;align-items:center;padding:10px 0">
+            <div>
+              <div class="meta" style="font-size:12px">Email</div>
+              <div style="font-weight:600;color:var(--ink);margin-top:2px">${esc(store.SESSION?.user?.email || '—')}</div>
+            </div>
           </div>
         </div>
       </div>

@@ -5,11 +5,13 @@ import { fmtDateTime } from '../utils/format';
 import { getLocation } from '../utils/geo';
 import { shrinkImage } from '../utils/image';
 import { toast, fail } from '../components/toast';
-import { openModal, closeModal } from '../components/modal';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import { notifyPush } from '../api/push';
 import type { ReportRow, ReportKind, ReportSeverity, ReportStatus } from '../types/database';
 
 let selectedReportKind: ReportKind = 'incident';
+export type ReportFilter = 'all' | 'open' | 'urgent' | 'resolved';
+let currentReportFilter: ReportFilter = 'all';
 
 export async function vReports(): Promise<void> {
   const view = document.getElementById('view');
@@ -24,43 +26,98 @@ export async function vReports(): Promise<void> {
   if (error) return fail(error);
   const rows = (data || []) as ReportRow[];
 
-  view.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px">
-      <div>
-        <h2 class="sec">Raportimet</h2>
-        <p class="sub" style="margin:0">Raportoni probleme, incidente ose pyetje ligjore në terren. Qendra njoftohet menjëherë.</p>
+  function renderView() {
+    if (!view) return;
+    const countAll = rows.length;
+    const countOpen = rows.filter(r => r.status === 'open' || r.status === 'review').length;
+    const countUrgent = rows.filter(r => r.severity === 'high' && r.status !== 'resolved').length;
+    const countResolved = rows.filter(r => r.status === 'resolved').length;
+
+    const filtered = rows.filter(r => {
+      if (currentReportFilter === 'open') return r.status === 'open' || r.status === 'review';
+      if (currentReportFilter === 'urgent') return r.severity === 'high' && r.status !== 'resolved';
+      if (currentReportFilter === 'resolved') return r.status === 'resolved';
+      return true;
+    });
+
+    view.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2 class="sec">Raportimet</h2>
+          <p class="sub" style="margin:0">Raportoni probleme, incidente ose pyetje ligjore në terren. Qendra njoftohet menjëherë.</p>
+        </div>
+        <button class="btn red" id="btn_new_report">⚠️ Raporto problem</button>
       </div>
-      <button class="btn red" id="btn_new_report">⚠️ Raporto problem</button>
-    </div>
 
-    ${rows.length ? `
-      <div class="grid" style="gap:14px">
-        ${rows.map(r => reportCardHtml(r)).join('')}
-      </div>` : '<div class="empty">Nuk ka asnjë raportim të regjistruar.</div>'}`;
+      <div class="filter-bar">
+        <button class="filter-chip ${currentReportFilter === 'all' ? 'active' : ''}" data-report-filter="all">
+          Të gjitha <span class="count">${countAll}</span>
+        </button>
+        <button class="filter-chip ${currentReportFilter === 'open' ? 'active' : ''}" data-report-filter="open">
+          Të hapura <span class="count">${countOpen}</span>
+        </button>
+        <button class="filter-chip ${currentReportFilter === 'urgent' ? 'active' : ''}" data-report-filter="urgent">
+          Urgjente 🚨 <span class="count">${countUrgent}</span>
+        </button>
+        <button class="filter-chip ${currentReportFilter === 'resolved' ? 'active' : ''}" data-report-filter="resolved">
+          Të zgjidhura <span class="count">${countResolved}</span>
+        </button>
+      </div>
 
-  document.getElementById('btn_new_report')?.addEventListener('click', openReportModal);
+      ${filtered.length ? `
+        <div class="grid" style="gap:14px">
+          ${filtered.map(r => reportCardHtml(r)).join('')}
+        </div>` : `
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">🛡️</div>
+          <div class="empty-state-title">Nuk ka asnjë raportim për këtë përzgjedhje</div>
+          <div class="empty-state-desc">
+            ${currentReportFilter === 'urgent'
+              ? 'Shkëlqyeshëm! Nuk ka asnjë incident apo problem urgjent të pazgjidhur.'
+              : currentReportFilter === 'open'
+              ? 'Të gjitha raportimet nga terreni janë trajtuar me sukses.'
+              : currentReportFilter === 'resolved'
+              ? 'Ende nuk ka raportime të shënuara si të zgjidhura.'
+              : 'Nuk ka asnjë raportim aktiv nga terreni në sistem.'}
+          </div>
+          <button class="btn red" id="btn_new_report_empty">⚠️ Raporto një problem të ri</button>
+        </div>`}
+    `;
 
-  view.querySelectorAll<HTMLElement>('[data-report-status]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.reportId;
-      const st = btn.dataset.reportStatus as ReportStatus;
-      if (id && st) setReportStatus(id, st);
+    document.getElementById('btn_new_report')?.addEventListener('click', openReportModal);
+    document.getElementById('btn_new_report_empty')?.addEventListener('click', openReportModal);
+
+    view.querySelectorAll<HTMLElement>('[data-report-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentReportFilter = (btn.dataset.reportFilter || 'all') as ReportFilter;
+        renderView();
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-del-report]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.delReport;
-      if (id) delReport(id);
+    view.querySelectorAll<HTMLElement>('[data-report-status]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.reportId;
+        const st = btn.dataset.reportStatus as ReportStatus;
+        if (id && st) setReportStatus(id, st);
+      });
     });
-  });
 
-  view.querySelectorAll<HTMLElement>('[data-save-repnote]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.saveRepnote;
-      if (id) saveReportNote(id);
+    view.querySelectorAll<HTMLElement>('[data-del-report]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.delReport;
+        if (id) delReport(id);
+      });
     });
-  });
+
+    view.querySelectorAll<HTMLElement>('[data-save-repnote]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.saveRepnote;
+        if (id) saveReportNote(id);
+      });
+    });
+  }
+
+  renderView();
 }
 
 export function reportCardHtml(r: ReportRow): string {
@@ -70,40 +127,44 @@ export function reportCardHtml(r: ReportRow): string {
 
   return `
   <div class="card">
-    <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div>
-        <div class="row" style="gap:8px;align-items:center">
-          <span class="pill ${st[1]}">${st[0]}</span>
-          <h3 style="margin:0">${k.ic} ${esc(r.title)}</h3>
-        </div>
-        <div class="meta" style="margin-top:4px">
-          Nga <b>${esc(r.reporter_name || 'Vullnetar')}</b> · ${fmtDateTime(r.created_at)}
-          ${r.location_text ? ` · 📍 ${esc(r.location_text)}` : ''}
-          ${r.lat ? ` · <a class="link" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lng}">harta</a>` : ''}
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div class="row" style="gap:10px;align-items:center">
+          <span class="stat-icon" style="width:36px;height:36px;font-size:18px;border-radius:10px" aria-hidden="true">${k.ic}</span>
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--ink)">${esc(r.title)}</h3>
+            <div class="meta" style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span class="pill ${st[1]}" style="font-size:11px;padding:2px 7px">${st[0]}</span>
+              <span>Nga <b>${esc(r.reporter_name || 'Vullnetar')}</b></span>
+              <span>· ${fmtDateTime(r.created_at)}</span>
+              ${r.location_text ? ` · <span>📍 ${esc(r.location_text)}</span>` : ''}
+              ${r.lat ? ` · <a class="link" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lng}">harta ↗</a>` : ''}
+            </div>
+          </div>
         </div>
       </div>
-      <span class="pill ${r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'amber' : 'gray'}">
-        ${r.severity === 'high' ? 'Urgjente' : r.severity === 'medium' ? 'Mesatare' : 'E ulët'}
+      <span class="pill ${r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'amber' : 'gray'}" style="font-size:11px;font-weight:600">
+        ${r.severity === 'high' ? '🚨 Urgjente' : r.severity === 'medium' ? 'Mesatare' : 'E ulët'}
       </span>
     </div>
 
-    <div style="margin-top:12px;white-space:pre-wrap;line-height:1.6">${esc(r.body)}</div>
+    <div style="margin-top:12px;white-space:pre-wrap;line-height:1.6;font-size:14px;color:var(--ink)">${esc(r.body)}</div>
 
     ${canManage ? `
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
-        <label style="margin-top:0">Shënimi i qendrës / trajtimi:</label>
-        <div class="row" style="gap:8px">
+        <label style="margin-top:0;font-size:12.5px;font-weight:600">Shënimi i qendrës / trajtimi:</label>
+        <div class="row" style="gap:8px;margin-top:6px">
           <input id="rep_note_${r.id}" style="flex:1" placeholder="Shënim për zgjidhjen…" value="${esc(r.handled_note || '')}">
           <button class="btn sec sm" data-save-repnote="${r.id}">Ruaj</button>
         </div>
-        <div class="row rep-actions" style="margin-top:10px">
+        <div class="row rep-actions" style="margin-top:10px;gap:8px">
           ${r.status === 'open'
             ? `<button class="rep-act" data-report-id="${r.id}" data-report-status="review">🔎 Merr në shqyrtim</button>`
             : ''}
           ${r.status !== 'resolved'
             ? `<button class="rep-act done" data-report-id="${r.id}" data-report-status="resolved">✓ Shënoje të zgjidhur</button>`
             : `<button class="rep-act reopen" data-report-id="${r.id}" data-report-status="open">↺ Rihap</button>`}
-          ${store.isAdmin() ? `<button class="rep-del" data-del-report="${r.id}">Fshi raportimin</button>` : ''}
+          ${store.isAdmin() ? `<button class="rep-del" data-del-report="${r.id}">🗑️ Fshi raportimin</button>` : ''}
         </div>
       </div>` : (r.handled_note ? `
       <div class="notice" style="margin-top:12px;margin-bottom:0">
@@ -259,7 +320,14 @@ export async function saveReportNote(id: string): Promise<void> {
 }
 
 export async function delReport(id: string): Promise<void> {
-  if (!confirm('Të fshihet ky raportim?')) return;
+  const ok = await confirmAction({
+    title: 'Fshi raportimin',
+    message: 'A jeni i sigurt që dëshironi të fshini këtë raportim nga sistemi?',
+    confirmText: 'Fshi raportimin',
+    confirmClass: 'btn-danger',
+    icon: '🗑️'
+  });
+  if (!ok) return;
   const { error } = await sb.from('reports').delete().eq('id', id);
   if (error) return fail(error);
   toast('Raportimi u fshi.');

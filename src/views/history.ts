@@ -4,7 +4,7 @@ import { esc, truncate } from '../utils/security';
 import { nf, fmtDate, fmtTime, dur, toLocalInput } from '../utils/format';
 import { toast, fail } from '../components/toast';
 import { statCard } from './home';
-import { openModal, closeModal } from '../components/modal';
+import { openModal, closeModal, confirmAction } from '../components/modal';
 import type { HistoryRowItem, HistorySummaryResult, UnitTotalItem } from '../types/database';
 
 export async function vHistory(): Promise<void> {
@@ -98,10 +98,10 @@ export function renderHistory(): void {
     <p class="sub">Çdo turn i regjistruar, sipas njësisë. Numrat këtu janë burimi i shifrës së përgjithshme të fushatës — korrigjoni këtu kur dikush ka gabuar.</p>
 
     <div class="grid g4" style="margin-bottom:18px">
-      ${statCard('var(--teal)', nf(sum.total_signatures), 'Firma (në filtër)')}
-      ${statCard('var(--cyan)', nf(sum.total_shifts), 'Turne')}
-      ${statCard('var(--amber)', nf(sum.open_shifts), 'Turne pa mbyllur')}
-      ${statCard('var(--green)', nf(sum.active_units), 'Njësi me aktivitet')}
+      ${statCard('var(--teal)', nf(sum.total_signatures), 'Firma (në filtër)', '📝')}
+      ${statCard('var(--cyan)', nf(sum.total_shifts), 'Turne', '🗓️')}
+      ${statCard('var(--amber)', nf(sum.open_shifts), 'Turne pa mbyllur', '⏳')}
+      ${statCard('var(--green)', nf(sum.active_units), 'Njësi me aktivitet', '📍')}
     </div>
 
     <div class="card" style="margin-bottom:16px">
@@ -323,7 +323,14 @@ export async function saveCheckin(id: string): Promise<void> {
 }
 
 export async function delCheckin(id: string): Promise<void> {
-  if (!confirm('Të fshihet ky turn i regjistruar? Nënshkrimet e tij do të zbriten nga totali.')) return;
+  const ok = await confirmAction({
+    title: 'Fshi turnin e regjistruar',
+    message: 'A jeni i sigurt që dëshironi të fshini këtë turn të regjistruar? Nënshkrimet e tij do të zbriten nga totali.',
+    confirmText: 'Fshi turnin',
+    confirmClass: 'btn-danger',
+    icon: '🗑️'
+  });
+  if (!ok) return;
   const { error } = await sb.from('checkins').delete().eq('id', id);
   if (error) return fail(error);
   toast('Turni u fshi.');

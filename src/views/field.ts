@@ -4,6 +4,7 @@ import { esc, truncate } from '../utils/security';
 import { nf, fmtDate, fmtTime, dur } from '../utils/format';
 import { getLocation } from '../utils/geo';
 import { toast, fail } from '../components/toast';
+import { confirmAction } from '../components/modal';
 import { slotsHtml } from '../components/slots';
 import { initMap, mapZoom } from '../map/slippyMap';
 import { shiftWhen, joinShift, leaveShift } from './shifts';
@@ -84,14 +85,14 @@ export async function vField(go: (k: any) => void): Promise<void> {
             <table class="tbl"><thead><tr>
               <th>Data</th><th>Njësia</th><th>Kohëzgjatja</th><th style="text-align:right">Firma</th></tr></thead><tbody>
               ${mine.map(r => `<tr>
-                <td>${fmtDate(r.started_at)}</td>
-                <td>${esc(r.unit_code || truncate(r.location_name, 20) || '—')}</td>
-                <td>${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill ok">hapur</span>'}</td>
-                <td style="text-align:right"><b>${nf(r.credited)}</b>
-                  ${r.team_size > 1 ? `<div class="meta">ekip · ${r.team_size} veta</div>` : ''}</td></tr>`).join('')}
+                <td style="font-size:13px">${fmtDate(r.started_at)}</td>
+                <td><span class="unit-tag" style="font-size:11px;padding:2px 7px">${esc(r.unit_code || truncate(r.location_name, 20) || '—')}</span></td>
+                <td style="font-size:13px">${r.ended_at ? dur(r.started_at, r.ended_at) : '<span class="pill ok">hapur</span>'}</td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)"><b>${nf(r.credited)}</b>
+                  ${r.team_size > 1 ? `<div class="meta" style="font-size:11px;font-family:inherit">ekip · ${r.team_size} veta</div>` : ''}</td></tr>`).join('')}
             </tbody></table>` : '<div class="empty">Ende pa turne.</div>'}
         </div>
-        ${shared ? `<div class="hint">Te turnet në ekip shfaqet sa mblodhi i gjithë turni —
+        ${shared ? `<div class="hint" style="margin-top:8px">Te turnet në ekip shfaqet sa mblodhi i gjithë turni —
           ky është rezultati juaj bashkë me të tjerët. Te totali i fushatës numërohet një herë të vetme.</div>` : ''}
       </div>
     </div>
@@ -156,16 +157,26 @@ export function fieldTopCardHtml(cur: CheckinRow | null, sh: ShiftListItem | nul
     const linked = !!cur.shift_id;
     const lead = !linked || (sh && sh.id === cur.shift_id && sh.i_am_lead);
     const head = `
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><h3 style="margin:0">📍 Në terren${sh && sh.id === cur.shift_id
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div class="stat-icon" style="background:#ecfdf5;border-color:#a7f3d0;color:#059669;font-size:18px" aria-hidden="true">📍</div>
+          <div>
+            <h3 style="margin:0;font-size:17px;font-weight:700;color:var(--ink)">Në terren${sh && sh.id === cur.shift_id
               ? ': ' + esc(sh.unit_code + ' · ' + sh.unit_name)
               : (cur.location_name ? ': ' + esc(cur.location_name) : '')}</h3>
-          <div class="meta">${sh && sh.id === cur.shift_id ? esc(shiftWhen(sh)) + ' · ' : ''}check-in
-            ${fmtTime(cur.started_at)} · ${dur(cur.started_at)}
-            ${sh && sh.id === cur.shift_id ? ' · ' + sh.checked_in_count + ' nga ekipi brenda' : ''}
-            ${cur.lat ? ` · <a class="link" target="_blank" rel="noopener"
-              href="https://www.google.com/maps?q=${cur.lat},${cur.lng}">harta</a>` : ''}</div></div>
-        <span class="pill ok">turn i hapur</span>
+            <div class="meta" style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              ${sh && sh.id === cur.shift_id ? esc(shiftWhen(sh)) + ' · ' : ''}
+              <span>check-in <b>${fmtTime(cur.started_at)}</b></span>
+              <span>· kohëzgjatja <b>${dur(cur.started_at)}</b></span>
+              ${sh && sh.id === cur.shift_id ? ' · <b>' + sh.checked_in_count + ' nga ekipi brenda</b>' : ''}
+              ${cur.lat ? ` · <a class="link" target="_blank" rel="noopener"
+                href="https://www.google.com/maps?q=${cur.lat},${cur.lng}">harta ↗</a>` : ''}
+            </div>
+          </div>
+        </div>
+        <span class="pill ok" style="display:inline-flex;align-items:center;gap:6px;font-weight:600">
+          <span style="width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block"></span> turn i hapur
+        </span>
       </div>`;
 
     if (lead) {
@@ -217,14 +228,19 @@ export function fieldTopCardHtml(cur: CheckinRow | null, sh: ShiftListItem | nul
            <b>${fmtTime(new Date(opensAt))}</b>, ${CHECKIN_GRACE_MIN} minuta para fillimit.</div>`;
 
     return `<div class="card" style="margin-bottom:18px">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><h3 style="margin:0">Turni i radhës</h3>
-          <div class="meta" style="text-transform:capitalize">${esc(shiftWhen(sh))}</div></div>
-        <span class="unit-tag ${open ? 'ok' : ''}">${esc(sh.unit_code || '—')}</span>
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div class="stat-icon" style="background:#f0fdfa;border-color:var(--line);font-size:18px" aria-hidden="true">🗓️</div>
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:700">Turni i radhës</h3>
+            <div class="meta" style="text-transform:capitalize;margin-top:2px">${esc(shiftWhen(sh))}</div>
+          </div>
+        </div>
+        <span class="unit-tag ${open ? 'ok' : ''}" style="font-weight:700;font-size:12px;padding:3px 9px">${esc(sh.unit_code || '—')}</span>
       </div>
-      <div class="meta" style="margin-top:5px">${esc(sh.unit_name || '')}${sh.notes ? ' · ' + esc(sh.notes) : ''}
+      <div class="meta" style="margin-top:8px">${esc(sh.unit_name || '')}${sh.notes ? ' · ' + esc(sh.notes) : ''}
         · e hapi ${esc(sh.created_by_name || '—')}</div>
-      ${slotsHtml(sh.id, sh.signed, sh.capacity)}
+      <div style="margin-top:10px">${slotsHtml(sh.id, sh.signed, sh.capacity)}</div>
       ${state}
 
       ${over && sh.i_am_lead ? `
@@ -243,18 +259,23 @@ export function fieldTopCardHtml(cur: CheckinRow | null, sh: ShiftListItem | nul
             ? `<button class="btn red sm" id="btn_leave_next">Hiqem nga turni</button>`
             : `<button class="btn sec sm" id="btn_join_next">Regjistrohu në turn</button>`}
         </div>`}
-      <div class="hint">Turnet e tjera të ekipit i gjeni te
+      <div class="hint" style="margin-top:10px">Turnet e tjera të ekipit i gjeni te
         <a class="link" data-nav-tab="shifts">Turni</a>.</div>
     </div>`;
   }
 
   return `<div class="card" style="margin-bottom:18px">
-    <h3>Ende pa turn të planifikuar</h3>
-    <div class="meta">Check-in-i bëhet vetëm brenda një turni që e hap koordinatori
-      ose mbledhësi juaj i autorizuar. Sapo të planifikohet një, do të shfaqet këtu.</div>
-    <div class="row" style="margin-top:12px">
-      <button class="btn ${store.isTeamLead() ? '' : 'sec'}" data-nav-tab="shifts">
-        ${store.isTeamLead() ? 'Planifiko një turn' : 'Shiko Turnin'}</button>
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div class="stat-icon" aria-hidden="true">🗓️</div>
+      <div>
+        <h3 style="margin:0;font-size:16px;font-weight:700">Ende pa turn të planifikuar</h3>
+        <div class="meta" style="margin-top:4px">Check-in-i bëhet vetëm brenda një turni që e hap koordinatori
+          ose mbledhësi juaj i autorizuar. Sapo të planifikohet një, do të shfaqet këtu.</div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn ${store.isTeamLead() ? '' : 'sec'}" data-nav-tab="shifts">
+            ${store.isTeamLead() ? '➕ Planifiko një turn' : 'Shiko Turnin'}</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -334,13 +355,14 @@ export async function closeTeamShift(shiftId: string, go: (k: any) => void): Pro
   const sig = parseInt(sigInput?.value || '', 10);
   if (isNaN(sig) || sig < 0) return fail('Shkruani sa nënshkrime u mblodhën (0 nëse asnjë).');
 
-  if (
-    !confirm(
-      `Të mbyllet turni me ${nf(sig)} nënshkrime? Dalin nga terreni të gjithë ata të ekipit që bënë check-in.`
-    )
-  ) {
-    return;
-  }
+  const ok = await confirmAction({
+    title: 'Mbyll turnin e ekipit',
+    message: `Të mbyllet turni me ${nf(sig)} nënshkrime? Dalin nga terreni të gjithë ata të ekipit që bënë check-in.`,
+    confirmText: 'Mbyll turnin',
+    confirmClass: 'btn-danger',
+    icon: '📋'
+  });
+  if (!ok) return;
 
   if (btn) btn.disabled = true;
   const { error } = await sb.rpc('shift_check_out', {
@@ -377,7 +399,14 @@ export async function closeOwnShift(id: string, go: (k: any) => void): Promise<v
 }
 
 export async function cancelShift(id: string, go: (k: any) => void): Promise<void> {
-  if (!confirm('Të anulohet ky check-in? Turni nuk do të numërohet për ju.')) return;
+  const ok = await confirmAction({
+    title: 'Anulo check-in-in',
+    message: 'A jeni i sigurt që dëshironi të anuloni këtë check-in? Turni nuk do të numërohet për ju.',
+    confirmText: 'Anulo check-in',
+    confirmClass: 'btn-danger',
+    icon: '⚠️'
+  });
+  if (!ok) return;
   const { error } = await sb.from('checkins').delete().eq('id', id);
   if (error) return fail(error);
   vField(go);

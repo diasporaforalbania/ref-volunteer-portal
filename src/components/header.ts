@@ -21,13 +21,9 @@ export function renderHeader(): string {
       ${avatarHtml(store.ME.photo_path, store.ME.full_name, 'av')}
       <div><div class="nm">${esc(store.ME.full_name || email)}</div>
            <div class="rl">${roleName}${unitName}</div></div>
-      <button class="btn ghost sm" id="btn_feedback"
-              style="color:#fff;border:1px solid rgba(255,255,255,.5)"
-              title="Sugjero një ide ose raporto">💡 Ide</button>
-      <button class="btn ghost sm push-toggle" id="btn_push"
-              style="color:#fff;border:1px solid rgba(255,255,255,.5)"
-              aria-pressed="false" title="Njoftimet">🔕</button>
-      <button class="btn ghost sm" style="color:#fff;border:1px solid rgba(255,255,255,.5)" id="btn_logout">Dil</button>
+      <button class="btn-hdr" id="btn_feedback" title="Sugjero një ide ose raporto">💡 Ide</button>
+      <button class="btn-hdr push-toggle" id="btn_push" aria-pressed="false" title="Njoftimet">🔕</button>
+      <button class="btn-hdr" id="btn_logout">Dil</button>
     </div>
   </div></header>`;
 }
