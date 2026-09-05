@@ -62,9 +62,10 @@ select
   -- fjalor si te `/api/points` dhe të mos mbajë dy harta fushash.
   s.starts_at                                     as opens_at,
   s.ends_at                                       as closes_at,
-  s.time_zone                                     as time_zone,
   -- Pika e saktë e takimit, e shkruar nga vullnetari te portali. PUBLIKE.
-  nullif(trim(s.notes), '')                       as spot
+  nullif(trim(s.notes), '')                       as spot,
+  -- Shtohet në fund që CREATE OR REPLACE VIEW të ruajë rendin e kolonave.
+  s.time_zone                                     as time_zone
 from public.shifts s
 join public.units  u on u.id = s.unit_id
 where s.closed_at is null        -- turni jo i mbyllur nga udhëheqësi
