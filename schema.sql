@@ -1345,6 +1345,41 @@ begin
   return v_id;
 end $$;
 
+-- Përditësimi i identitetit dhe objektivit të njësisë. Kalon në RPC që kodi
+-- (unik), kufijtë e tekstit dhe roli admin të verifikohen edhe në bazë.
+create or replace function public.unit_update(
+  p_unit uuid, p_code text, p_name text, p_region text default null,
+  p_territory text default null, p_target integer default 0
+)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini mund të ndryshojë njësitë.';
+  end if;
+  if nullif(trim(p_code), '') is null or nullif(trim(p_name), '') is null then
+    raise exception 'Kodi dhe emri i njësisë janë të detyrueshëm.';
+  end if;
+  if length(trim(p_code)) > 12 or length(trim(p_name)) > 120
+     or length(coalesce(trim(p_region), '')) > 80
+     or length(coalesce(trim(p_territory), '')) > 160 then
+    raise exception 'Një nga fushat e njësisë është shumë e gjatë.';
+  end if;
+  if coalesce(p_target, 0) < 0 then
+    raise exception 'Objektivi nuk mund të jetë negativ.';
+  end if;
+
+  update public.units
+     set code = upper(trim(p_code)),
+         name = trim(p_name),
+         region = nullif(trim(p_region), ''),
+         territory = nullif(trim(p_territory), ''),
+         target = coalesce(p_target, 0)
+   where id = p_unit;
+  if not found then
+    raise exception 'Njësia nuk u gjet.';
+  end if;
+end $$;
+
 create or replace function public.unit_delete(p_unit uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
@@ -1358,8 +1393,10 @@ begin
 end $$;
 
 revoke all on function public.unit_create(text, text, text, text, integer) from public, anon;
+revoke all on function public.unit_update(uuid, text, text, text, text, integer) from public, anon;
 revoke all on function public.unit_delete(uuid) from public, anon;
 grant execute on function public.unit_create(text, text, text, text, integer) to authenticated;
+grant execute on function public.unit_update(uuid, text, text, text, text, integer) to authenticated;
 grant execute on function public.unit_delete(uuid) to authenticated;
 
 -- Korrigjimi i historikut të një turni (vetëm qendra) — numri i firmave dhe orët.

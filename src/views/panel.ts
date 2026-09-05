@@ -91,7 +91,7 @@ export async function vPanel(): Promise<void> {
                   ${isAdm ? `
                     <td style="text-align:right">
                       <div class="row" style="justify-content:flex-end;gap:4px">
-                        <button class="btn ghost sm" data-edit-unit-target="${u.id}" data-target-val="${u.target}" data-unit-name="${esc(u.name)}" title="Ndrysho objektivin">🎯</button>
+                        <button class="btn ghost sm" data-edit-unit="${u.id}" title="Ndrysho njësinë">✎ Ndrysho</button>
                         <button class="btn red sm" data-delete-unit="${u.id}" data-unit-name="${esc(u.name)}" style="font-size:11.5px;padding:3px 7px">Fshi</button>
                       </div>
                     </td>
@@ -186,42 +186,67 @@ export async function vPanel(): Promise<void> {
     });
   });
 
-  // Attach edit target handler
-  view.querySelectorAll<HTMLElement>('[data-edit-unit-target]').forEach(btn => {
+  // Admini ndryshon të gjitha fushat përshkruese të njësisë në një vend.
+  view.querySelectorAll<HTMLElement>('[data-edit-unit]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const unitId = btn.dataset.editUnitTarget;
-      const unitName = btn.dataset.unitName || 'njësi';
-      const oldVal = btn.dataset.targetVal || '0';
-      if (!unitId) return;
+      const unit = units.find(u => u.id === btn.dataset.editUnit);
+      if (!unit) return;
 
       openModal(`
       <div class="modal">
         <button class="modal-x" id="modal_close_btn">✕</button>
-        <h3>Përditëso objektivin</h3>
-        <div class="meta" style="margin-bottom:12px">Njësia: <b>${esc(unitName)}</b></div>
-        <label>Objektivi i ri i nënshkrimeve *</label>
-        <input id="ut_target" type="number" min="0" value="${oldVal}">
+        <h3>Ndrysho njësinë organizative</h3>
+        <label>Kodi i njësisë *</label>
+        <input id="eu_code" maxlength="12" value="${esc(unit.code)}" style="text-transform:uppercase">
+        <label>Emri i njësisë *</label>
+        <input id="eu_name" maxlength="120" value="${esc(unit.name)}">
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1">
+            <label>Rajoni</label>
+            <input id="eu_region" maxlength="80" value="${esc(unit.region || '')}">
+          </div>
+          <div style="flex:1">
+            <label>Territori</label>
+            <input id="eu_territory" maxlength="160" value="${esc(unit.territory || '')}">
+          </div>
+        </div>
+        <label>Objektivi i nënshkrimeve *</label>
+        <input id="eu_target" type="number" min="0" value="${unit.target}">
+        <div class="meta" style="margin-top:7px">Statusi hapur/mbyllur dhe koordinatorët menaxhohen me kontrollet e tyre të veçanta.</div>
         <div class="row" style="margin-top:16px">
-          <button class="btn" id="ut_save_btn">Ruaj objektivin</button>
-          <button class="btn ghost" id="ut_cancel_btn">Anulo</button>
+          <button class="btn" id="eu_save_btn">Ruaj ndryshimet</button>
+          <button class="btn ghost" id="eu_cancel_btn">Anulo</button>
         </div>
       </div>`);
 
       document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
-      document.getElementById('ut_cancel_btn')?.addEventListener('click', closeModal);
-      document.getElementById('ut_save_btn')?.addEventListener('click', async () => {
-        const inp = document.getElementById('ut_target') as HTMLInputElement | null;
-        const saveBtn = document.getElementById('ut_save_btn') as HTMLButtonElement | null;
-        const target = parseInt(inp?.value || '0', 10);
-        if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër pozitiv.');
+      document.getElementById('eu_cancel_btn')?.addEventListener('click', closeModal);
+      document.getElementById('eu_save_btn')?.addEventListener('click', async () => {
+        const code = ((document.getElementById('eu_code') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
+        const name = ((document.getElementById('eu_name') as HTMLInputElement | null)?.value || '').trim();
+        const region = ((document.getElementById('eu_region') as HTMLInputElement | null)?.value || '').trim() || null;
+        const territory = ((document.getElementById('eu_territory') as HTMLInputElement | null)?.value || '').trim() || null;
+        const target = parseInt((document.getElementById('eu_target') as HTMLInputElement | null)?.value || '0', 10);
+        const saveBtn = document.getElementById('eu_save_btn') as HTMLButtonElement | null;
+
+        if (!code) return fail('Kodi i njësisë është i detyrueshëm.');
+        if (!name) return fail('Emri i njësisë është i detyrueshëm.');
+        if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër zero ose pozitiv.');
 
         if (saveBtn) saveBtn.disabled = true;
-        const { error } = await sb.from('units').update({ target }).eq('id', unitId);
+        const { error } = await sb.rpc('unit_update', {
+          p_unit: unit.id,
+          p_code: code,
+          p_name: name,
+          p_region: region,
+          p_territory: territory,
+          p_target: target,
+        });
         if (saveBtn) saveBtn.disabled = false;
 
         if (error) return fail(error);
         closeModal();
-        toast('Objektivi u përditësua.');
+        toast('Njësia u përditësua.');
         vPanel();
       });
     });
@@ -284,4 +309,3 @@ export function exportUnitsCsv(units: UnitTotalItem[]): void {
   link.click();
   link.remove();
 }
-
