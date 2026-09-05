@@ -39,12 +39,9 @@
 -- ekziston. Faqja publike tregon emrin e zonës, pikën e takimit dhe orarin,
 -- jo hartë.
 --
--- ⚠️  KUJDES: `u.is_open`
--- Filtri `u.is_open` do të thotë se një turn i planifikuar për një njësi që
--- qendra nuk e ka hapur ende NUK do të dalë. Ky është shkaku më i mundshëm
--- nëse një turn ekziston te portali por nuk duket te faqja. Diagnostika në
--- fund të skedarit e tregon menjëherë. Nëse doni t'i shfaqni edhe turnet e
--- njësive ende të pahapura, hiqni atë rresht.
+-- Turni i planifikuar publikohet pavarësisht `u.is_open`: krijimi i turnit
+-- është vendimi eksplicit që ai orar duhet të shfaqet. `is_open` vazhdon të
+-- kontrollojë check-in-in në terren.
 -- ============================================================================
 
 create or replace view public.public_upcoming_shifts as
@@ -69,7 +66,6 @@ select
 from public.shifts s
 join public.units  u on u.id = s.unit_id
 where s.closed_at is null        -- turni jo i mbyllur nga udhëheqësi
-  and u.is_open                  -- njësia e hapur nga qendra (shih KUJDES më lart)
   and s.starts_at > now()        -- VETËM ato që nuk kanë nisur ende
 order by s.starts_at, u.code;
 
@@ -98,9 +94,8 @@ notify pgrst, 'reload schema';
 --   u.name,
 --   s.starts_at,
 --   s.closed_at is null                    as turni_i_hapur,
---   u.is_open                              as njesia_e_hapur,
 --   s.starts_at > now()                    as ende_pa_nisur,
---   (s.closed_at is null and u.is_open and s.starts_at > now())
+--   (s.closed_at is null and s.starts_at > now())
 --                                          as del_te_faqja
 -- from public.shifts s
 -- join public.units  u on u.id = s.unit_id

@@ -34,6 +34,29 @@ end $$;
 grant insert (unit_id, starts_at, ends_at, time_zone, capacity, notes, created_by, created_by_name)
   on public.shifts to authenticated;
 
+create or replace function public.vol_can_access_shift_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_approved()
+     and (
+       public.vol_is_qendra()
+       or exists (select 1 from public.volunteers v
+                   where v.id = auth.uid() and v.unit_id = p_unit)
+       or public.vol_coordinates_unit(p_unit)
+     );
+$$;
+
+drop policy if exists sh_read on public.shifts;
+create policy sh_read on public.shifts for select to authenticated
+  using (public.vol_can_access_shift_unit(unit_id));
+
+drop policy if exists su_read on public.shift_signups;
+create policy su_read on public.shift_signups for select to authenticated
+  using ( public.vol_is_qendra()
+          or volunteer_id = auth.uid()
+          or exists (select 1 from public.shifts s
+                      where s.id = shift_id
+                        and public.vol_can_access_shift_unit(s.unit_id)) );
+
 -- ---- 1) Redaktimi i turneve: GRANT + politikë UPDATE -----------------------
 -- Vetëm ora, kapaciteti dhe shënimet janë të ndryshueshme. Njësia dhe
 -- created_by* mbeten jashtë grantit me qëllim.
@@ -136,7 +159,8 @@ language sql stable security definer set search_path = public as $$
            where g.shift_id = s.id),
          exists (select 1 from public.shift_signups g
                   where g.shift_id = s.id and g.volunteer_id = auth.uid()),
-         exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by),
+         (coalesce(public.vol_role() in ('ndihmes','mbledhes','koordinator'), false)
+          and public.vol_can_access_shift_unit(s.unit_id)),
          (s.created_by = auth.uid() or public.vol_is_admin()),
          (select count(*) from public.checkins c where c.shift_id = s.id),
          coalesce((select sum(c.signatures)::integer from public.checkins c
@@ -145,8 +169,7 @@ language sql stable security definer set search_path = public as $$
     join public.units u on u.id = s.unit_id
     left join public.volunteers k on k.id = s.created_by
    where public.vol_is_approved()
-     and ( public.vol_is_qendra()
-           or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = s.created_by) )
+     and public.vol_can_access_shift_unit(s.unit_id)
      -- Adminët i shohin edhe turnet e hapura e të harruara nga çdo kohë, që të
      -- mund t'i mbyllin; të tjerët vetëm dritaren e zakonshme 12-orëshe + tutje.
      and ( s.ends_at >= coalesce(p_from, now() - interval '12 hours')

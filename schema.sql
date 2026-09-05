@@ -551,6 +551,20 @@ language sql stable security definer set search_path = public as $$
      );
 $$;
 
+-- A mund ta përdorë vullnetari aktual një turn të kësaj zone? Turni i përket
+-- zonës (`unit_id`), jo personit që e krijoi: kështu një turn i hapur nga
+-- admini për A1 u del të gjithë anëtarëve dhe koordinatorëve të A1.
+create or replace function public.vol_can_access_shift_unit(p_unit uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.vol_is_approved()
+     and (
+       public.vol_is_qendra()
+       or exists (select 1 from public.volunteers v
+                   where v.id = auth.uid() and v.unit_id = p_unit)
+       or public.vol_coordinates_unit(p_unit)
+     );
+$$;
+
 
 -- ============================ REGJISTRIMI ===================================
 -- Kur dikush hap llogari, krijohet automatikisht rreshti i vullnetarit
@@ -797,8 +811,7 @@ grant update (starts_at, ends_at, time_zone, capacity, notes) on public.shifts t
 
 drop policy if exists sh_read on public.shifts;
 create policy sh_read on public.shifts for select to authenticated
-  using ( public.vol_is_qendra()
-          or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = created_by) );
+  using (public.vol_can_access_shift_unit(unit_id));
 
 -- `created_by = auth.uid()` te inserti: turni i mbetet gjithmonë atij që e hapi,
 -- sepse më vonë vetëm ai e mbyll dhe raporton nënshkrimet.
@@ -827,8 +840,7 @@ create policy su_read on public.shift_signups for select to authenticated
           or volunteer_id = auth.uid()
           or exists (select 1 from public.shifts s
                       where s.id = shift_id
-                        and exists (select 1 from public.vol_my_team_ids() t(id)
-                                     where t.id = s.created_by)) );
+                        and public.vol_can_access_shift_unit(s.unit_id)) );
 drop policy if exists su_insert on public.shift_signups;
 drop policy if exists su_delete on public.shift_signups;
 create policy su_delete on public.shift_signups for delete to authenticated
@@ -1687,9 +1699,9 @@ language sql stable security definer set search_path = public as $$
            where g.shift_id = s.id),
          exists (select 1 from public.shift_signups g
                   where g.shift_id = s.id and g.volunteer_id = auth.uid()),
-         -- "Në ekip" = turni u hap nga unë ose nga dikush MBI mua; vetëm atëherë
-         -- regjistrohem dhe bëj check-in.
-         exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by),
+         -- Turni i përket zonës, pavarësisht nëse e hapi admini apo një udhëheqës.
+         (coalesce(public.vol_role() in ('ndihmes','mbledhes','koordinator'), false)
+          and public.vol_can_access_shift_unit(s.unit_id)),
          (s.created_by = auth.uid() or public.vol_is_admin()),
          (select count(*) from public.checkins c where c.shift_id = s.id),
          coalesce((select sum(c.signatures)::integer from public.checkins c
@@ -1698,8 +1710,7 @@ language sql stable security definer set search_path = public as $$
     join public.units u on u.id = s.unit_id
     left join public.volunteers k on k.id = s.created_by
    where public.vol_is_approved()
-     and ( public.vol_is_qendra()
-           or exists (select 1 from public.vol_my_team_ids() t(id) where t.id = s.created_by) )
+     and public.vol_can_access_shift_unit(s.unit_id)
      -- Adminët i shohin edhe turnet e hapura e të harruara nga çdo kohë, që të
      -- mund t'i mbyllin; të tjerët vetëm dritaren e zakonshme 12-orëshe + tutje.
      and ( s.ends_at >= coalesce(p_from, now() - interval '12 hours')
@@ -1728,7 +1739,8 @@ language sql stable security definer set search_path = public as $$
   with vis as (
     select s.* from public.shifts s
      where public.vol_is_approved()
-       and exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by)
+       and coalesce(public.vol_role() in ('ndihmes','mbledhes','koordinator'), false)
+       and public.vol_can_access_shift_unit(s.unit_id)
   ),
   pick as (
     select v.*, 0 as pri from vis v
@@ -1791,7 +1803,7 @@ begin
   select * into s from public.shifts where id = p_shift;
   if not found then raise exception 'Ky turn nuk ekziston.'; end if;
   if s.closed_at is not null then raise exception 'Ky turn është mbyllur tashmë.'; end if;
-  if not exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = s.created_by) then
+  if not public.vol_can_access_shift_unit(s.unit_id) then
     raise exception 'Ky turn nuk është i ekipit tuaj.';
   end if;
   if now() < s.starts_at - public.shift_grace() then
@@ -1923,7 +1935,7 @@ grant execute on function public.checkin_close_own(uuid, integer, text) to authe
 create or replace function public.shift_join(p_shift uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_cap integer; v_taken integer; v_ends timestamptz; v_closed timestamptz;
-        v_by uuid; v_name text; v_role text;
+        v_unit uuid; v_name text; v_role text;
 begin
   if not public.vol_is_approved() then
     raise exception 'Vetëm vullnetarët e miratuar regjistrohen në turne.';
@@ -1933,12 +1945,12 @@ begin
     raise exception 'Në turne regjistrohen vetëm vullnetarët e terrenit.';
   end if;
 
-  select capacity, ends_at, closed_at, created_by into v_cap, v_ends, v_closed, v_by
+  select capacity, ends_at, closed_at, unit_id into v_cap, v_ends, v_closed, v_unit
     from public.shifts where id = p_shift for update;
   if not found then raise exception 'Ky turn nuk ekziston.'; end if;
   if v_closed is not null then raise exception 'Ky turn është mbyllur.'; end if;
   if v_ends < now() then raise exception 'Ky turn ka mbaruar.'; end if;
-  if not exists (select 1 from public.vol_my_lead_ids() t(id) where t.id = v_by) then
+  if not public.vol_can_access_shift_unit(v_unit) then
     raise exception 'Ky turn nuk është i ekipit tuaj.';
   end if;
 
@@ -2174,7 +2186,8 @@ select
 from public.shifts s
 join public.units  u on u.id = s.unit_id
 where s.closed_at is null
-  and u.is_open
+  -- Turni i planifikuar publikohet pavarësisht flamurit operacional të njësisë.
+  -- `units.is_open` vazhdon të kontrollojë check-in-in në terren.
   and s.starts_at > now()
 order by s.starts_at, u.code;
 
