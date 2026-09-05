@@ -141,6 +141,7 @@ export interface ShiftRow {
   unit_id: string;
   starts_at: string;
   ends_at: string;
+  time_zone: string;
   capacity: number;
   notes: string | null;
   created_by: string | null;
@@ -260,6 +261,7 @@ export interface ShiftListItem {
   unit_is_open: boolean;
   starts_at: string;
   ends_at: string;
+  time_zone: string;
   capacity: number;
   notes: string | null;
   created_by: string | null;

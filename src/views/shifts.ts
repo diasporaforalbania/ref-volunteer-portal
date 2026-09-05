@@ -1,17 +1,37 @@
 import { sb } from '../api/client';
 import { store } from '../state/store';
 import { esc } from '../utils/security';
-import { fmtDate, fmtTime, toLocalInput, nf } from '../utils/format';
+import { fmtDate, fmtTime, toZonedInput, zonedDateTimeToIso, nf } from '../utils/format';
 import { toast, fail } from '../components/toast';
 import { openModal, closeModal, confirmAction } from '../components/modal';
 import { slotsHtml } from '../components/slots';
 import type { ShiftListItem, UnitRow } from '../types/database';
 
 export const DAYS_SQ = ['E diel', 'E hënë', 'E martë', 'E mërkurë', 'E enjte', 'E premte', 'E shtunë'];
+export const DEFAULT_SHIFT_TIME_ZONE = 'Europe/Tirane';
+export const SHIFT_TIME_ZONES = [
+  ['Europe/Athens', 'Evropa Lindore (Athinë)'],
+  ['Europe/Tirane', 'Evropa Qendrore (Tiranë)'],
+  ['Europe/London', 'Londër'],
+  ['America/New_York', 'Nju Jork'],
+  ['America/Los_Angeles', 'Kaliforni'],
+  ['Australia/Melbourne', 'Melburn'],
+  ['Australia/Sydney', 'Sidnej'],
+] as const;
+
+const zoneLabel = (zone: string): string => SHIFT_TIME_ZONES.find(([id]) => id === zone)?.[1] || zone;
+const zoneOptions = (selected: string): string => SHIFT_TIME_ZONES.map(([id, label]) =>
+  `<option value="${id}" ${id === selected ? 'selected' : ''}>${label}</option>`
+).join('');
+
+const weekdayInZone = (ts: string, timeZone: string): string => {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(new Date(ts));
+  return DAYS_SQ[['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday)] || '';
+};
 
 export function shiftWhen(s: ShiftListItem): string {
-  const d = new Date(s.starts_at);
-  return `${DAYS_SQ[d.getDay()]}, ${fmtDate(s.starts_at)} · ${fmtTime(s.starts_at)} – ${fmtTime(s.ends_at)}`;
+  const zone = s.time_zone || DEFAULT_SHIFT_TIME_ZONE;
+  return `${weekdayInZone(s.starts_at, zone)}, ${fmtDate(s.starts_at, zone)} · ${fmtTime(s.starts_at, zone)}–${fmtTime(s.ends_at, zone)} · ${zoneLabel(zone)}`;
 }
 
 export type ShiftFilter = 'all' | 'mine' | 'upcoming' | 'open';
@@ -222,6 +242,8 @@ export function openShiftModal(units: UnitRow[]): void {
   const now = new Date();
   const defStart = new Date(now.getTime() + 3600000);
   const defEnd = new Date(now.getTime() + 3 * 3600000);
+  const defStartInput = toZonedInput(defStart, DEFAULT_SHIFT_TIME_ZONE);
+  const defEndInput = toZonedInput(defEnd, DEFAULT_SHIFT_TIME_ZONE);
   const myUnitId = store.ME?.unit_id;
 
   openModal(`
@@ -236,14 +258,20 @@ export function openShiftModal(units: UnitRow[]): void {
     </select>
     <div class="row" style="margin-top:8px">
       <div style="flex:1">
-        <label>Fillon *</label>
-        <input id="sh_start" type="datetime-local" value="${toLocalInput(defStart)}">
+        <label>Data e fillimit *</label>
+        <input id="sh_start_date" type="date" value="${defStartInput.date}">
+        <label>Ora (24-orëshe) *</label>
+        <input id="sh_start_time" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${defStartInput.time}">
       </div>
       <div style="flex:1">
-        <label>Mbaron *</label>
-        <input id="sh_end" type="datetime-local" value="${toLocalInput(defEnd)}">
+        <label>Data e mbarimit *</label>
+        <input id="sh_end_date" type="date" value="${defEndInput.date}">
+        <label>Ora (24-orëshe) *</label>
+        <input id="sh_end_time" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${defEndInput.time}">
       </div>
     </div>
+    <label>Zona kohore *</label>
+    <select id="sh_zone">${zoneOptions(DEFAULT_SHIFT_TIME_ZONE)}</select>
     <label>Kapaciteti (sa veta kërkohen, 0 = pa kufi)</label>
     <input id="sh_cap" type="number" min="0" value="4">
     <label>Pika e saktë e takimit</label>
@@ -262,27 +290,31 @@ export function openShiftModal(units: UnitRow[]): void {
 
 export async function saveShift(): Promise<void> {
   const unitSelect = document.getElementById('sh_unit') as HTMLSelectElement | null;
-  const startInput = document.getElementById('sh_start') as HTMLInputElement | null;
-  const endInput = document.getElementById('sh_end') as HTMLInputElement | null;
+  const startDate = (document.getElementById('sh_start_date') as HTMLInputElement | null)?.value || '';
+  const startTime = (document.getElementById('sh_start_time') as HTMLInputElement | null)?.value || '';
+  const endDate = (document.getElementById('sh_end_date') as HTMLInputElement | null)?.value || '';
+  const endTime = (document.getElementById('sh_end_time') as HTMLInputElement | null)?.value || '';
+  const time_zone = (document.getElementById('sh_zone') as HTMLSelectElement | null)?.value || DEFAULT_SHIFT_TIME_ZONE;
   const capInput = document.getElementById('sh_cap') as HTMLInputElement | null;
   const notesInput = document.getElementById('sh_notes') as HTMLTextAreaElement | null;
   const btn = document.getElementById('sh_save_btn') as HTMLButtonElement | null;
 
   const unit_id = unitSelect?.value;
-  const starts_at = startInput?.value;
-  const ends_at = endInput?.value;
+  const starts_at = zonedDateTimeToIso(startDate, startTime, time_zone);
+  const ends_at = zonedDateTimeToIso(endDate, endTime, time_zone);
   const capacity = parseInt(capInput?.value || '0', 10) || 0;
   const notes = (notesInput?.value || '').trim() || null;
 
-  if (!unit_id || !starts_at || !ends_at) return fail('Plotësoni të gjitha fushat e detyrueshme.');
+  if (!unit_id || !starts_at || !ends_at) return fail('Plotësoni datat dhe orët në formatin 24-orësh HH:MM.');
   if (new Date(ends_at) <= new Date(starts_at)) return fail('Mbarimi duhet të jetë pas fillimit.');
 
   if (btn) btn.disabled = true;
 
   const { error } = await sb.from('shifts').insert({
     unit_id,
-    starts_at: new Date(starts_at).toISOString(),
-    ends_at: new Date(ends_at).toISOString(),
+    starts_at,
+    ends_at,
+    time_zone,
     capacity,
     notes,
     created_by: store.ME?.id,
@@ -302,6 +334,9 @@ export async function saveShift(): Promise<void> {
 export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
   const unit = units.find(u => u.id === s.unit_id);
   const unitLabel = `${unit?.code || s.unit_code || '—'} · ${unit?.name || s.unit_name || ''}`;
+  const timeZone = s.time_zone || DEFAULT_SHIFT_TIME_ZONE;
+  const startInput = toZonedInput(s.starts_at, timeZone);
+  const endInput = toZonedInput(s.ends_at, timeZone);
 
   openModal(`
   <div class="modal">
@@ -311,14 +346,20 @@ export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
     <input value="${esc(unitLabel)}" disabled>
     <div class="row" style="margin-top:8px">
       <div style="flex:1">
-        <label>Fillon *</label>
-        <input id="esh_start" type="datetime-local" value="${toLocalInput(new Date(s.starts_at))}">
+        <label>Data e fillimit *</label>
+        <input id="esh_start_date" type="date" value="${startInput.date}">
+        <label>Ora (24-orëshe) *</label>
+        <input id="esh_start_time" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${startInput.time}">
       </div>
       <div style="flex:1">
-        <label>Mbaron *</label>
-        <input id="esh_end" type="datetime-local" value="${toLocalInput(new Date(s.ends_at))}">
+        <label>Data e mbarimit *</label>
+        <input id="esh_end_date" type="date" value="${endInput.date}">
+        <label>Ora (24-orëshe) *</label>
+        <input id="esh_end_time" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${endInput.time}">
       </div>
     </div>
+    <label>Zona kohore *</label>
+    <select id="esh_zone">${zoneOptions(timeZone)}</select>
     <label>Kapaciteti (sa veta kërkohen, 0 = pa kufi)</label>
     <input id="esh_cap" type="number" min="0" value="${s.capacity}">
     <label>Pika e saktë e takimit</label>
@@ -336,25 +377,29 @@ export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
 }
 
 export async function saveShiftEdit(id: string): Promise<void> {
-  const startInput = document.getElementById('esh_start') as HTMLInputElement | null;
-  const endInput = document.getElementById('esh_end') as HTMLInputElement | null;
+  const startDate = (document.getElementById('esh_start_date') as HTMLInputElement | null)?.value || '';
+  const startTime = (document.getElementById('esh_start_time') as HTMLInputElement | null)?.value || '';
+  const endDate = (document.getElementById('esh_end_date') as HTMLInputElement | null)?.value || '';
+  const endTime = (document.getElementById('esh_end_time') as HTMLInputElement | null)?.value || '';
+  const time_zone = (document.getElementById('esh_zone') as HTMLSelectElement | null)?.value || DEFAULT_SHIFT_TIME_ZONE;
   const capInput = document.getElementById('esh_cap') as HTMLInputElement | null;
   const notesInput = document.getElementById('esh_notes') as HTMLTextAreaElement | null;
   const btn = document.getElementById('esh_save_btn') as HTMLButtonElement | null;
 
-  const starts_at = startInput?.value;
-  const ends_at = endInput?.value;
+  const starts_at = zonedDateTimeToIso(startDate, startTime, time_zone);
+  const ends_at = zonedDateTimeToIso(endDate, endTime, time_zone);
   const capacity = parseInt(capInput?.value || '0', 10) || 0;
   const notes = (notesInput?.value || '').trim() || null;
 
-  if (!starts_at || !ends_at) return fail('Plotësoni orarin e turnit.');
+  if (!starts_at || !ends_at) return fail('Plotësoni datat dhe orët në formatin 24-orësh HH:MM.');
   if (new Date(ends_at) <= new Date(starts_at)) return fail('Mbarimi duhet të jetë pas fillimit.');
 
   if (btn) btn.disabled = true;
 
   const { error } = await sb.from('shifts').update({
-    starts_at: new Date(starts_at).toISOString(),
-    ends_at: new Date(ends_at).toISOString(),
+    starts_at,
+    ends_at,
+    time_zone,
     capacity,
     notes,
   }).eq('id', id);

@@ -62,6 +62,7 @@ select
   -- fjalor si te `/api/points` dhe të mos mbajë dy harta fushash.
   s.starts_at                                     as opens_at,
   s.ends_at                                       as closes_at,
+  s.time_zone                                     as time_zone,
   -- Pika e saktë e takimit, e shkruar nga vullnetari te portali. PUBLIKE.
   nullif(trim(s.notes), '')                       as spot
 from public.shifts s

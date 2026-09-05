@@ -40,13 +40,18 @@ const MAX_SHIFTS = 50;
 const UPSTREAM_TIMEOUT_MS = 4000;
 
 /** Gjatësitë maksimale të fushave tekst, pas prerjes. */
-const MAX_LEN = { unit_code: 12, unit_name: 120, area: 160, region: 80, spot: 200 };
+const MAX_LEN = { unit_code: 12, unit_name: 120, area: 160, region: 80, spot: 200, time_zone: 40 };
+
+const ALLOWED_TIME_ZONES = new Set([
+  'Europe/Athens', 'Europe/Tirane', 'Europe/London', 'America/New_York',
+  'America/Los_Angeles', 'Australia/Melbourne', 'Australia/Sydney',
+]);
 
 /**
  * Kolonat që kërkohen upstream — të fiksuara, nuk vijnë nga kërkesa. Pa `select`
  * eksplicit PostgREST kthen `*`, dhe `*` do të thotë "çfarëdo që ka pamja nesër".
  */
-const UPSTREAM_SELECT = 'id,unit_code,unit_name,area,region,opens_at,closes_at,spot';
+const UPSTREAM_SELECT = 'id,unit_code,unit_name,area,region,opens_at,closes_at,time_zone,spot';
 
 /**
  * Tekst i pabesuar → tekst i sigurt për t'u renderuar. Identik me `points.js`:
@@ -103,6 +108,7 @@ export function sanitizeShift(row) {
     region: cleanText(row.region, MAX_LEN.region),
     opens_at,
     closes_at: cleanTimestamp(row.closes_at),
+    time_zone: ALLOWED_TIME_ZONES.has(row.time_zone) ? row.time_zone : 'Europe/Tirane',
     // Pika e saktë e takimit (shifts.notes). Tekst i shkruar nga njeriu ->
     // sanitizohet si `area`; konsumatori DUHET gjithsesi ta escape-ojë.
     spot: cleanText(row.spot, MAX_LEN.spot),

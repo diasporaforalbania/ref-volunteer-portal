@@ -211,6 +211,7 @@ create table if not exists public.shifts (
   unit_id         uuid not null references public.units on delete cascade,
   starts_at       timestamptz not null,
   ends_at         timestamptz not null,
+  time_zone       text not null default 'Europe/Tirane',
   capacity        integer not null default 0,      -- 0 = pa kufi
   notes           text,
   created_by      uuid references public.volunteers on delete set null,
@@ -219,8 +220,26 @@ create table if not exists public.shifts (
   -- turni mbaron për të gjithë ekipin njëherësh, shih `shift_check_out`.
   closed_at       timestamptz,
   created_at      timestamptz not null default now(),
-  constraint shifts_time_ck check (ends_at > starts_at)
+  constraint shifts_time_ck check (ends_at > starts_at),
+  constraint shifts_time_zone_ck check (time_zone in (
+    'Europe/Athens', 'Europe/Tirane', 'Europe/London', 'America/New_York',
+    'America/Los_Angeles', 'Australia/Melbourne', 'Australia/Sydney'
+  ))
 );
+
+-- Për bazat ekzistuese: turnet e vjetra interpretohen me zonën e Shqipërisë.
+alter table public.shifts add column if not exists time_zone text not null default 'Europe/Tirane';
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'shifts_time_zone_ck' and conrelid = 'public.shifts'::regclass
+  ) then
+    alter table public.shifts add constraint shifts_time_zone_ck check (time_zone in (
+      'Europe/Athens', 'Europe/Tirane', 'Europe/London', 'America/New_York',
+      'America/Los_Angeles', 'Australia/Melbourne', 'Australia/Sydney'
+    ));
+  end if;
+end $$;
 
 create table if not exists public.shift_signups (
   id             uuid primary key default gen_random_uuid(),
@@ -769,12 +788,12 @@ create policy chk_delete on public.checkins for delete to authenticated
 -- terrenit sheh vetëm turnet e degës së vet (`vol_my_team_ids`).
 revoke all on public.shifts from anon, authenticated;
 grant select, delete on public.shifts to authenticated;
-grant insert (unit_id, starts_at, ends_at, capacity, notes, created_by, created_by_name)
+grant insert (unit_id, starts_at, ends_at, time_zone, capacity, notes, created_by, created_by_name)
   on public.shifts to authenticated;
 -- Redaktimi i një turni të planifikuar — vetëm ora dhe kapaciteti/shënimet.
 -- Njësia dhe autorësia (created_by*) mbeten të pandryshueshme; kush e mund e
 -- kontrollon `sh_update`.
-grant update (starts_at, ends_at, capacity, notes) on public.shifts to authenticated;
+grant update (starts_at, ends_at, time_zone, capacity, notes) on public.shifts to authenticated;
 
 drop policy if exists sh_read on public.shifts;
 create policy sh_read on public.shifts for select to authenticated
@@ -1645,14 +1664,14 @@ language sql immutable as $$ select interval '15 minutes' $$;
 drop function if exists public.shift_list(timestamptz);
 create or replace function public.shift_list(p_from timestamptz default null)
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
-               starts_at timestamptz, ends_at timestamptz, capacity integer,
+               starts_at timestamptz, ends_at timestamptz, time_zone text, capacity integer,
                notes text, created_by uuid, created_by_name text, created_by_role text,
                closed_at timestamptz, unit_is_open boolean,
                signed_count bigint, signed jsonb, i_am_in boolean,
                i_am_on_team boolean, i_can_manage boolean,
                checked_in_count bigint, signatures integer)
 language sql stable security definer set search_path = public as $$
-  select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.capacity,
+  select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.time_zone, s.capacity,
          s.notes, s.created_by, s.created_by_name, k.role, s.closed_at, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = s.id),
          -- Kush është regjistruar: emri, roli dhe fotoja, që orari t'i tregojë
@@ -1700,7 +1719,7 @@ grant execute on function public.shift_list(timestamptz) to authenticated;
 drop function if exists public.my_next_shift();
 create or replace function public.my_next_shift()
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
-               starts_at timestamptz, ends_at timestamptz, capacity integer,
+               starts_at timestamptz, ends_at timestamptz, time_zone text, capacity integer,
                notes text, created_by uuid, created_by_name text,
                unit_is_open boolean, signed_count bigint, signed jsonb,
                checked_in_count bigint,
@@ -1722,7 +1741,7 @@ language sql stable security definer set search_path = public as $$
        and ( v.ends_at >= now()
              or (v.created_by = auth.uid() and v.ends_at >= now() - interval '7 days') )
   )
-  select p.id, p.unit_id, u.code, u.name, p.starts_at, p.ends_at, p.capacity,
+  select p.id, p.unit_id, u.code, u.name, p.starts_at, p.ends_at, p.time_zone, p.capacity,
          p.notes, p.created_by, p.created_by_name, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = p.id),
          (select coalesce(jsonb_agg(jsonb_build_object(
@@ -2147,6 +2166,7 @@ select
   nullif(trim(u.region), '')                      as region,
   s.starts_at                                     as opens_at,
   s.ends_at                                       as closes_at,
+  s.time_zone                                     as time_zone,
   -- Pika e saktë e takimit, e shkruar nga vullnetari te portali. PUBLIKE.
   nullif(trim(s.notes), '')                       as spot
 from public.shifts s

@@ -18,10 +18,26 @@
 -- një herë mbi bazën e prodhimit (Supabase SQL editor). Është idempotent.
 -- ============================================================================
 
+alter table public.shifts add column if not exists time_zone text not null default 'Europe/Tirane';
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'shifts_time_zone_ck' and conrelid = 'public.shifts'::regclass
+  ) then
+    alter table public.shifts add constraint shifts_time_zone_ck check (time_zone in (
+      'Europe/Athens', 'Europe/Tirane', 'Europe/London', 'America/New_York',
+      'America/Los_Angeles', 'Australia/Melbourne', 'Australia/Sydney'
+    ));
+  end if;
+end $$;
+
+grant insert (unit_id, starts_at, ends_at, time_zone, capacity, notes, created_by, created_by_name)
+  on public.shifts to authenticated;
+
 -- ---- 1) Redaktimi i turneve: GRANT + politikë UPDATE -----------------------
 -- Vetëm ora, kapaciteti dhe shënimet janë të ndryshueshme. Njësia dhe
 -- created_by* mbeten jashtë grantit me qëllim.
-grant update (starts_at, ends_at, capacity, notes) on public.shifts to authenticated;
+grant update (starts_at, ends_at, time_zone, capacity, notes) on public.shifts to authenticated;
 
 drop policy if exists sh_update on public.shifts;
 -- Adminët redaktojnë çdo turn. Askush tjetër — as koordinatori/mbledhësi që e
@@ -100,14 +116,14 @@ grant execute on function public.shift_check_out(uuid, integer, text) to authent
 drop function if exists public.shift_list(timestamptz);
 create or replace function public.shift_list(p_from timestamptz default null)
 returns table (id uuid, unit_id uuid, unit_code text, unit_name text,
-               starts_at timestamptz, ends_at timestamptz, capacity integer,
+               starts_at timestamptz, ends_at timestamptz, time_zone text, capacity integer,
                notes text, created_by uuid, created_by_name text, created_by_role text,
                closed_at timestamptz, unit_is_open boolean,
                signed_count bigint, signed jsonb, i_am_in boolean,
                i_am_on_team boolean, i_can_manage boolean,
                checked_in_count bigint, signatures integer)
 language sql stable security definer set search_path = public as $$
-  select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.capacity,
+  select s.id, s.unit_id, u.code, u.name, s.starts_at, s.ends_at, s.time_zone, s.capacity,
          s.notes, s.created_by, s.created_by_name, k.role, s.closed_at, u.is_open,
          (select count(*) from public.shift_signups g where g.shift_id = s.id),
          (select coalesce(jsonb_agg(jsonb_build_object(
