@@ -47,13 +47,19 @@ function renderChangeRequestPayload(r: ChangeRequestRow, units: UnitRow[]): stri
     </div>`;
 }
 
-function renderRegisteredRowHtml(v: VolunteerRow, units: UnitRow[], roleKeys: VolunteerRole[]): string {
+function phoneMetaHtml(phone: string | null | undefined): string {
+  const p = (phone || '').trim();
+  if (!p) return '';
+  return ` · 📞 <a href="tel:${esc(p)}" style="color:var(--teal-d);text-decoration:none">${esc(p)}</a>`;
+}
+
+function renderRegisteredRowHtml(v: VolunteerRow, units: UnitRow[], roleKeys: VolunteerRole[], phone?: string | null): string {
   return `
     <div class="adm-row" data-vol-id="${v.id}">
       ${contactAvatarBtn(v)}
       <div class="adm-info">
         <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')} <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span></div>
-        <div class="meta">${esc(v.volunteer_code)}${v.city ? ` · ${esc(v.city)}` : ''}</div>
+        <div class="meta">${esc(v.volunteer_code)}${v.city ? ` · ${esc(v.city)}` : ''}${phoneMetaHtml(phone)}</div>
       </div>
       <div class="adm-sel">
         <select id="registered_role_${v.id}" aria-label="Roli i ${esc(v.full_name)}">
@@ -547,6 +553,19 @@ export async function vAdmin(): Promise<void> {
   const feedbacks = (feedbackRes?.data || []) as FeedbackRow[];
   const roleKeys = Object.keys(ROLES) as VolunteerRole[];
 
+  // Phone numbers live in the private table; fetch them for every listed
+  // volunteer so they can be shown inline (both pending and registered).
+  const phoneById = new Map<string, string>();
+  const allVolIds = [...vols, ...registered].map(v => v.id);
+  if (allVolIds.length) {
+    const phoneRes = await sb.from('volunteer_private').select('id,phone').in('id', allVolIds);
+    if (phoneRes.error) return fail(phoneRes.error);
+    for (const p of (phoneRes.data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone'>[]) {
+      const val = (p.phone || '').trim();
+      if (val) phoneById.set(p.id, val);
+    }
+  }
+
   view.innerHTML = `
     <h2 class="sec">Administrimi</h2>
     <p class="sub">Miratimi i vullnetarëve të rinj, shqyrtimi i kërkesave për ndryshime dhe caktimi i roleve.</p>
@@ -629,7 +648,7 @@ export async function vAdmin(): Promise<void> {
             ${contactAvatarBtn(v)}
             <div class="adm-info">
               <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')}</div>
-              <div class="meta">${esc(v.city || '—')} · kërkoi <b>${esc(ROLES[v.requested_role || 'ndihmes'])}</b> · regjistruar ${fmtDateTime(v.created_at)}</div>
+              <div class="meta">${esc(v.city || '—')} · kërkoi <b>${esc(ROLES[v.requested_role || 'ndihmes'])}</b> · regjistruar ${fmtDateTime(v.created_at)}${phoneMetaHtml(phoneById.get(v.id))}</div>
             </div>
             <div class="adm-sel">
               <select id="adm_role_${v.id}">
@@ -706,7 +725,7 @@ export async function vAdmin(): Promise<void> {
       </div>` : ''}
 
       <div style="margin-top:12px" id="registered_list">
-        ${registered.length ? registered.map(v => renderRegisteredRowHtml(v, units, roleKeys)).join('') : '<div class="empty">Nuk ka ende vullnetarë të regjistruar.</div>'}
+        ${registered.length ? registered.map(v => renderRegisteredRowHtml(v, units, roleKeys, phoneById.get(v.id))).join('') : '<div class="empty">Nuk ka ende vullnetarë të regjistruar.</div>'}
         <div class="empty" id="registered_none" hidden>Asnjë vullnetar nuk përputhet me filtrin.</div>
       </div>
 
@@ -1001,7 +1020,7 @@ export async function vAdmin(): Promise<void> {
         const regList = document.getElementById('registered_list');
         if (regList) {
           const temp = document.createElement('div');
-          temp.innerHTML = renderRegisteredRowHtml(moved, units, roleKeys);
+          temp.innerHTML = renderRegisteredRowHtml(moved, units, roleKeys, phoneById.get(moved.id));
           const newRow = temp.firstElementChild as HTMLElement;
           if (newRow) {
             regList.prepend(newRow);
