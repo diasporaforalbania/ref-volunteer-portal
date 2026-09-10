@@ -42,7 +42,7 @@ export function renderAuth(mode: 'login' | 'signup'): void {
       <input id="a_name" type="text" autocomplete="name" placeholder="Emri juaj i plotë">
       <label>Qyteti / zona *</label>
       <input id="a_city" type="text" autocomplete="address-level2" placeholder="p.sh. Tiranë">
-      <label>Telefoni</label>
+      <label>Telefoni *</label>
       <input id="a_phone" type="tel" autocomplete="tel" placeholder="+355 …">
       <label>Cilin rol do të kontribuosh? *</label>
       <select id="a_role">
@@ -135,6 +135,7 @@ export async function doSignup(): Promise<void> {
 
   if (!full_name) return fail('Shkruani emrin dhe mbiemrin.');
   if (!city) return fail('Shkruani qytetin ose zonën ku do të kontribuoni.');
+  if (!phone) return fail('Shkruani numrin e telefonit.');
   if (!email || !password) return fail('Plotësoni email-in dhe fjalëkalimin.');
   if (password.length < 8) return fail('Fjalëkalimi duhet të ketë të paktën 8 karaktere.');
 
