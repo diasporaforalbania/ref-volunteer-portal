@@ -400,15 +400,17 @@ function applyPendingFilters(pending: VolunteerRow[], units: UnitRow[]): void {
   if (none) none.hidden = visible.length > 0 || pending.length === 0;
 }
 
-let regPage = 1;
 const REG_PAGE_SIZE = 25;
+const regPageBySection: Record<string, number> = {};
 
-function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): VolunteerRow[] {
-  const q = ((document.getElementById('reg_search') as HTMLInputElement | null)?.value || '').trim().toLowerCase();
-  const role = (document.getElementById('reg_filter_role') as HTMLSelectElement | null)?.value || '';
-  const unit = (document.getElementById('reg_filter_unit') as HTMLSelectElement | null)?.value || '';
-  const status = (document.getElementById('reg_filter_status') as HTMLSelectElement | null)?.value || '';
-  const sort = (document.getElementById('reg_sort') as HTMLSelectElement | null)?.value || 'name';
+// The registered volunteers are shown in two independent sections — active
+// ("aktiv") and suspended ("pezulluar"). Both share the same search / filter /
+// sort / pagination machinery, keyed by a section prefix used in element ids.
+function currentSectionView(key: string, data: VolunteerRow[], units: UnitRow[]): VolunteerRow[] {
+  const q = ((document.getElementById(`${key}_search`) as HTMLInputElement | null)?.value || '').trim().toLowerCase();
+  const role = (document.getElementById(`${key}_filter_role`) as HTMLSelectElement | null)?.value || '';
+  const unit = (document.getElementById(`${key}_filter_unit`) as HTMLSelectElement | null)?.value || '';
+  const sort = (document.getElementById(`${key}_sort`) as HTMLSelectElement | null)?.value || 'name';
 
   const unitLabel = (id: string | null | undefined) => {
     if (!id) return '\uffff';
@@ -416,7 +418,7 @@ function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): Vo
     return u ? `${u.code} ${u.name}` : '\uffff';
   };
 
-  return registered
+  return data
     .filter(v => {
       if (q) {
         const matchName = (v.full_name || '').toLowerCase().includes(q);
@@ -429,7 +431,6 @@ function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): Vo
       if (role && v.role !== role) return false;
       if (unit === '__none__' && v.unit_id) return false;
       if (unit && unit !== '__none__' && v.unit_id !== unit) return false;
-      if (status && v.status !== status) return false;
       return true;
     })
     .sort((a, b) => {
@@ -443,24 +444,28 @@ function currentRegisteredView(registered: VolunteerRow[], units: UnitRow[]): Vo
     });
 }
 
-function applyRegisteredFilters(registered: VolunteerRow[], units: UnitRow[]): void {
-  const visible = currentRegisteredView(registered, units);
+function applySectionFilters(key: string, data: VolunteerRow[], units: UnitRow[]): void {
+  const visible = currentSectionView(key, data, units);
   const totalPages = Math.max(1, Math.ceil(visible.length / REG_PAGE_SIZE));
-  if (regPage > totalPages) regPage = totalPages;
-  if (regPage < 1) regPage = 1;
+  let page = regPageBySection[key] || 1;
+  if (page > totalPages) page = totalPages;
+  if (page < 1) page = 1;
+  regPageBySection[key] = page;
 
-  const startIdx = (regPage - 1) * REG_PAGE_SIZE;
-  const endIdx = startIdx + REG_PAGE_SIZE;
-  const pageVisible = visible.slice(startIdx, endIdx);
+  const startIdx = (page - 1) * REG_PAGE_SIZE;
+  const pageVisible = visible.slice(startIdx, startIdx + REG_PAGE_SIZE);
   const pageVisibleIds = new Set(pageVisible.map(v => v.id));
 
-  const list = document.getElementById('registered_list');
-  const none = document.getElementById('registered_none');
-  const count = document.getElementById('registered_count');
-  const paginationBar = document.getElementById('reg_pagination');
-  const pageInfo = document.getElementById('reg_page_info');
-  const prevBtn = document.getElementById('reg_prev_page') as HTMLButtonElement | null;
-  const nextBtn = document.getElementById('reg_next_page') as HTMLButtonElement | null;
+  const list = document.getElementById(`${key}_list`);
+  const none = document.getElementById(`${key}_none`);
+  const empty = document.getElementById(`${key}_empty`);
+  const count = document.getElementById(`${key}_count`);
+  const filters = document.getElementById(`${key}_filters`);
+  const exportBtn = document.getElementById(`${key}_export`) as HTMLButtonElement | null;
+  const paginationBar = document.getElementById(`${key}_pagination`);
+  const pageInfo = document.getElementById(`${key}_page_info`);
+  const prevBtn = document.getElementById(`${key}_prev_page`) as HTMLButtonElement | null;
+  const nextBtn = document.getElementById(`${key}_next_page`) as HTMLButtonElement | null;
   if (!list) return;
 
   const rows = [...list.querySelectorAll<HTMLElement>('.adm-row')];
@@ -472,23 +477,92 @@ function applyRegisteredFilters(registered: VolunteerRow[], units: UnitRow[]): v
     const row = rows.find(r => r.dataset.volId === v.id);
     if (row) list.appendChild(row);
   });
+  if (empty) list.appendChild(empty);
   if (none) list.appendChild(none);
 
   if (count) {
-    count.textContent = visible.length === registered.length
-      ? String(registered.length)
-      : `${visible.length}/${registered.length}`;
+    count.textContent = visible.length === data.length
+      ? String(data.length)
+      : `${visible.length}/${data.length}`;
   }
-  if (none) none.hidden = visible.length > 0 || registered.length === 0;
+  if (empty) empty.hidden = data.length !== 0;
+  if (none) none.hidden = visible.length > 0 || data.length === 0;
+  if (filters) filters.style.display = data.length ? '' : 'none';
+  if (exportBtn) exportBtn.disabled = data.length === 0;
 
   if (paginationBar) {
     paginationBar.style.display = visible.length > REG_PAGE_SIZE ? 'flex' : 'none';
   }
   if (pageInfo) {
-    pageInfo.textContent = `Faqja ${regPage} nga ${totalPages} (${visible.length} vullnetarë)`;
+    pageInfo.textContent = `Faqja ${page} nga ${totalPages} (${visible.length} vullnetarë)`;
   }
-  if (prevBtn) prevBtn.disabled = regPage <= 1;
-  if (nextBtn) nextBtn.disabled = regPage >= totalPages;
+  if (prevBtn) prevBtn.disabled = page <= 1;
+  if (nextBtn) nextBtn.disabled = page >= totalPages;
+}
+
+function registeredSectionHtml(opts: {
+  key: string;
+  title: string;
+  pillClass: string;
+  desc: string;
+  emptyMsg: string;
+  data: VolunteerRow[];
+  units: UnitRow[];
+  roleKeys: VolunteerRole[];
+  phoneById: Map<string, string>;
+}): string {
+  const { key, title, pillClass, desc, emptyMsg, data, units, roleKeys, phoneById } = opts;
+  return `
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">${esc(title)} <span class="pill ${pillClass}" id="${key}_count">${data.length}</span></h3>
+        <button class="btn sec sm" id="${key}_export" ${data.length ? '' : 'disabled'}>📥 Shkarko</button>
+      </div>
+      <div class="meta" style="margin-top:4px">${esc(desc)}</div>
+      <div class="adm-filters" id="${key}_filters"${data.length ? '' : ' style="display:none"'}>
+        <label class="adm-filter search-filter">
+          <span>Kërko vullnetar</span>
+          <input id="${key}_search" type="search" placeholder="Kërko me emër, kod ose qytet…" aria-label="Kërko vullnetarë">
+        </label>
+        <label class="adm-filter">
+          <span>Roli</span>
+          <select id="${key}_filter_role" aria-label="Filtro sipas rolit">
+            <option value="">Të gjitha rolet</option>
+            ${roleKeys.map(r => `<option value="${r}">${esc(ROLES[r])}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Njësia</span>
+          <select id="${key}_filter_unit" aria-label="Filtro sipas njësisë">
+            <option value="">Të gjitha njësitë</option>
+            <option value="__none__">(Pa njësi)</option>
+            ${units.map(u => `<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="adm-filter">
+          <span>Rendit</span>
+          <select id="${key}_sort" aria-label="Rendit listën">
+            <option value="name">Emri</option>
+            <option value="role">Roli</option>
+            <option value="unit">Njësia</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-top:12px" id="${key}_list">
+        ${data.map(v => renderRegisteredRowHtml(v, units, roleKeys, phoneById.get(v.id))).join('')}
+        <div class="empty" id="${key}_empty"${data.length ? ' hidden' : ''}>${esc(emptyMsg)}</div>
+        <div class="empty" id="${key}_none" hidden>Asnjë vullnetar nuk përputhet me filtrin.</div>
+      </div>
+
+      <div id="${key}_pagination" class="row" style="display:none;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap;gap:8px">
+        <div class="meta" id="${key}_page_info" style="font-size:13px"></div>
+        <div class="row" style="gap:6px">
+          <button class="btn sec sm" id="${key}_prev_page">← Prapa</button>
+          <button class="btn sec sm" id="${key}_next_page">Përpara →</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function confirmAction(options: {
@@ -548,6 +622,8 @@ export async function vAdmin(): Promise<void> {
   if (allUnits.error) return fail(allUnits.error);
   const vols = (pendingVols.data || []) as VolunteerRow[];
   const registered = (registeredVols.data || []) as VolunteerRow[];
+  const active = registered.filter(v => v.status === 'approved');
+  const suspended = registered.filter(v => v.status === 'suspended');
   const reqs = (pendingReqs.data || []) as Array<ChangeRequestRow & { volunteers?: { full_name: string; volunteer_code: string } }>;
   const units = (allUnits.data || []) as UnitRow[];
   const feedbacks = (feedbackRes?.data || []) as FeedbackRow[];
@@ -679,64 +755,29 @@ export async function vAdmin(): Promise<void> {
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:18px">
-      <div class="row" style="justify-content:space-between;align-items:baseline">
-        <h3 style="margin:0">Vullnetarët e regjistruar <span class="pill blue" id="registered_count">${registered.length}</span></h3>
-        <button class="btn sec sm" id="btn_export_vols" ${registered.length ? '' : 'disabled'}>📥 Shkarko</button>
-      </div>
-      <div class="meta" style="margin-top:4px">Lista e vullnetarëve të miratuar dhe të pezulluar, me rolet dhe njësitë e tyre.</div>
-      ${registered.length ? `
-      <div class="adm-filters">
-        <label class="adm-filter search-filter">
-          <span>Kërko vullnetar</span>
-          <input id="reg_search" type="search" placeholder="Kërko me emër, kod ose qytet…" aria-label="Kërko vullnetarë të regjistruar">
-        </label>
-        <label class="adm-filter">
-          <span>Statusi</span>
-          <select id="reg_filter_status" aria-label="Filtro sipas statusit">
-            <option value="">Të gjithë</option>
-            <option value="approved">Aktivë</option>
-            <option value="suspended">Të pezulluar</option>
-          </select>
-        </label>
-        <label class="adm-filter">
-          <span>Roli</span>
-          <select id="reg_filter_role" aria-label="Filtro sipas rolit">
-            <option value="">Të gjitha rolet</option>
-            ${roleKeys.map(r => `<option value="${r}">${esc(ROLES[r])}</option>`).join('')}
-          </select>
-        </label>
-        <label class="adm-filter">
-          <span>Njësia</span>
-          <select id="reg_filter_unit" aria-label="Filtro sipas njësisë">
-            <option value="">Të gjitha njësitë</option>
-            <option value="__none__">(Pa njësi)</option>
-            ${units.map(u => `<option value="${u.id}">${esc(u.code)} · ${esc(u.name)}</option>`).join('')}
-          </select>
-        </label>
-        <label class="adm-filter">
-          <span>Rendit</span>
-          <select id="reg_sort" aria-label="Rendit listën">
-            <option value="name">Emri</option>
-            <option value="role">Roli</option>
-            <option value="unit">Njësia</option>
-          </select>
-        </label>
-      </div>` : ''}
+    ${registeredSectionHtml({
+      key: 'active',
+      title: 'Vullnetarët aktiv',
+      pillClass: 'blue',
+      desc: 'Lista e vullnetarëve të miratuar, me rolet dhe njësitë e tyre.',
+      emptyMsg: 'Nuk ka ende vullnetarë aktivë.',
+      data: active,
+      units,
+      roleKeys,
+      phoneById,
+    })}
 
-      <div style="margin-top:12px" id="registered_list">
-        ${registered.length ? registered.map(v => renderRegisteredRowHtml(v, units, roleKeys, phoneById.get(v.id))).join('') : '<div class="empty">Nuk ka ende vullnetarë të regjistruar.</div>'}
-        <div class="empty" id="registered_none" hidden>Asnjë vullnetar nuk përputhet me filtrin.</div>
-      </div>
-
-      <div id="reg_pagination" class="row" style="display:none;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap;gap:8px">
-        <div class="meta" id="reg_page_info" style="font-size:13px"></div>
-        <div class="row" style="gap:6px">
-          <button class="btn sec sm" id="reg_prev_page">← Prapa</button>
-          <button class="btn sec sm" id="reg_next_page">Përpara →</button>
-        </div>
-      </div>
-    </div>
+    ${registeredSectionHtml({
+      key: 'suspended',
+      title: 'Vullnetarët e pezulluar',
+      pillClass: 'gray',
+      desc: 'Lista e vullnetarëve të pezulluar. Mund të riaktivizohen në çdo moment.',
+      emptyMsg: 'Nuk ka vullnetarë të pezulluar.',
+      data: suspended,
+      units,
+      roleKeys,
+      phoneById,
+    })}
 
     <div class="card">
       <h3 style="margin:0">Kërkesa për ndryshime <span class="pill blue" id="reqs_count">${reqs.length}</span></h3>
@@ -828,38 +869,48 @@ export async function vAdmin(): Promise<void> {
   document.getElementById('pending_filter_unit')?.addEventListener('change', applyPending);
   document.getElementById('pending_sort')?.addEventListener('change', applyPending);
 
-  document.getElementById('btn_export_vols')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btn_export_vols') as HTMLButtonElement | null;
-    if (btn) btn.disabled = true;
-    try {
-      await downloadRegisteredVolunteers(currentRegisteredView(registered, units), units);
-    } finally {
-      if (btn && registered.length) btn.disabled = false;
-    }
-  });
+  const applyActive = () => applySectionFilters('active', active, units);
+  const applySuspended = () => applySectionFilters('suspended', suspended, units);
 
-  const applyFilters = () => applyRegisteredFilters(registered, units);
-  const resetAndApplyFilters = () => {
-    regPage = 1;
-    applyFilters();
+  const updateRegisteredKpi = () => {
+    const kpiReg = document.getElementById('kpi_registered_count');
+    if (kpiReg) kpiReg.textContent = String(active.length + suspended.length);
   };
 
-  document.getElementById('reg_search')?.addEventListener('input', resetAndApplyFilters);
-  document.getElementById('reg_filter_status')?.addEventListener('change', resetAndApplyFilters);
-  document.getElementById('reg_filter_role')?.addEventListener('change', resetAndApplyFilters);
-  document.getElementById('reg_filter_unit')?.addEventListener('change', resetAndApplyFilters);
-  document.getElementById('reg_sort')?.addEventListener('change', resetAndApplyFilters);
+  const findVol = (id: string) => active.find(v => v.id === id) || suspended.find(v => v.id === id);
 
-  document.getElementById('reg_prev_page')?.addEventListener('click', () => {
-    if (regPage > 1) {
-      regPage--;
-      applyFilters();
+  // Move a volunteer between the active and suspended sections after its status
+  // changes, rebuilding the row (with the correct action button and listeners)
+  // in the destination list.
+  const relocateVolunteer = (
+    id: string,
+    fromArr: VolunteerRow[],
+    toKey: string,
+    toArr: VolunteerRow[],
+    newStatus: 'approved' | 'suspended',
+  ) => {
+    const idx = fromArr.findIndex(v => v.id === id);
+    if (idx < 0) return;
+    const [vol] = fromArr.splice(idx, 1);
+    vol.status = newStatus;
+    toArr.unshift(vol);
+    document.querySelector(`.adm-row[data-vol-id="${id}"]`)?.remove();
+    const toList = document.getElementById(`${toKey}_list`);
+    if (toList) {
+      const temp = document.createElement('div');
+      temp.innerHTML = renderRegisteredRowHtml(vol, units, roleKeys, phoneById.get(id));
+      const newRow = temp.firstElementChild as HTMLElement;
+      if (newRow) {
+        toList.prepend(newRow);
+        attachRegisteredRowListeners(newRow);
+      }
     }
-  });
-  document.getElementById('reg_next_page')?.addEventListener('click', () => {
-    regPage++;
-    applyFilters();
-  });
+    regPageBySection.active = 1;
+    regPageBySection.suspended = 1;
+    applyActive();
+    applySuspended();
+    updateRegisteredKpi();
+  };
 
   function attachRegisteredRowListeners(row: HTMLElement): void {
     const id = row.dataset.volId;
@@ -869,7 +920,7 @@ export async function vAdmin(): Promise<void> {
     const unitSel = document.getElementById(`registered_unit_${id}`) as HTMLSelectElement | null;
 
     const checkDirty = () => {
-      const vol = registered.find(v => v.id === id);
+      const vol = findVol(id);
       if (!vol || !roleSel || !unitSel) return;
       const saveBtn = row.querySelector<HTMLButtonElement>('[data-update-vol]');
       if (!saveBtn) return;
@@ -889,7 +940,7 @@ export async function vAdmin(): Promise<void> {
     unitSel?.addEventListener('change', checkDirty);
 
     row.querySelector<HTMLButtonElement>('[data-vol-contact]')?.addEventListener('click', () => {
-      const vol = [...vols, ...registered].find(v => v.id === id);
+      const vol = [...vols, ...active, ...suspended].find(v => v.id === id);
       if (vol) showVolunteerContact(vol, units);
     });
 
@@ -907,7 +958,7 @@ export async function vAdmin(): Promise<void> {
 
       if (roleRes.error) return fail(roleRes.error);
       if (unitRes.error) return fail(unitRes.error);
-      const vol = registered.find(v => v.id === id);
+      const vol = findVol(id);
       if (vol) {
         vol.role = role;
         vol.unit_id = unitSel?.value || null;
@@ -916,64 +967,77 @@ export async function vAdmin(): Promise<void> {
       toast('Roli dhe njësia u përditësuan.');
     });
 
-    const attachSuspend = () => {
-      row.querySelector<HTMLButtonElement>('[data-suspend-vol]')?.addEventListener('click', async (e) => {
-        const btn = e.currentTarget as HTMLButtonElement;
-        const vol = registered.find(v => v.id === id);
-        const name = vol?.full_name || 'këtë vullnetar';
-        const ok = await confirmAction({
-          title: 'Pezullo vullnetarin',
-          message: `Llogaria e ${name} do të pezullohet nga aktivitetet e fushatës. Mund të riaktivizohet në çdo moment.`,
-          confirmText: '✕ Pezullo llogarinë',
-          confirmClass: 'btn red sm',
-          icon: '⚠️',
-        });
-        if (!ok) return;
-
-        btn.disabled = true;
-        const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'suspended' });
-        btn.disabled = false;
-        if (error) return fail(error);
-        toast('Vullnetari u anulua.');
-        if (vol) vol.status = 'suspended';
-        const pill = row.querySelector('.adm-nm .pill');
-        if (pill) {
-          pill.className = 'pill gray';
-          pill.textContent = 'pezulluar';
-        }
-        btn.outerHTML = `<button class="btn green sm" data-reactivate-vol="${id}">↻ Riaktivizo</button>`;
-        attachReactivate();
-        applyFilters();
+    row.querySelector<HTMLButtonElement>('[data-suspend-vol]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const vol = findVol(id);
+      const name = vol?.full_name || 'këtë vullnetar';
+      const ok = await confirmAction({
+        title: 'Pezullo vullnetarin',
+        message: `Llogaria e ${name} do të pezullohet nga aktivitetet e fushatës. Mund të riaktivizohet në çdo moment.`,
+        confirmText: '✕ Pezullo llogarinë',
+        confirmClass: 'btn red sm',
+        icon: '⚠️',
       });
-    };
+      if (!ok) return;
 
-    const attachReactivate = () => {
-      row.querySelector<HTMLButtonElement>('[data-reactivate-vol]')?.addEventListener('click', async (e) => {
-        const btn = e.currentTarget as HTMLButtonElement;
-        btn.disabled = true;
-        const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'approved' });
-        btn.disabled = false;
-        if (error) return fail(error);
-        toast('Vullnetari u riaktivizua.');
-        const vol = registered.find(v => v.id === id);
-        if (vol) vol.status = 'approved';
-        const pill = row.querySelector('.adm-nm .pill');
-        if (pill) {
-          pill.className = 'pill ok';
-          pill.textContent = 'aktiv';
-        }
-        btn.outerHTML = `<button class="btn red sm" data-suspend-vol="${id}">✕ Anulo</button>`;
-        attachSuspend();
-        applyFilters();
-      });
-    };
+      btn.disabled = true;
+      const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'suspended' });
+      btn.disabled = false;
+      if (error) return fail(error);
+      toast('Vullnetari u anulua.');
+      relocateVolunteer(id, active, 'suspended', suspended, 'suspended');
+    });
 
-    attachSuspend();
-    attachReactivate();
+    row.querySelector<HTMLButtonElement>('[data-reactivate-vol]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      const { error } = await sb.rpc('vol_set_status', { p_id: id, p_status: 'approved' });
+      btn.disabled = false;
+      if (error) return fail(error);
+      toast('Vullnetari u riaktivizua.');
+      relocateVolunteer(id, suspended, 'active', active, 'approved');
+    });
   }
 
-  // Attach registered row listeners on initial load
-  view.querySelectorAll<HTMLElement>('#registered_list .adm-row').forEach(attachRegisteredRowListeners);
+  const setupRegisteredSection = (key: string, data: VolunteerRow[]) => {
+    const apply = () => applySectionFilters(key, data, units);
+    const resetAndApply = () => {
+      regPageBySection[key] = 1;
+      apply();
+    };
+
+    document.getElementById(`${key}_search`)?.addEventListener('input', resetAndApply);
+    document.getElementById(`${key}_filter_role`)?.addEventListener('change', resetAndApply);
+    document.getElementById(`${key}_filter_unit`)?.addEventListener('change', resetAndApply);
+    document.getElementById(`${key}_sort`)?.addEventListener('change', resetAndApply);
+
+    document.getElementById(`${key}_prev_page`)?.addEventListener('click', () => {
+      if ((regPageBySection[key] || 1) > 1) {
+        regPageBySection[key] = (regPageBySection[key] || 1) - 1;
+        apply();
+      }
+    });
+    document.getElementById(`${key}_next_page`)?.addEventListener('click', () => {
+      regPageBySection[key] = (regPageBySection[key] || 1) + 1;
+      apply();
+    });
+
+    document.getElementById(`${key}_export`)?.addEventListener('click', async () => {
+      const btn = document.getElementById(`${key}_export`) as HTMLButtonElement | null;
+      if (btn) btn.disabled = true;
+      try {
+        await downloadRegisteredVolunteers(currentSectionView(key, data, units), units);
+      } finally {
+        if (btn && data.length) btn.disabled = false;
+      }
+    });
+
+    document.querySelectorAll<HTMLElement>(`#${key}_list .adm-row`).forEach(attachRegisteredRowListeners);
+    apply();
+  };
+
+  setupRegisteredSection('active', active);
+  setupRegisteredSection('suspended', suspended);
 
   // Attach contact modal to pending volunteer rows
   view.querySelectorAll<HTMLButtonElement>('#pending_list [data-vol-contact]').forEach(btn => {
@@ -1008,16 +1072,16 @@ export async function vAdmin(): Promise<void> {
       }
       toast('Vullnetari u miratua me sukses.');
 
-      // Optimistic in-place move to registered
+      // Optimistic in-place move to the active volunteers section
       const idx = vols.findIndex(v => v.id === id);
       if (idx >= 0) {
         const [moved] = vols.splice(idx, 1);
         moved.status = 'approved';
         moved.role = role;
         moved.unit_id = unit;
-        registered.unshift(moved);
+        active.unshift(moved);
         document.querySelector(`.adm-row[data-vol-id="${id}"]`)?.remove();
-        const regList = document.getElementById('registered_list');
+        const regList = document.getElementById('active_list');
         if (regList) {
           const temp = document.createElement('div');
           temp.innerHTML = renderRegisteredRowHtml(moved, units, roleKeys, phoneById.get(moved.id));
@@ -1028,12 +1092,12 @@ export async function vAdmin(): Promise<void> {
           }
         }
         applyPending();
-        applyFilters();
+        regPageBySection.active = 1;
+        applyActive();
 
         const kpiPending = document.getElementById('kpi_pending_count');
-        const kpiReg = document.getElementById('kpi_registered_count');
         if (kpiPending) kpiPending.textContent = String(Math.max(0, parseInt(kpiPending.textContent || '1', 10) - 1));
-        if (kpiReg) kpiReg.textContent = String(parseInt(kpiReg.textContent || '0', 10) + 1);
+        updateRegisteredKpi();
       }
     });
   });
