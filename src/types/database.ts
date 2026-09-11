@@ -1,6 +1,7 @@
 export type VolunteerRole =
   | 'ndihmes'
   | 'mbledhes'
+  | 'lw'
   | 'koordinator'
   | 'jurist'
   | 'logjistike'

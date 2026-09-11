@@ -949,10 +949,17 @@ export async function vAdmin(): Promise<void> {
       const role = roleSel?.value as VolunteerRole | undefined;
       if (!role) return fail('Zgjidhni një rol të vlefshëm.');
 
+      // LW-ja e mban njësinë e vet — krijohet dhe caktohet automatikisht nga
+      // baza (trigger-i `lw_ensure_unit`) sapo caktohet roli. Ndaj për LW nuk
+      // e prekim njësinë me dorë (as `vol_set_unit`, që aty është no-op).
+      const manageUnit = role !== 'lw';
+
       btn.disabled = true;
       const [roleRes, unitRes] = await Promise.all([
         sb.rpc('vol_set_role', { p_id: id, p_role: role }),
-        sb.rpc('vol_set_unit', { p_id: id, p_unit: unitSel?.value || null }),
+        manageUnit
+          ? sb.rpc('vol_set_unit', { p_id: id, p_unit: unitSel?.value || null })
+          : Promise.resolve({ error: null }),
       ]);
       btn.disabled = false;
 
@@ -961,10 +968,12 @@ export async function vAdmin(): Promise<void> {
       const vol = findVol(id);
       if (vol) {
         vol.role = role;
-        vol.unit_id = unitSel?.value || null;
+        if (manageUnit) vol.unit_id = unitSel?.value || null;
       }
       checkDirty();
-      toast('Roli dhe njësia u përditësuan.');
+      toast(manageUnit
+        ? 'Roli dhe njësia u përditësuan.'
+        : 'Roli u përditësua — njësia e LW-së u krijua automatikisht.');
     });
 
     row.querySelector<HTMLButtonElement>('[data-suspend-vol]')?.addEventListener('click', async (e) => {

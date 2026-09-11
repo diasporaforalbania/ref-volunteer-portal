@@ -46,7 +46,7 @@ create table if not exists public.volunteers (
   full_name     text not null default '',
   volunteer_code text unique not null default ('V-' || lpad(nextval('public.vol_code_seq')::text, 4, '0')),
   role          text not null default 'ndihmes'
-                check (role in ('ndihmes','mbledhes','koordinator','jurist','admin',
+                check (role in ('ndihmes','mbledhes','lw','koordinator','jurist','admin',
                                  'logjistike','burime_njerezore','pr_edukim','it')),
   -- Roli i kërkuar në regjistrim — thjesht preferenca e vullnetarit. NUK jep
   -- të drejta vetë: `role` (më sipër) mbetet 'ndihmes' derisa admini ta
@@ -375,7 +375,7 @@ begin
     alter table public.volunteers drop constraint volunteers_role_check;
   end if;
   alter table public.volunteers add constraint volunteers_role_check
-    check (role in ('ndihmes','mbledhes','koordinator','jurist','admin',
+    check (role in ('ndihmes','mbledhes','lw','koordinator','jurist','admin',
                      'logjistike','burime_njerezore','pr_edukim','it'));
 end $$;
 
@@ -545,6 +545,9 @@ language sql stable security definer set search_path = public as $$
        or case public.vol_role()
             when 'koordinator' then public.vol_coordinates_unit(p_unit)
             when 'mbledhes'    then exists (select 1 from public.volunteers
+                                             where id = auth.uid() and unit_id = p_unit)
+            -- LW-ja planifikon turne vetëm te njësia e vet (singleton).
+            when 'lw'          then exists (select 1 from public.volunteers
                                              where id = auth.uid() and unit_id = p_unit)
             else false
           end
@@ -912,7 +915,7 @@ begin
   if not public.vol_is_admin() then
     raise exception 'Vetëm admini ndryshon rolet.';
   end if;
-  if p_role not in ('ndihmes','mbledhes','koordinator','jurist','admin',
+  if p_role not in ('ndihmes','mbledhes','lw','koordinator','jurist','admin',
                      'logjistike','burime_njerezore','pr_edukim','it') then
     raise exception 'Rol i pavlefshëm: %', p_role;
   end if;
@@ -931,7 +934,7 @@ begin
     raise exception 'Vetëm admini vendos për vullnetarët e rinj.';
   end if;
   if p_approve and p_role is not null and p_role not in
-     ('ndihmes','mbledhes','koordinator','jurist','admin',
+     ('ndihmes','mbledhes','lw','koordinator','jurist','admin',
       'logjistike','burime_njerezore','pr_edukim','it') then
     raise exception 'Rol i pavlefshëm: %', p_role;
   end if;
@@ -952,6 +955,13 @@ begin
   if not public.vol_is_staff() then
     raise exception 'Nuk keni të drejtë ta bëni këtë veprim.';
   end if;
+  -- LW-ja e mban njësinë e vet (me emrin e saj), të krijuar automatikisht nga
+  -- `lw_ensure_unit`. Nuk ricaktohet me dorë — çdo thirrje këtu për një LW rri
+  -- pa efekt, që një `vol_set_unit(null)` paralel të mos ia fshijë njësinë.
+  select role into v_role from public.volunteers where id = p_id;
+  if v_role = 'lw' then
+    return;
+  end if;
   if not public.vol_is_center() then
     if p_unit is not null and not public.vol_coordinates_unit(p_unit) then
       raise exception 'Mund të caktoni njerëz vetëm në zonat tuaja.';
@@ -962,7 +972,6 @@ begin
   end if;
   update public.volunteers set unit_id = p_unit where id = p_id;
 
-  select role into v_role from public.volunteers where id = p_id;
   if v_role = 'koordinator' and p_unit is not null then
     insert into public.unit_coordinators (unit_id, volunteer_id, assigned_by)
     values (p_unit, p_id, auth.uid())
@@ -1399,6 +1408,59 @@ grant execute on function public.unit_create(text, text, text, text, integer) to
 grant execute on function public.unit_update(uuid, text, text, text, text, integer) to authenticated;
 grant execute on function public.unit_delete(uuid) to authenticated;
 
+-- ============================ NJËSIA E LW-së ================================
+-- Roli `lw` (mbledhës lëvizës, derë-më-derë) NUK rri në një zonë fikse: sapo
+-- caktohet roli, personit i hapet automatikisht një njësi singleton me EMRIN e
+-- tij, objektiv fillestar 500 firma, dhe ai vihet koordinator i saj. Kështu
+-- njësia del vetë te Paneli dhe te struktura, dhe LW-ja mund të hapë turne e të
+-- bëjë check-in te njësia e vet, pa varur nga qendra.
+--
+-- Njësia adresohet me kod deterministik `LW-<kodi i vullnetarit>` (unik, ≤12
+-- shkronja), ndaj trigger-i është idempotent: caktimi i sërishëm i rolit `lw`
+-- nuk krijon dublikatë. `security definer` që t'i kalojë RLS-së kur shkruan te
+-- `units`/`unit_coordinators`. Zona (`region`, p.sh. "Diaspora") lihet bosh —
+-- e plotëson admini më vonë me redaktimin e njësisë.
+create or replace function public.lw_ensure_unit()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_code text; v_unit uuid;
+begin
+  if new.role <> 'lw' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and old.role is not distinct from 'lw' then
+    return new;  -- ishte tashmë LW — s'ka gjë për të bërë.
+  end if;
+
+  v_code := left('LW-' || new.volunteer_code, 12);
+
+  select id into v_unit from public.units where code = v_code;
+  if v_unit is null then
+    insert into public.units (code, name, region, territory, target,
+                              is_open, opened_at, coordinator_id)
+    values (v_code,
+            coalesce(nullif(trim(new.full_name), ''), new.volunteer_code),
+            null, nullif(trim(new.city), ''), 500,
+            true, now(), new.id)
+    returning id into v_unit;
+  else
+    -- Njësia ekziston (roli u rikthye): siguro që koordinatori mbetet vetë ai.
+    update public.units set coordinator_id = new.id where id = v_unit;
+  end if;
+
+  update public.volunteers set unit_id = v_unit where id = new.id;
+
+  insert into public.unit_coordinators (unit_id, volunteer_id, assigned_by)
+  values (v_unit, new.id, coalesce(auth.uid(), new.id))
+  on conflict (unit_id, volunteer_id) do nothing;
+
+  return new;
+end $$;
+
+drop trigger if exists lw_ensure_unit_trg on public.volunteers;
+create trigger lw_ensure_unit_trg
+  after insert or update of role on public.volunteers
+  for each row execute function public.lw_ensure_unit();
+
 -- Korrigjimi i historikut të një turni (vetëm qendra) — numri i firmave dhe orët.
 create or replace function public.checkin_edit(
   p_id uuid, p_signatures integer, p_started timestamptz,
@@ -1525,9 +1587,11 @@ language sql stable security definer set search_path = public as $$
          v.supervisor_id, v.unit_id
     from public.volunteers v, me
    where v.status = 'approved'
-     and v.role in ('koordinator','mbledhes','ndihmes')
+     and v.role in ('koordinator','mbledhes','ndihmes','lw')
      and (
        me.role in ('admin','jurist','logjistike','burime_njerezore','pr_edukim','it')
+       -- LW-ja është singleton, jashtë hierarkisë së të tjerëve: sheh vetëm veten.
+       or (me.role = 'lw' and v.id = me.id)
        or (me.role = 'koordinator' and (
              v.id = me.id
              -- gjithë njerëzit e njësive që mbaj, plus kolegët e mi mbi to
@@ -1833,8 +1897,8 @@ begin
   if v.id is null or v.status <> 'approved' then
     raise exception 'Vetëm vullnetarët e miratuar bëjnë check-in.';
   end if;
-  if v.role not in ('ndihmes','mbledhes','koordinator') then
-    raise exception 'Check-in bëjnë vetëm ndihmësit, mbledhësit dhe koordinatorët e terrenit.';
+  if v.role not in ('ndihmes','mbledhes','koordinator','lw') then
+    raise exception 'Check-in bëjnë vetëm ndihmësit, mbledhësit, koordinatorët dhe LW-të e terrenit.';
   end if;
 
   select * into s from public.shifts where id = p_shift;
@@ -1889,8 +1953,8 @@ begin
   end if;
   v_admin := public.vol_is_admin();
   -- Adminët mbyllin çdo turn, në çdo njësi. Të tjerët vetëm si udhëheqës terreni.
-  if not v_admin and v.role not in ('koordinator','mbledhes') then
-    raise exception 'Turnin e mbyllin vetëm koordinatorët dhe mbledhësit e autorizuar.';
+  if not v_admin and v.role not in ('koordinator','mbledhes','lw') then
+    raise exception 'Turnin e mbyllin vetëm koordinatorët, mbledhësit e autorizuar dhe LW-të.';
   end if;
   if p_signatures is null or p_signatures < 0 then
     raise exception 'Numri i nënshkrimeve nuk mund të jetë negativ.';
@@ -1978,7 +2042,7 @@ begin
     raise exception 'Vetëm vullnetarët e miratuar regjistrohen në turne.';
   end if;
   select full_name, role into v_name, v_role from public.volunteers where id = auth.uid();
-  if v_role not in ('ndihmes','mbledhes','koordinator') then
+  if v_role not in ('ndihmes','mbledhes','koordinator','lw') then
     raise exception 'Në turne regjistrohen vetëm vullnetarët e terrenit.';
   end if;
 

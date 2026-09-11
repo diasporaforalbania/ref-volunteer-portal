@@ -26,6 +26,7 @@ const ROLE_CLASS: Record<string, string> = {
   koordinator: 'r-coord',
   mbledhes: 'r-collect',
   ndihmes: 'r-help',
+  lw: 'r-coord', // LW-ja qëndron mbi njësinë e vet si koordinator i saj.
 };
 
 let detach: (() => void) | null = null;
@@ -81,13 +82,19 @@ export function renderUnitBoard(rootId: string, units: UnitTotalItem[], team: Vo
   });
 
   team.forEach(v => {
-    people.set(v.id, {
-      id: v.id,
-      name: v.full_name || v.volunteer_code,
-      code: v.volunteer_code,
-      role: v.role,
-      photo: v.photo_path,
-    });
+    // Mos e mbishkruaj hyrjen e ndërtuar nga koordinatorët e njësisë (te
+    // `units`). Kjo ka rëndësi për LW-në: ai del te `struktura_tree` me rolin
+    // 'lw', por te tabela mbahet si koordinator i njësisë së vet — pa këtë
+    // kusht, hyrja e ekipit do t'ia fshinte identitetin e koordinatorit.
+    if (!people.has(v.id)) {
+      people.set(v.id, {
+        id: v.id,
+        name: v.full_name || v.volunteer_code,
+        code: v.volunteer_code,
+        role: v.role,
+        photo: v.photo_path,
+      });
+    }
     if (v.role === 'mbledhes' && v.unit_id) unitOf.set(v.id, v.unit_id);
     if (v.role === 'ndihmes' && v.supervisor_id) supOf.set(v.id, v.supervisor_id);
   });

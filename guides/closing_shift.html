@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mbyll turnin dhe raporto nënshkrimet — udhëzues</title>
+<style>
+:root{
+  --ground:#f2f6f4;--surface:#fff;--surface-2:#e7efec;--ink:#0c2320;--ink-2:#4a635e;
+  --rule:#d2e0db;--accent:#0d9488;--accent-deep:#0b6f66;--accent-soft:#d8ece8;
+  --warn:#a1520a;--warn-soft:#fbf1e2;--warn-rule:#e6cfa8;
+  --shadow:0 1px 2px rgba(12,35,32,.06),0 8px 24px rgba(12,35,32,.07);
+  --dev-frame:#172320;--dev-bezel:#2c3d39;--dev-teal:#0f766e;--dev-teal-2:#12a594;
+  --dev-card:#fff;--dev-ink:#0c2320;--dev-ink-2:#7d938e;--dev-ground:#eef3f1;
+  --dev-line:#e3ebe8;--dev-field:#f4f7f6;--dev-hi:#ffd75e;--dev-hi-ring:#e8a200;
+  --dev-red:#c0392b;--dev-red-soft:#fdecea;--dev-green:#1e8e3e;--dev-amber-soft:#fdf3e0;
+  --dev-amber-ink:#8a5300;--dev-amber-rule:#e9d3a3;--dev-ok:#12a594;
+  --font-display:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;
+  --font-body:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0a1513;--surface:#11201d;--surface-2:#182b27;--ink:#e3efeb;--ink-2:#93aca6;
+  --rule:#223733;--accent:#2dd4bf;--accent-deep:#5eead4;--accent-soft:#0e302c;
+  --warn:#e9b44c;--warn-soft:#241d10;--warn-rule:#4a3a1a;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --ground:#0a1513;--surface:#11201d;--surface-2:#182b27;--ink:#e3efeb;--ink-2:#93aca6;
+  --rule:#223733;--accent:#2dd4bf;--accent-deep:#5eead4;--accent-soft:#0e302c;
+  --warn:#e9b44c;--warn-soft:#241d10;--warn-rule:#4a3a1a;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 24px 72px;display:flex;flex-direction:column;gap:44px}
+header{display:flex;flex-direction:column;gap:16px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-deep);font-weight:600}
+h1{font-family:var(--font-display);font-size:clamp(30px,5vw,44px);line-height:1.1;letter-spacing:-.01em;margin:0;text-wrap:balance;font-weight:600}
+.lede{margin:0;max-width:64ch;font-size:18px;color:var(--ink-2)}
+.role-tag{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--accent-deep);background:var(--accent-soft);border:1px solid var(--rule);border-radius:999px;padding:6px 14px}
+section{display:flex;flex-direction:column;gap:22px}
+.sec-head{padding-bottom:14px;border-bottom:1px solid var(--rule)}
+.sec-note{margin:0;color:var(--ink-2);font-size:15px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:28px;align-items:start}
+.step{display:flex;flex-direction:column;gap:14px}
+.step-text{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:700;display:grid;place-items:center;font-variant-numeric:tabular-nums;margin-top:1px}
+.step-body{display:flex;flex-direction:column;gap:5px;min-width:0}
+.step-title{overflow-wrap:anywhere}
+.step-title{font-weight:650;font-size:16px;line-height:1.35}
+.step-sub{font-size:14px;color:var(--ink-2);line-height:1.5}
+kbd{font-family:var(--font-body);font-size:13px;font-weight:600;background:var(--surface-2);border:1px solid var(--rule);border-radius:4px;padding:1px 6px;white-space:nowrap;color:var(--ink)}
+.caption{font-size:12px;color:var(--ink-2);text-align:center;margin-top:2px}
+footer{border-top:1px solid var(--rule);padding-top:18px;font-size:13px;color:var(--ink-2);display:flex;flex-direction:column;gap:6px}
+a{color:var(--accent-deep)}
+
+/* ---------- phone ---------- */
+.phone{margin:0;width:100%;max-width:214px;aspect-ratio:214/424;background:var(--dev-frame);border-radius:26px;padding:7px;box-shadow:var(--shadow);border:1px solid var(--dev-bezel)}
+.screen{width:100%;height:100%;border-radius:20px;overflow:hidden;background:var(--dev-card);display:flex;flex-direction:column;position:relative;font-size:9px;color:var(--dev-ink)}
+
+/* app chrome */
+.appbar{flex:0 0 auto;background:linear-gradient(135deg,var(--dev-teal),var(--dev-teal-2));color:#fff;padding:7px 9px 6px;display:flex;align-items:center;justify-content:space-between}
+.appbar .brand{font-family:var(--font-display);font-weight:700;font-size:12px;line-height:1}
+.appbar .brand small{display:block;font-family:var(--font-body);font-weight:500;font-size:6px;opacity:.85;margin-top:2px;letter-spacing:.02em}
+.avatar{width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.5)}
+.tabs{flex:0 0 auto;display:flex;gap:2px;background:var(--dev-card);border-bottom:1px solid var(--dev-line);padding:0 4px;overflow:hidden}
+.tabs .t{font-size:7.5px;font-weight:600;color:var(--dev-ink-2);padding:6px 6px 5px;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs .t.on{color:var(--dev-teal);border-bottom-color:var(--dev-teal)}
+.page{flex:1;background:var(--dev-ground);padding:9px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
+.page-h{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.page-title{font-family:var(--font-display);font-weight:700;font-size:14px;line-height:1}
+.page-sub{font-size:7px;color:var(--dev-ink-2);line-height:1.35;margin-top:2px}
+.plan-btn{flex:0 0 auto;background:var(--dev-teal);color:#fff;font-size:8px;font-weight:700;padding:6px 8px;border-radius:7px;white-space:nowrap}
+
+/* filter chips */
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{font-size:7px;font-weight:600;color:var(--dev-ink-2);background:var(--dev-card);border:1px solid var(--dev-line);border-radius:999px;padding:3px 7px;display:flex;gap:3px;align-items:center}
+.chip .c{background:var(--dev-field);border-radius:999px;padding:0 4px;font-size:6.5px}
+.chip.on{color:#fff;background:var(--dev-teal);border-color:var(--dev-teal)}
+.chip.on .c{background:rgba(255,255,255,.25)}
+
+/* shift card */
+.scard{background:var(--dev-card);border:1px solid var(--dev-line);border-radius:9px;padding:8px 9px;display:flex;flex-direction:column;gap:7px}
+.scard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.utag{flex:0 0 auto;font-size:8px;font-weight:700;color:var(--dev-teal);background:var(--accent-soft);border-radius:5px;padding:2px 6px}
+.scard h4{margin:0;font-size:10px;font-weight:700;line-height:1.1}
+.scard .when{font-size:7px;color:var(--dev-ink-2);margin-top:2px;display:flex;gap:3px;align-items:center}
+.scard .by{font-size:6.5px;color:var(--dev-ink-2);margin-top:1px}
+.dots{display:flex;gap:3px;align-items:center;padding-top:6px;border-top:1px solid var(--dev-line)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--dev-field);border:1px dashed #cdd8d4}
+.dot.f{background:linear-gradient(135deg,var(--dev-teal),var(--dev-teal-2));border:none}
+.dot.me{background:var(--dev-hi);border:2px solid var(--dev-hi-ring);box-sizing:border-box}
+.dots .lab{font-size:6.5px;color:var(--dev-ink-2);margin-left:2px}
+.mini{flex:0 0 auto;font-size:8px;font-weight:700;padding:5px 8px;border-radius:6px;white-space:nowrap}
+.mini.join{color:var(--dev-teal);background:var(--dev-card);border:1px solid var(--dev-teal)}
+.mini.leave{color:#fff;background:var(--dev-red)}
+.mini.close{color:#fff;background:var(--dev-red)}
+
+/* modal sheet (form) */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--dev-card);border-radius:14px 14px 0 0;box-shadow:0 -10px 26px rgba(0,0,0,.24);padding:9px 10px 11px;display:flex;flex-direction:column;gap:5px;max-height:88%;overflow:hidden}
+.sheet .grab{width:30px;height:3px;border-radius:2px;background:#d3ddd9;margin:0 auto 4px}
+.sheet h5{margin:0 0 2px;font-family:var(--font-display);font-size:11px;font-weight:700}
+.f-label{font-size:7px;font-weight:600;color:var(--dev-ink-2);margin-top:3px}
+.f-in{background:var(--dev-field);border:1px solid var(--dev-line);border-radius:5px;padding:4px 6px;font-size:8px;color:var(--dev-ink);min-height:15px;display:flex;align-items:center}
+.f-in.ph{color:var(--dev-ink-2)}
+.f-in.sel{justify-content:space-between}
+.f-in.sel::after{content:"▾";color:var(--dev-ink-2);font-size:7px}
+.f-row{display:flex;gap:6px}
+.f-row>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.f-area{background:var(--dev-field);border:1px solid var(--dev-line);border-radius:5px;padding:4px 6px;font-size:7.5px;color:var(--dev-ink-2);min-height:22px}
+.warn-note{background:var(--dev-amber-soft);border:1px solid var(--dev-amber-rule);color:var(--dev-amber-ink);border-radius:6px;padding:5px 6px;font-size:6.5px;line-height:1.4;margin-top:4px}
+.sheet-actions{display:flex;gap:6px;margin-top:7px}
+.m-save{flex:1;text-align:center;background:var(--dev-teal);color:#fff;font-size:9px;font-weight:700;padding:6px 0;border-radius:6px}
+.m-ghost{flex:0 0 auto;text-align:center;color:var(--dev-ink-2);font-size:9px;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid var(--dev-line)}
+
+/* field (Terreni) open-shift card */
+.fcard{background:var(--dev-card);border:1px solid var(--dev-ok);box-shadow:0 0 0 2px #d5f2ee;border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:5px}
+.fhead{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.fhead .ic{width:18px;height:18px;border-radius:5px;background:#ecfdf5;border:1px solid #a7f3d0;color:#059669;display:grid;place-items:center;font-size:10px;flex:0 0 auto}
+.fhead h4{margin:0;font-size:10px;font-weight:700;line-height:1.15}
+.fhead .meta{font-size:6.5px;color:var(--dev-ink-2);margin-top:2px}
+.pill-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:7px;font-weight:700;color:#0a7d55;background:#e7f8f0;border-radius:999px;padding:2px 7px}
+.pill-open .d{width:5px;height:5px;border-radius:50%;background:#12a594}
+
+/* confirm dialog */
+.dialog{position:absolute;left:12px;right:12px;top:50%;transform:translateY(-50%);background:var(--dev-card);border-radius:13px;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.34);display:flex;flex-direction:column;gap:7px;z-index:4}
+.dialog .dic{width:26px;height:26px;border-radius:8px;background:var(--dev-red-soft);color:var(--dev-red);display:grid;place-items:center;font-size:13px}
+.dialog h5{margin:0;font-size:11px;font-weight:700}
+.dialog p{margin:0;font-size:8px;color:var(--dev-ink-2);line-height:1.45}
+.dialog .acts{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:2px}
+.dialog .ghost{font-size:9px;font-weight:600;color:var(--dev-ink-2)}
+.dialog .danger{font-size:9px;font-weight:700;color:#fff;background:var(--dev-red);padding:5px 11px;border-radius:7px}
+
+/* toast */
+.toast{position:absolute;left:12px;right:12px;bottom:11px;background:#14312c;color:#eafaf6;font-size:8.5px;font-weight:600;text-align:center;padding:7px 9px;border-radius:9px;box-shadow:0 8px 20px rgba(0,0,0,.3);z-index:5}
+.scrim{position:absolute;inset:0;background:rgba(10,20,18,.32);z-index:1}
+
+/* highlight ring */
+.target{position:relative;z-index:3;box-shadow:0 0 0 3px var(--dev-hi),0 0 0 4px var(--dev-hi-ring)!important;border-radius:7px}
+.target.round{border-radius:999px}
+
+a:focus-visible,kbd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:560px){.wrap{padding:32px 18px 56px;gap:36px}.phone{max-width:200px;margin:0 auto}}
+*{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{@page{size:A4 portrait;margin:11mm}.wrap{padding:0;max-width:none}.step,.phone,figure{break-inside:avoid}.sec-head,h1{break-after:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Portali i vullnetarëve · Terreni</div>
+    <h1>Mbyll turnin dhe raporto nënshkrimet</h1>
+    <p class="lede">Kur turni mbaron, mbledhësi që e hapi (ose koordinatori) e mbyll turnin dhe shënon sa nënshkrime mblodhi ekipi. Numri u shfaqet të gjithëve te “Turnet e mia”.</p>
+    <div class="role-tag">📍 Për mbledhësin që hapi turnin ose koordinatorin</div>
+  </header>
+
+  <section>
+    <div class="sec-head"><p class="sec-note">Nga skeda <b>Terreni</b>, pasi keni bërë check-in. Numri është total për ekipin, jo për person.</p></div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-text">
+          <div class="num">1</div>
+          <div class="step-body">
+            <div class="step-title">Hapni skedën <kbd>Terreni</kbd></div>
+            <div class="step-sub">Pasi keni bërë check-in, turni shfaqet lart si <kbd>turn i hapur</kbd>.</div>
+          </div>
+        </div>
+        <figure class="phone"><div class="screen"><div class="appbar"><div class="brand">Referendumi<small>Portali i vullnetarëve</small></div><div class="avatar"></div></div><div class="tabs"><div class="t ">Hyrje</div><div class="t ">Njoftime</div><div class="t on">Terreni</div><div class="t ">Turni</div><div class="t ">Materiale</div></div><div class="page">
+          <div class="fcard">
+            <div class="fhead">
+              <div style="display:flex;gap:6px;align-items:flex-start"><div class="ic">📍</div>
+                <div><h4>Në terren: TR-07 · Parku Rinia</h4><div class="meta">check-in 10:04 · kohëzgjatja 2h 51m · 3 nga ekipi brenda</div></div></div>
+              <span class="pill-open"><span class="d"></span> turn i hapur</span>
+            </div>
+          </div></div></div></figure>
+        <figcaption class="caption">Turni i hapur te Terreni</figcaption>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <div class="num">2</div>
+          <div class="step-body">
+            <div class="step-title">Shkruani numrin e nënshkrimeve</div>
+            <div class="step-sub">Te fusha <kbd>Sa nënshkrime mblodhi ekipi gjithsej?</kbd> — numri i përgjithshëm i turnit, jo për person.</div>
+          </div>
+        </div>
+        <figure class="phone"><div class="screen"><div class="appbar"><div class="brand">Referendumi<small>Portali i vullnetarëve</small></div><div class="avatar"></div></div><div class="tabs"><div class="t ">Hyrje</div><div class="t ">Njoftime</div><div class="t on">Terreni</div><div class="t ">Turni</div><div class="t ">Materiale</div></div><div class="page">
+          <div class="fcard">
+            <div class="fhead">
+              <div style="display:flex;gap:6px;align-items:flex-start"><div class="ic">📍</div>
+                <div><h4>Në terren: TR-07</h4><div class="meta">check-in 10:04 · 3 nga ekipi brenda</div></div></div>
+              <span class="pill-open"><span class="d"></span> turn i hapur</span>
+            </div>
+            <div class="f-label">Sa nënshkrime mblodhi ekipi gjithsej? *</div>
+            <div class="f-in target" style="font-weight:700;font-size:11px">128</div>
+            <div class="f-label">Shënime (opsionale)</div>
+            <div class="f-area">si shkoi, çfarë duhet ditur…</div>
+          </div></div></div></figure>
+        <figcaption class="caption">Numri i nënshkrimeve</figcaption>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <div class="num">3</div>
+          <div class="step-body">
+            <div class="step-title">Prekni <kbd>Mbyll turnin</kbd></div>
+            <div class="step-sub">Shtoni shënime nëse doni, pastaj prekni butonin për ta mbyllur turnin.</div>
+          </div>
+        </div>
+        <figure class="phone"><div class="screen"><div class="appbar"><div class="brand">Referendumi<small>Portali i vullnetarëve</small></div><div class="avatar"></div></div><div class="tabs"><div class="t ">Hyrje</div><div class="t ">Njoftime</div><div class="t on">Terreni</div><div class="t ">Turni</div><div class="t ">Materiale</div></div><div class="page">
+          <div class="fcard">
+            <div class="fhead">
+              <div style="display:flex;gap:6px;align-items:flex-start"><div class="ic">📍</div>
+                <div><h4>Në terren: TR-07</h4><div class="meta">check-in 10:04 · 3 nga ekipi brenda</div></div></div>
+              <span class="pill-open"><span class="d"></span> turn i hapur</span>
+            </div>
+            <div class="f-label">Sa nënshkrime mblodhi ekipi gjithsej? *</div>
+            <div class="f-in" style="font-weight:700;font-size:11px">128</div>
+            <div class="f-label">Shënime (opsionale)</div>
+            <div class="f-area">Mot i mirë, shumë interes te të rinjtë.</div>
+            <div class="sheet-actions"><div class="m-save close target" style="background:var(--dev-red)">Mbyll turnin</div></div>
+          </div></div></div></figure>
+        <figcaption class="caption">Butoni për të mbyllur</figcaption>
+      </div>
+      <div class="step">
+        <div class="step-text">
+          <div class="num">4</div>
+          <div class="step-body">
+            <div class="step-title">Konfirmoni mbylljen</div>
+            <div class="step-sub">Dilni nga terreni ju dhe të gjithë ekipi që bëri check-in. Numri ruhet te “Turnet e mia”.</div>
+          </div>
+        </div>
+        <figure class="phone"><div class="screen"><div class="appbar"><div class="brand">Referendumi<small>Portali i vullnetarëve</small></div><div class="avatar"></div></div><div class="tabs"><div class="t ">Hyrje</div><div class="t ">Njoftime</div><div class="t on">Terreni</div><div class="t ">Turni</div><div class="t ">Materiale</div></div><div class="page" style="filter:brightness(.9)">
+          <div class="fcard"><div class="fhead"><div style="display:flex;gap:6px;align-items:flex-start"><div class="ic">📍</div><div><h4>Në terren: TR-07</h4></div></div></div></div></div>
+          <div class="scrim"></div>
+          <div class="dialog">
+            <div class="dic">📋</div>
+            <h5>Mbyll turnin e ekipit</h5>
+            <p>Të mbyllet turni me <b>128</b> nënshkrime? Dalin nga terreni të gjithë ata të ekipit që bënë check-in.</p>
+            <div class="acts"><span class="ghost">Anulo</span><span class="danger target round">Mbyll turnin</span></div>
+          </div>
+          <div class="toast">Turni u mbyll · 128 nënshkrime. Faleminderit!</div></div></figure>
+        <figcaption class="caption">Turni u mbyll</figcaption>
+      </div></div>
+  </section>
+
+  <footer>
+    <div>Pamjet janë ilustrime të ndërfaqes së portalit. Emërtimet mund të ndryshojnë pak sipas versionit, por radha e hapave mbetet e njëjtë.</div>
+    <div>Portali i vullnetarëve · portal.referendum21.org</div>
+  </footer>
+</div>
+</body>
+</html>

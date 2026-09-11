@@ -12,6 +12,7 @@ import type { TabKey, BadgeState, HistoryState, OrgState, SlotState } from '../t
 export const ROLES: Record<VolunteerRole, string> = {
   ndihmes: 'Ndihmës',
   mbledhes: 'Mbledhës i autorizuar',
+  lw: 'LW',
   koordinator: 'Koordinator',
   jurist: 'Jurist (qendra)',
   logjistike: 'Logjistikë (qendra)',
@@ -38,6 +39,7 @@ export const INTERNAL_ROLES: VolunteerRole[] = [...QENDRA_ROLES, 'koordinator'];
 export const ROLE_DESC: Record<Exclude<VolunteerRole, 'admin'>, string> = {
   ndihmes: 'Ndihmon në terren me mbledhjen e nënshkrimeve dhe detyra të tjera bazë.',
   mbledhes: 'I trajnuar dhe i autorizuar zyrtarisht të mbledhë nënshkrime në terren.',
+  lw: 'Mbledhës lëvizës derë-më-derë, pa zonë fikse — mban njësinë e vet me emrin e tij.',
   koordinator: 'Drejton një ose disa zona, organizon turnet dhe njerëzit e terrenit.',
   jurist: 'Ndihmon me pyetje ligjore dhe siguron që mbledhja të jetë brenda ligjit.',
   logjistike: 'Kujdeset për materialet, transportin dhe organizimin praktik të fushatës.',
@@ -47,12 +49,12 @@ export const ROLE_DESC: Record<Exclude<VolunteerRole, 'admin'>, string> = {
 };
 
 /**
- * Roles a volunteer may request when signing up. `it` is deliberately left out —
- * the centre assigns that role itself, so it is no longer offered at signup.
- * Existing IT volunteers and admin role assignment are unaffected.
+ * Roles a volunteer may request when signing up. `it` and `lw` are deliberately
+ * left out — the centre assigns those roles itself, so they are not offered at
+ * signup. Existing IT/LW volunteers and admin role assignment are unaffected.
  */
 export const SIGNUP_ROLES: Array<Exclude<VolunteerRole, 'admin'>> =
-  (Object.keys(ROLE_DESC) as Array<Exclude<VolunteerRole, 'admin'>>).filter(r => r !== 'it');
+  (Object.keys(ROLE_DESC) as Array<Exclude<VolunteerRole, 'admin'>>).filter(r => r !== 'it' && r !== 'lw');
 
 export const KINDS: Record<ReportKind, { ic: string; lb: string; d: string }> = {
   incident: { ic: '🚨', lb: 'Incident', d: 'Pengesë, presion, konflikt në terren' },
@@ -121,7 +123,7 @@ export class AppState {
   }
 
   public isField(): boolean {
-    return !!this.ME && ['ndihmes', 'mbledhes'].includes(this.ME.role);
+    return !!this.ME && ['ndihmes', 'mbledhes', 'lw'].includes(this.ME.role);
   }
 
   public isQendra(): boolean {
@@ -134,11 +136,11 @@ export class AppState {
   }
 
   public isTeamLead(): boolean {
-    return !!this.ME && ['koordinator', 'mbledhes'].includes(this.ME.role);
+    return !!this.ME && ['koordinator', 'mbledhes', 'lw'].includes(this.ME.role);
   }
 
   public isTeamRole(): boolean {
-    return !!this.ME && ['ndihmes', 'mbledhes', 'koordinator'].includes(this.ME.role);
+    return !!this.ME && ['ndihmes', 'mbledhes', 'koordinator', 'lw'].includes(this.ME.role);
   }
 }
 
