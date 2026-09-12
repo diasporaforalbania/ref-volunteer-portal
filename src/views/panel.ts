@@ -70,7 +70,7 @@ export async function vPanel(): Promise<void> {
                   <td style="font-weight:600;color:var(--ink)">${esc(u.name)}</td>
                   <td>
                     ${coords.length
-                      ? coords.map(c => `<span class="chip" style="font-size:11px">${esc(truncate(c.name || c.code || '—', 22))}</span>`).join(' ')
+                      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;max-width:280px">${coords.map(c => `<span class="chip" style="font-size:11px">${esc(truncate(c.name || c.code || '—', 22))}</span>`).join('')}</div>`
                       : '<span class="meta">—</span>'}
                   </td>
                   <td>
@@ -89,9 +89,9 @@ export async function vPanel(): Promise<void> {
                     </div>
                   </td>
                   ${isAdm ? `
-                    <td style="text-align:right">
-                      <div class="row" style="justify-content:flex-end;gap:4px">
-                        <button class="btn ghost sm" data-edit-unit="${u.id}" title="Ndrysho njësinë">✎ Ndrysho</button>
+                    <td style="text-align:right;white-space:nowrap">
+                      <div style="display:inline-flex;flex-wrap:nowrap;justify-content:flex-end;gap:4px">
+                        <button class="btn ghost sm" data-edit-unit="${u.id}" title="Ndrysho njësinë" style="font-size:11.5px;padding:3px 8px">✎ Ndrysho</button>
                         <button class="btn red sm" data-delete-unit="${u.id}" data-unit-name="${esc(u.name)}" style="font-size:11.5px;padding:3px 7px">Fshi</button>
                       </div>
                     </td>
