@@ -10,7 +10,13 @@ export type VolunteerRole =
   | 'it'
   | 'admin';
 
-export type VolunteerStatus = 'pending' | 'approved' | 'suspended';
+export type VolunteerStatus =
+  | 'pending'
+  | 'kontaktuar'
+  | 'pa_pergjigje'
+  | 'ne_autorizim'
+  | 'approved'
+  | 'suspended';
 
 export type ChangeRequestKind = 'profile' | 'photo' | 'zone';
 export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -44,6 +50,7 @@ export interface VolunteerRow {
   role: VolunteerRole;
   requested_role: VolunteerRole | null;
   status: VolunteerStatus;
+  reject_reason?: string | null;
   unit_id: string | null;
   supervisor_id: string | null;
   city: string | null;

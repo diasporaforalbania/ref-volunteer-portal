@@ -418,6 +418,21 @@ textarea {
   color: #0e6b86;
 }
 
+.pill.purple {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.pill.teal {
+  background: #e6fffa;
+  color: #0d9488;
+}
+
+.pill.orange {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
 .empty {
   color: var(--muted);
   font-size: 14px;
@@ -1296,6 +1311,10 @@ table.tbl tr:last-child td {
   font-weight: 700;
   font-size: 15px;
   line-height: 1.3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .adm-sel {
@@ -1320,6 +1339,143 @@ table.tbl tr:last-child td {
   border-color: var(--teal, #2a8f7c) !important;
   box-shadow: 0 0 0 2px rgba(42, 143, 124, 0.25);
   font-weight: 700;
+}
+
+.adm-sel-status {
+  flex: 0 1 175px;
+}
+
+.reason-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 12px;
+}
+
+.reason-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 5px 11px;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.reason-chip:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.reason-chip.selected {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+  font-weight: 600;
+}
+
+/* Rejection Reason Tooltip & Badge */
+.reason-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+}
+
+.reason-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: 175px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.reason-badge:hover,
+.reason-tooltip-wrap:focus-within .reason-badge {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.12);
+}
+
+.reason-badge .reason-icon {
+  font-size: 11px;
+  flex: none;
+  line-height: 1;
+}
+
+.reason-badge .reason-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tooltip floating bubble */
+.reason-tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  width: max-content;
+  max-width: 250px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.22);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 120;
+  text-align: left;
+}
+
+/* Arrow */
+.reason-tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+}
+
+.reason-tooltip-wrap:hover .reason-tooltip-bubble,
+.reason-tooltip-wrap:focus-within .reason-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.reason-tooltip-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fca5a5;
+  margin-bottom: 3px;
 }
 
 @media (max-width: 700px) {
@@ -1348,6 +1504,23 @@ table.tbl tr:last-child td {
   .adm-sel select {
     height: 40px;
     width: 100%;
+  }
+  .reason-badge {
+    max-width: 140px;
+    font-size: 11px;
+    padding: 2px 7px;
+  }
+  .reason-tooltip-bubble {
+    max-width: 210px;
+    left: 0;
+    transform: translateY(4px);
+  }
+  .reason-tooltip-bubble::after {
+    left: 20px;
+  }
+  .reason-tooltip-wrap:hover .reason-tooltip-bubble,
+  .reason-tooltip-wrap:focus-within .reason-tooltip-bubble {
+    transform: translateY(0);
   }
 }
 
