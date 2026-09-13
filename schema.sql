@@ -57,7 +57,8 @@ create table if not exists public.volunteers (
                        ('ndihmes','mbledhes','koordinator','jurist',
                         'logjistike','burime_njerezore','pr_edukim','it')),
   status        text not null default 'pending'
-                check (status in ('pending','approved','suspended')),
+                check (status in ('pending','kontaktuar','pa_pergjigje','ne_autorizim','approved','suspended')),
+  reject_reason text,
   unit_id       uuid references public.units on delete set null,
   -- Lidhja Mbledhës → Ndihmës: një ndihmës i përgjigjet një mbledhësi të
   -- vetëm. Mbledhësi NUK ka supervizor personal — eprorët e tij janë
@@ -648,7 +649,7 @@ create policy vol_select on public.volunteers for select to authenticated
       and role in ('ndihmes','mbledhes')
       and (
         unit_id in (select public.vol_my_unit_ids())
-        or status = 'pending'
+        or status in ('pending','kontaktuar','pa_pergjigje','ne_autorizim')
         or unit_id is null
       )
     )
@@ -922,12 +923,10 @@ begin
   update public.volunteers set role = p_role where id = p_id;
 end $$;
 
--- Vendimi për një vullnetar TË RI (status 'pending') — vetëm admini, jo
--- koordinatori/juristi. Miratimi i vullnetarëve të rinj rri tërësisht te
--- faqja "Admin". Refuzimi thjesht e lë 'suspended', si më parë; nëse duhet
--- pezulluar/riaktivizuar dikë të MIRATUAR tashmë, kjo bëhet ende nga
--- `vol_set_status` te Paneli (staf, jo vetëm admin) — s'ka lidhje me këtë.
-create or replace function public.vol_decide_pending(p_id uuid, p_approve boolean, p_role text default null)
+-- Vendimi për një vullnetar TË RI (status 'pending' ose nënstatuset e kontaktit)
+-- — vetëm admini, jo koordinatori/juristi. Miratimi i vullnetarëve të rinj rri
+-- tërësisht te faqja "Admin". Refuzimi e kalon në 'suspended' me arsyen opsionale.
+create or replace function public.vol_decide_pending(p_id uuid, p_approve boolean, p_role text default null, p_reject_reason text default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.vol_is_admin() then
@@ -939,11 +938,29 @@ begin
     raise exception 'Rol i pavlefshëm: %', p_role;
   end if;
   update public.volunteers
-     set status      = case when p_approve then 'approved' else 'suspended' end,
-         role         = case when p_approve then coalesce(p_role, role) else role end,
-         approved_at  = case when p_approve then now() else approved_at end,
-         approved_by  = case when p_approve then auth.uid() else approved_by end
-   where id = p_id and status = 'pending';
+     set status        = case when p_approve then 'approved' else 'suspended' end,
+         reject_reason = case when not p_approve then coalesce(p_reject_reason, reject_reason) else null end,
+         role          = case when p_approve then coalesce(p_role, role) else role end,
+         approved_at   = case when p_approve then now() else approved_at end,
+         approved_by   = case when p_approve then auth.uid() else approved_by end
+   where id = p_id and status in ('pending','kontaktuar','pa_pergjigje','ne_autorizim');
+end $$;
+
+-- Ndryshimi i gjendjes së kontaktit/verifikimit për vullnetarët në pritje.
+-- Stafi (admin / qendra) mund të shënojë nëse është kontaktuar, pa përgjigje, etj.
+create or replace function public.vol_set_pending_status(p_id uuid, p_status text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.vol_is_staff() then
+    raise exception 'Nuk keni të drejtë ta ndryshoni statusin.';
+  end if;
+  if p_status not in ('pending', 'kontaktuar', 'pa_pergjigje', 'ne_autorizim') then
+    raise exception 'Status i pavlefshëm: %', p_status;
+  end if;
+  update public.volunteers
+     set status = p_status
+   where id = p_id
+     and status in ('pending', 'kontaktuar', 'pa_pergjigje', 'ne_autorizim');
 end $$;
 
 -- Caktimi i njësisë. Koordinatori i shpërndan njerëzit VETËM brenda zonave
@@ -1514,7 +1531,7 @@ returns json language sql stable security definer set search_path = public as $$
     'shifts',        (select count(*) from public.checkins),
     'active_shifts', (select count(*) from public.checkins where ended_at is null),
     'volunteers',    (select count(*) from public.volunteers where status = 'approved'),
-    'pending',       (select count(*) from public.volunteers where status = 'pending'),
+    'pending',       (select count(*) from public.volunteers where status in ('pending','kontaktuar','pa_pergjigje','ne_autorizim')),
     'pending_requests', (select count(*) from public.change_requests where status = 'pending'),
     'units',         (select count(*) from public.units),
     'open_reports',  (select count(*) from public.reports where status <> 'resolved'),

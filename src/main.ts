@@ -231,7 +231,7 @@ export async function loadUserAndStats(): Promise<void> {
       store.STATS = {};
     }
 
-    if (store.ME.status === 'pending') {
+    if (['pending', 'kontaktuar', 'pa_pergjigje', 'ne_autorizim'].includes(store.ME.status)) {
       return renderGate('pending');
     }
     if (store.ME.status === 'suspended') {

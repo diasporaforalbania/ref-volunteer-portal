@@ -1,11 +1,11 @@
 import { sb } from '../api/client';
-import { ROLES } from '../state/store';
+import { ROLES, VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_PILLS } from '../state/store';
 import { esc } from '../utils/security';
 import { fmtDateTime } from '../utils/format';
 import { avatarHtml, photoUrl } from '../api/storage';
 import { toast, fail } from '../components/toast';
 import { closeModal, openModal } from '../components/modal';
-import type { VolunteerRow, ChangeRequestRow, VolunteerPrivateRow, VolunteerRole, UnitRow, FeedbackRow, FeedbackStatus } from '../types/database';
+import type { VolunteerRow, ChangeRequestRow, VolunteerPrivateRow, VolunteerRole, VolunteerStatus, UnitRow, FeedbackRow, FeedbackStatus } from '../types/database';
 
 function contactAvatarBtn(v: VolunteerRow): string {
   const name = v.full_name || 'vullnetarit';
@@ -53,12 +53,32 @@ function phoneMetaHtml(phone: string | null | undefined): string {
   return ` · 📞 <a href="tel:${esc(p)}" style="color:var(--teal-d);text-decoration:none">${esc(p)}</a>`;
 }
 
+function reasonBadgeHtml(reason: string | null | undefined): string {
+  const r = (reason || '').trim();
+  if (!r) return '';
+  return `
+    <span class="reason-tooltip-wrap" tabindex="0" role="button" data-reason-click="${esc(r)}" aria-label="Arsyeja e refuzimit: ${esc(r)}">
+      <span class="reason-badge">
+        <span class="reason-icon">💬</span>
+        <span class="reason-text">${esc(r)}</span>
+      </span>
+      <span class="reason-tooltip-bubble" role="tooltip">
+        <span class="reason-tooltip-title">Arsyeja e refuzimit</span>
+        <span>${esc(r)}</span>
+      </span>
+    </span>`;
+}
+
 function renderRegisteredRowHtml(v: VolunteerRow, units: UnitRow[], roleKeys: VolunteerRole[], phone?: string | null): string {
   return `
     <div class="adm-row" data-vol-id="${v.id}">
       ${contactAvatarBtn(v)}
       <div class="adm-info">
-        <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')} <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span></div>
+        <div class="adm-nm">
+          <span>${esc(v.full_name || 'I paemërtuar')}</span>
+          <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span>
+          ${v.status === 'suspended' ? reasonBadgeHtml(v.reject_reason) : ''}
+        </div>
         <div class="meta">${esc(v.volunteer_code)}${v.city ? ` · ${esc(v.city)}` : ''}${phoneMetaHtml(phone)}</div>
       </div>
       <div class="adm-sel">
@@ -102,12 +122,8 @@ async function showVolunteerContact(vol: VolunteerRow, units: UnitRow[]): Promis
   const priv = data as VolunteerPrivateRow | null;
   const unit = units.find(u => u.id === vol.unit_id);
   const roleTitle = ROLES[vol.role] || ROLES[vol.requested_role || 'ndihmes'] || vol.role;
-  const isPending = vol.status === 'pending';
-  const statusPill = isPending
-    ? '<span class="pill amber">në pritje</span>'
-    : vol.status === 'approved'
-      ? '<span class="pill ok">aktiv</span>'
-      : '<span class="pill gray">pezulluar</span>';
+  const statusInfo = VOLUNTEER_STATUS_PILLS[vol.status] || { label: vol.status, color: 'gray' };
+  const statusPill = `<span class="pill ${statusInfo.color}">${esc(statusInfo.label)}</span>`;
 
   const phone = (priv?.phone || '').trim();
   const email = (priv?.email || '').trim();
@@ -183,6 +199,12 @@ async function showVolunteerContact(vol: VolunteerRow, units: UnitRow[]): Promis
           </div>
         </div>` : ''}
 
+        ${vol.reject_reason ? `
+        <div class="card" style="padding:12px 14px;border:1px solid #fecaca;background:rgba(239,68,68,0.06);border-radius:10px;box-shadow:none;margin:0">
+          <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#b91c1c;font-weight:700">Arsyeja e refuzimit</div>
+          <div style="font-size:13.5px;margin-top:4px;color:var(--text);line-height:1.4">${esc(vol.reject_reason)}</div>
+        </div>` : ''}
+
         ${note ? `
         <div class="card" style="padding:12px 14px;border:1px solid var(--line);border-radius:10px;box-shadow:none;margin:0">
           <div class="meta" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em">Shënim i brendshëm</div>
@@ -217,7 +239,7 @@ function csvCell(value: string | number | null | undefined): string {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
-async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: UnitRow[]): Promise<void> {
+async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: UnitRow[], sectionKey?: string): Promise<void> {
   if (!registered.length) {
     fail('Nuk ka vullnetarë për të shkarkuar.');
     return;
@@ -237,7 +259,11 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
     ((data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone' | 'email'>[]).map(p => [p.id, p])
   );
 
-  const headers = ['Emri', 'Kodi', 'Qyteti', 'Roli', 'Zona', 'Email', 'Telefon'];
+  const isSuspended = sectionKey === 'suspended' || registered.some(v => v.status === 'suspended');
+  const headers = isSuspended
+    ? ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Arsyeja_Refuzimit', 'Email', 'Telefon']
+    : ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Email', 'Telefon'];
+
   const lines = [
     headers.join(','),
     ...registered.map(v => {
@@ -247,15 +273,19 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
       const unitId = unitSel?.value || v.unit_id || '';
       const unit = units.find(u => u.id === unitId);
       const priv = privById.get(v.id);
-      return [
+      const row = [
         csvCell(v.full_name),
         csvCell(v.volunteer_code),
         csvCell(v.city),
+        csvCell(v.status === 'approved' ? 'aktiv' : 'pezulluar'),
         csvCell(ROLES[role] || role),
         csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
-        csvCell(priv?.email),
-        csvCell(priv?.phone),
-      ].join(',');
+      ];
+      if (isSuspended) {
+        row.push(csvCell(v.reject_reason || ''));
+      }
+      row.push(csvCell(priv?.email), csvCell(priv?.phone));
+      return row.join(',');
     }),
   ];
 
@@ -263,7 +293,12 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `vullnetaret_${new Date().toISOString().slice(0, 10)}.csv`;
+  const filePrefix = sectionKey === 'suspended'
+    ? 'vullnetaret_e_pezulluar'
+    : sectionKey === 'active'
+      ? 'vullnetaret_aktiv'
+      : 'vullnetaret';
+  link.download = `${filePrefix}_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -291,7 +326,7 @@ async function downloadPendingVolunteers(pending: VolunteerRow[], units: UnitRow
     ((data || []) as Pick<VolunteerPrivateRow, 'id' | 'phone' | 'email'>[]).map(p => [p.id, p])
   );
 
-  const headers = ['Emri', 'Kodi', 'Qyteti', 'Roli_i_Kerkuar', 'Zona_e_Zgjedhur', 'Email', 'Telefon', 'Data_Regjistrimit'];
+  const headers = ['Emri', 'Kodi', 'Qyteti', 'Gjendja', 'Roli_i_Kerkuar', 'Zona_e_Zgjedhur', 'Email', 'Telefon', 'Data_Regjistrimit'];
   const lines = [
     headers.join(','),
     ...pending.map(v => {
@@ -305,6 +340,7 @@ async function downloadPendingVolunteers(pending: VolunteerRow[], units: UnitRow
         csvCell(v.full_name),
         csvCell(v.volunteer_code),
         csvCell(v.city),
+        csvCell(VOLUNTEER_STATUS_LABELS[v.status] || v.status),
         csvCell(ROLES[role] || role),
         csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
         csvCell(priv?.email),
@@ -330,6 +366,7 @@ function currentPendingView(pending: VolunteerRow[], units: UnitRow[]): Voluntee
   const q = ((document.getElementById('pending_search') as HTMLInputElement | null)?.value || '').trim().toLowerCase();
   const role = (document.getElementById('pending_filter_role') as HTMLSelectElement | null)?.value || '';
   const unit = (document.getElementById('pending_filter_unit') as HTMLSelectElement | null)?.value || '';
+  const status = (document.getElementById('pending_filter_status') as HTMLSelectElement | null)?.value || '';
   const sort = (document.getElementById('pending_sort') as HTMLSelectElement | null)?.value || 'date';
 
   const unitLabel = (id: string | null | undefined) => {
@@ -352,6 +389,7 @@ function currentPendingView(pending: VolunteerRow[], units: UnitRow[]): Voluntee
       if (role && reqRole !== role) return false;
       if (unit === '__none__' && v.unit_id) return false;
       if (unit && unit !== '__none__' && v.unit_id !== unit) return false;
+      if (status && v.status !== status) return false;
       return true;
     })
     .sort((a, b) => {
@@ -565,6 +603,78 @@ function registeredSectionHtml(opts: {
     </div>`;
 }
 
+function promptRejectReason(vol: VolunteerRow): Promise<{ confirmed: boolean; reason: string | null }> {
+  return new Promise(resolve => {
+    const presetReasons = [
+      'Nuk u përgjigj pas disa telefonatave',
+      'Keqkuptim (dëshiron vetëm të nënshkruajë)',
+      'Nuk plotëson kushtet ligjore / banon jashtë',
+      'Numër kontakti i pasaktë',
+    ];
+
+    openModal(`
+      <div class="modal" style="max-width:500px">
+        <button class="modal-x" id="reject_modal_close" type="button" aria-label="Mbyll">✕</button>
+        <div class="row" style="gap:12px;align-items:center;margin-bottom:12px">
+          <span style="font-size:26px;line-height:1">🚫</span>
+          <h3 style="margin:0;font-size:18px">Refuzo vullnetarin</h3>
+        </div>
+        <p class="meta" style="margin:0 0 14px;font-size:13.5px">
+          Kërkesa e regjistrimit për <b>${esc(vol.full_name || 'Vullnetar')}</b> (${esc(vol.volunteer_code)}) do të pezullohet.
+        </p>
+
+        <div style="margin-bottom:12px">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text);text-transform:uppercase;letter-spacing:.04em">
+            Zgjidhni një arsye të shpejtë:
+          </label>
+          <div class="reason-chip-group" id="reject_chips_container">
+            ${presetReasons.map(r => `<button type="button" class="reason-chip" data-preset-reason="${esc(r)}">${esc(r)}</button>`).join('')}
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label for="reject_custom_reason" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text);text-transform:uppercase;letter-spacing:.04em">
+            Arsyeja e refuzimit / shënim:
+          </label>
+          <textarea id="reject_custom_reason" rows="3" placeholder="Shënoni arsyen e refuzimit (zgjidhni më lart ose shkruani)..." style="width:100%;box-sizing:border-box;resize:vertical;font-size:13.5px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-family:inherit"></textarea>
+        </div>
+
+        <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
+          <button class="btn ghost sm" id="reject_modal_cancel" type="button">Anulo</button>
+          <button class="btn red sm" id="reject_modal_submit" type="button">✕ Po, refuzo</button>
+        </div>
+      </div>`);
+
+    const close = () => {
+      closeModal();
+      resolve({ confirmed: false, reason: null });
+    };
+
+    document.getElementById('reject_modal_close')?.addEventListener('click', close);
+    document.getElementById('reject_modal_cancel')?.addEventListener('click', close);
+
+    const textarea = document.getElementById('reject_custom_reason') as HTMLTextAreaElement | null;
+    const chips = document.querySelectorAll<HTMLButtonElement>('#reject_chips_container [data-preset-reason]');
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const val = chip.dataset.presetReason || '';
+        chips.forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        if (textarea) {
+          textarea.value = val;
+          textarea.focus();
+        }
+      });
+    });
+
+    document.getElementById('reject_modal_submit')?.addEventListener('click', () => {
+      const reason = textarea?.value.trim() || null;
+      closeModal();
+      resolve({ confirmed: true, reason });
+    });
+  });
+}
+
 function confirmAction(options: {
   title: string;
   message: string;
@@ -609,7 +719,7 @@ export async function vAdmin(): Promise<void> {
   view.innerHTML = '<div class="empty">Po ngarkohet paneli i administratorit…</div>';
 
   const [pendingVols, registeredVols, pendingReqs, allUnits, feedbackRes] = await Promise.all([
-    sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').eq('status', 'pending').order('created_at'),
+    sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').in('status', ['pending', 'kontaktuar', 'pa_pergjigje', 'ne_autorizim']).order('created_at'),
     sb.from('volunteers').select('*, units:units!volunteers_unit_id_fkey(name)').in('status', ['approved', 'suspended']).order('full_name'),
     sb.from('change_requests').select('*, volunteers(full_name, volunteer_code)').eq('status', 'pending').order('created_at'),
     sb.from('units').select('id,code,name').order('code'),
@@ -693,6 +803,16 @@ export async function vAdmin(): Promise<void> {
           <input id="pending_search" type="search" placeholder="Kërko me emër, kod ose qytet…" aria-label="Kërko vullnetarë në pritje">
         </label>
         <label class="adm-filter">
+          <span>Gjendja</span>
+          <select id="pending_filter_status" aria-label="Filtro sipas gjendjes">
+            <option value="">Të gjitha gjendjet</option>
+            <option value="pending">Në pritje</option>
+            <option value="kontaktuar">U kontaktua</option>
+            <option value="pa_pergjigje">Pa përgjigje</option>
+            <option value="ne_autorizim">Në autorizim</option>
+          </select>
+        </label>
+        <label class="adm-filter">
           <span>Roli i kërkuar</span>
           <select id="pending_filter_role" aria-label="Filtro sipas rolit të kërkuar">
             <option value="">Të gjitha rolet</option>
@@ -723,7 +843,10 @@ export async function vAdmin(): Promise<void> {
           <div class="adm-row" data-vol-id="${v.id}">
             ${contactAvatarBtn(v)}
             <div class="adm-info">
-              <div class="adm-nm">${esc(v.full_name || 'I paemërtuar')}</div>
+              <div class="adm-nm">
+                ${esc(v.full_name || 'I paemërtuar')}
+                ${v.status !== 'pending' ? `<span class="pill ${VOLUNTEER_STATUS_PILLS[v.status]?.color || 'amber'}" style="font-size:11px;padding:2px 7px;margin-left:6px;vertical-align:middle">${esc(VOLUNTEER_STATUS_LABELS[v.status] || v.status)}</span>` : ''}
+              </div>
               <div class="meta">${esc(v.city || '—')} · kërkoi <b>${esc(ROLES[v.requested_role || 'ndihmes'])}</b> · regjistruar ${fmtDateTime(v.created_at)}${phoneMetaHtml(phoneById.get(v.id))}</div>
             </div>
             <div class="adm-sel">
@@ -743,6 +866,14 @@ export async function vAdmin(): Promise<void> {
                     ${esc(u.code)} · ${esc(u.name)}
                   </option>
                 `).join('')}
+              </select>
+            </div>
+            <div class="adm-sel adm-sel-status">
+              <select class="adm-pending-status" id="adm_status_${v.id}" data-vol-status-select="${v.id}" aria-label="Gjendja e kontaktit për ${esc(v.full_name)}">
+                <option value="pending" ${v.status === 'pending' ? 'selected' : ''}>⏳ Në pritje</option>
+                <option value="kontaktuar" ${v.status === 'kontaktuar' ? 'selected' : ''}>📞 U kontaktua</option>
+                <option value="pa_pergjigje" ${v.status === 'pa_pergjigje' ? 'selected' : ''}>📵 Pa përgjigje</option>
+                <option value="ne_autorizim" ${v.status === 'ne_autorizim' ? 'selected' : ''}>📄 Në autorizim</option>
               </select>
             </div>
             <div class="adm-acts">
@@ -865,6 +996,7 @@ export async function vAdmin(): Promise<void> {
 
   const applyPending = () => applyPendingFilters(vols, units);
   document.getElementById('pending_search')?.addEventListener('input', applyPending);
+  document.getElementById('pending_filter_status')?.addEventListener('change', applyPending);
   document.getElementById('pending_filter_role')?.addEventListener('change', applyPending);
   document.getElementById('pending_filter_unit')?.addEventListener('change', applyPending);
   document.getElementById('pending_sort')?.addEventListener('change', applyPending);
@@ -942,6 +1074,14 @@ export async function vAdmin(): Promise<void> {
     row.querySelector<HTMLButtonElement>('[data-vol-contact]')?.addEventListener('click', () => {
       const vol = [...vols, ...active, ...suspended].find(v => v.id === id);
       if (vol) showVolunteerContact(vol, units);
+    });
+
+    row.querySelectorAll<HTMLElement>('[data-reason-click]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const reason = el.dataset.reasonClick;
+        if (reason) toast(`Arsyeja e refuzimit: "${reason}"`);
+      });
     });
 
     row.querySelector<HTMLButtonElement>('[data-update-vol]')?.addEventListener('click', async (e) => {
@@ -1035,7 +1175,7 @@ export async function vAdmin(): Promise<void> {
       const btn = document.getElementById(`${key}_export`) as HTMLButtonElement | null;
       if (btn) btn.disabled = true;
       try {
-        await downloadRegisteredVolunteers(currentSectionView(key, data, units), units);
+        await downloadRegisteredVolunteers(currentSectionView(key, data, units), units, key);
       } finally {
         if (btn && data.length) btn.disabled = false;
       }
@@ -1111,24 +1251,66 @@ export async function vAdmin(): Promise<void> {
     });
   });
 
+  // Inline pending status change listener
+  view.querySelectorAll<HTMLSelectElement>('.adm-pending-status').forEach(select => {
+    select.addEventListener('change', async () => {
+      const id = select.dataset.volStatusSelect;
+      if (!id) return;
+      const newStatus = select.value as VolunteerStatus;
+      const vol = vols.find(v => v.id === id);
+      if (!vol) return;
+      const oldStatus = vol.status;
+
+      select.disabled = true;
+      const { error } = await sb.rpc('vol_set_pending_status', { p_id: id, p_status: newStatus });
+      select.disabled = false;
+
+      if (error) {
+        select.value = oldStatus;
+        return fail(error);
+      }
+
+      vol.status = newStatus;
+      toast(`Gjendja u ndryshua në "${VOLUNTEER_STATUS_LABELS[newStatus] || newStatus}".`);
+
+      const row = document.querySelector(`.adm-row[data-vol-id="${id}"]`);
+      if (row) {
+        let pill = row.querySelector<HTMLElement>('.adm-nm .pill');
+        if (newStatus !== 'pending') {
+          const pillInfo = VOLUNTEER_STATUS_PILLS[newStatus] || { label: newStatus, color: 'amber' };
+          if (!pill) {
+            pill = document.createElement('span');
+            row.querySelector('.adm-nm')?.appendChild(pill);
+          }
+          pill.className = `pill ${pillInfo.color}`;
+          pill.style.cssText = 'font-size:11px;padding:2px 7px;margin-left:6px;vertical-align:middle';
+          pill.textContent = VOLUNTEER_STATUS_LABELS[newStatus] || pillInfo.label;
+        } else if (pill) {
+          pill.remove();
+        }
+      }
+
+      applyPending();
+    });
+  });
+
   view.querySelectorAll<HTMLElement>('[data-reject-vol]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.rejectVol;
       if (!id) return;
-      const row = vols.find(v => v.id === id);
-      const name = row?.full_name || 'këtë vullnetar';
-      const ok = await confirmAction({
-        title: 'Refuzo regjistrimin',
-        message: `Jeni të sigurt që dëshironi të refuzoni kërkesën e regjistrimit për ${name}?`,
-        confirmText: '✕ Po, refuzo',
-        confirmClass: 'btn red sm',
-        icon: '🚫',
-      });
-      if (!ok) return;
+      const vol = vols.find(v => v.id === id);
+      if (!vol) return;
+
+      const { confirmed, reason } = await promptRejectReason(vol);
+      if (!confirmed) return;
 
       const actBtn = btn as HTMLButtonElement;
       actBtn.disabled = true;
-      const { error } = await sb.rpc('vol_decide_pending', { p_id: id, p_approve: false });
+      const { error } = await sb.rpc('vol_decide_pending', {
+        p_id: id,
+        p_approve: false,
+        p_reject_reason: reason,
+      });
       if (error) {
         actBtn.disabled = false;
         return fail(error);
@@ -1136,7 +1318,25 @@ export async function vAdmin(): Promise<void> {
       toast('Kërkesa u refuzua.');
       const idx = vols.findIndex(v => v.id === id);
       if (idx >= 0) {
-        vols.splice(idx, 1);
+        const [rejectedVol] = vols.splice(idx, 1);
+        if (rejectedVol) {
+          rejectedVol.status = 'suspended';
+          rejectedVol.reject_reason = reason;
+          suspended.unshift(rejectedVol);
+          const suspList = document.getElementById('suspended_list');
+          if (suspList) {
+            const temp = document.createElement('div');
+            temp.innerHTML = renderRegisteredRowHtml(rejectedVol, units, roleKeys, phoneById.get(id));
+            const newRow = temp.firstElementChild as HTMLElement;
+            if (newRow) {
+              suspList.prepend(newRow);
+              attachRegisteredRowListeners(newRow);
+            }
+          }
+          regPageBySection.suspended = 1;
+          applySuspended();
+          updateRegisteredKpi();
+        }
         document.querySelector(`.adm-row[data-vol-id="${id}"]`)?.remove();
         applyPending();
 

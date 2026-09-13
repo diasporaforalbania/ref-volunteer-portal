@@ -2,12 +2,31 @@ import type { Session } from '@supabase/supabase-js';
 import type {
   VolunteerRow,
   VolunteerRole,
+  VolunteerStatus,
   CampaignStatsResult,
   ReportKind,
   ReportStatus,
   MaterialCategory,
 } from '../types/database';
 import type { TabKey, BadgeState, HistoryState, OrgState, SlotState } from '../types/app';
+
+export const VOLUNTEER_STATUS_LABELS: Record<VolunteerStatus, string> = {
+  pending: 'Në pritje',
+  kontaktuar: 'U kontaktua',
+  pa_pergjigje: 'Pa përgjigje',
+  ne_autorizim: 'Në pritje të autorizimit',
+  approved: 'Aktiv',
+  suspended: 'Refuzuar / Pezulluar',
+};
+
+export const VOLUNTEER_STATUS_PILLS: Record<VolunteerStatus, { label: string; color: string }> = {
+  pending: { label: 'Në pritje', color: 'amber' },
+  kontaktuar: { label: 'U kontaktua', color: 'teal' },
+  pa_pergjigje: { label: 'Pa përgjigje', color: 'orange' },
+  ne_autorizim: { label: 'Në autorizim', color: 'purple' },
+  approved: { label: 'Aktiv', color: 'ok' },
+  suspended: { label: 'Refuzuar / Pezulluar', color: 'red' },
+};
 
 export const ROLES: Record<VolunteerRole, string> = {
   ndihmes: 'Ndihmës',
