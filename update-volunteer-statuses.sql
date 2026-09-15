@@ -32,7 +32,12 @@ using (
   )
 );
 
--- 4. Funksioni për vendimin e vullnetarit të ri (miratim ose refuzim me arsye)
+-- 4. Fshi funksionin e vjetër me 3 parametra para se të krijojmë të riun me 4 parametra
+--    (CREATE OR REPLACE nuk e zëvendëson kur ndryshon firma — PostgreSQL krijon
+--     një overload të ri dhe nuk di ta zgjedhë kur thërrasim me 3 argumente)
+drop function if exists public.vol_decide_pending(uuid, boolean, text);
+
+-- Funksioni për vendimin e vullnetarit të ri (miratim ose refuzim me arsye)
 create or replace function public.vol_decide_pending(
   p_id uuid,
   p_approve boolean,

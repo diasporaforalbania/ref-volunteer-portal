@@ -926,6 +926,8 @@ end $$;
 -- Vendimi për një vullnetar TË RI (status 'pending' ose nënstatuset e kontaktit)
 -- — vetëm admini, jo koordinatori/juristi. Miratimi i vullnetarëve të rinj rri
 -- tërësisht te faqja "Admin". Refuzimi e kalon në 'suspended' me arsyen opsionale.
+-- Fshi overloadin e vjetër me 3 parametra, nëse ekziston.
+drop function if exists public.vol_decide_pending(uuid, boolean, text);
 create or replace function public.vol_decide_pending(p_id uuid, p_approve boolean, p_role text default null, p_reject_reason text default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin

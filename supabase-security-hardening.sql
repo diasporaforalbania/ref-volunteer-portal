@@ -109,7 +109,7 @@ grant execute on function public.unit_create(text, text, text, text, integer) to
 grant execute on function public.unit_delete(uuid) to authenticated;
 grant execute on function public.vol_set_status(uuid, text) to authenticated;
 grant execute on function public.vol_set_role(uuid, text) to authenticated;
-grant execute on function public.vol_decide_pending(uuid, boolean, text) to authenticated;
+grant execute on function public.vol_decide_pending(uuid, boolean, text, text) to authenticated;
 grant execute on function public.vol_set_unit(uuid, uuid) to authenticated;
 grant execute on function public.vol_set_supervisor(uuid, uuid) to authenticated;
 

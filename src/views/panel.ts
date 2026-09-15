@@ -105,13 +105,38 @@ export async function vPanel(): Promise<void> {
 
   renderUnitBoard('board_box', units, team);
 
+  /** Gjej numrin e ardhshëm të lirë për prefiksin e dhënë (A, D, …). */
+  const nextCodeNumber = (prefix: string): number => {
+    const pfx = prefix.toUpperCase();
+    let max = 0;
+    for (const u of units) {
+      const m = u.code.match(new RegExp(`^${pfx}(\\d+)$`, 'i'));
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return max + 1;
+  };
+
   document.getElementById('btn_add_unit')?.addEventListener('click', () => {
+    const defaultPrefix: string = 'D';
+    const defaultNum = nextCodeNumber(defaultPrefix);
+
     openModal(`
     <div class="modal">
       <button class="modal-x" id="modal_close_btn">✕</button>
       <h3>Shto njësi të re</h3>
       <label>Kodi i njësisë *</label>
-      <input id="nu_code" placeholder="p.sh. A1" style="text-transform:uppercase">
+      <div class="row" style="gap:6px;align-items:stretch">
+        <select id="nu_prefix" style="width:auto;min-width:72px;font-weight:700;font-size:15px;text-align:center">
+          <option value="A"${defaultPrefix === 'A' ? ' selected' : ''}>A – Shqipëri</option>
+          <option value="D"${defaultPrefix === 'D' ? ' selected' : ''}>D – Diasporë</option>
+        </select>
+        <input id="nu_code_num" type="number" min="1" value="${defaultNum}"
+               style="flex:1;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums"
+               placeholder="nr.">
+      </div>
+      <div class="meta" id="nu_code_hint" style="margin-top:4px;font-size:12px">
+        Kodi: <b>${defaultPrefix}${defaultNum}</b> — numri i parë i lirë
+      </div>
       <label>Emri i njësisë *</label>
       <input id="nu_name" placeholder="p.sh. Qendër - Tiranë">
       <div class="row" style="margin-top:8px">
@@ -132,25 +157,50 @@ export async function vPanel(): Promise<void> {
       </div>
     </div>`);
 
+    const prefixSel = document.getElementById('nu_prefix') as HTMLSelectElement | null;
+    const numInput = document.getElementById('nu_code_num') as HTMLInputElement | null;
+    const hintEl = document.getElementById('nu_code_hint');
+
+    /** Përditëso hint-in dhe numrin kur ndërrohet prefiksi. */
+    const refreshCodeHint = () => {
+      const pfx = (prefixSel?.value || 'D').toUpperCase();
+      const n = parseInt(numInput?.value || '0', 10);
+      if (hintEl) hintEl.innerHTML = `Kodi: <b>${pfx}${n || '?'}</b>`;
+    };
+
+    prefixSel?.addEventListener('change', () => {
+      const pfx = (prefixSel.value || 'D').toUpperCase();
+      const next = nextCodeNumber(pfx);
+      if (numInput) numInput.value = String(next);
+      if (hintEl) hintEl.innerHTML = `Kodi: <b>${pfx}${next}</b> — numri i parë i lirë`;
+    });
+
+    numInput?.addEventListener('input', refreshCodeHint);
+
     document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
     document.getElementById('nu_cancel_btn')?.addEventListener('click', closeModal);
     document.getElementById('nu_save_btn')?.addEventListener('click', async () => {
-      const codeInput = document.getElementById('nu_code') as HTMLInputElement | null;
       const nameInput = document.getElementById('nu_name') as HTMLInputElement | null;
       const regInput = document.getElementById('nu_region') as HTMLInputElement | null;
       const terInput = document.getElementById('nu_territory') as HTMLInputElement | null;
       const tarInput = document.getElementById('nu_target') as HTMLInputElement | null;
       const saveBtn = document.getElementById('nu_save_btn') as HTMLButtonElement | null;
 
-      const code = (codeInput?.value || '').trim().toUpperCase();
+      const pfx = (prefixSel?.value || 'D').toUpperCase();
+      const num = parseInt(numInput?.value || '0', 10);
+      if (!num || num < 1) return fail('Numri i njësisë duhet të jetë pozitiv.');
+      const code = `${pfx}${num}`;
+
       const name = (nameInput?.value || '').trim();
       const region = (regInput?.value || '').trim() || null;
       const territory = (terInput?.value || '').trim() || null;
       const target = parseInt(tarInput?.value || '0', 10);
 
-      if (!code) return fail('Kodi i njësisë është i detyrueshëm.');
       if (!name) return fail('Emri i njësisë është i detyrueshëm.');
       if (isNaN(target) || target < 0) return fail('Objektivi duhet të jetë numër zero ose pozitiv.');
+
+      // Kontrollo nëse kodi ekziston tashmë
+      if (units.some(u => u.code.toUpperCase() === code)) return fail(`Kodi ${code} ekziston tashmë.`);
 
       if (saveBtn) saveBtn.disabled = true;
       const { error } = await sb.rpc('unit_create', {
