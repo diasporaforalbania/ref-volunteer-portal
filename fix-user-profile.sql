@@ -252,5 +252,87 @@ language sql stable security definer set search_path = public as $$
   from filtered;
 $$;
 
+-- Skemat ekzistuese e kanë id si FK te auth.users. Regjistrimet vetëm në listë
+-- nuk kanë llogari; fshirja e llogarive reale trajtohet nga trigger-i më poshtë.
+alter table public.volunteers add column if not exists roster_only boolean not null default false;
+alter table public.volunteers drop constraint if exists volunteers_id_fkey;
+alter table public.volunteers alter column id set default gen_random_uuid();
+
+
+-- Ruaj sjelljen e mëparshme ON DELETE CASCADE për përdoruesit me llogari.
+-- Regjistrimet vetëm në listë nuk kanë llogari dhe nuk preken.
+create or replace function public.handle_deleted_volunteer()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.volunteers where id = old.id and roster_only = false;
+  return old;
+end $$;
+
+drop trigger if exists on_auth_volunteer_deleted on auth.users;
+create trigger on_auth_volunteer_deleted
+  after delete on auth.users
+  for each row execute function public.handle_deleted_volunteer();
+revoke all on function public.handle_deleted_volunteer() from public, anon, authenticated;
+
+
+
+-- Admini shton një vullnetar në listë pa krijuar llogari hyrjeje. Roli dhe
+-- njësia caktohen këtu, pas kontrollit të rolit të thirrësit në bazë.
+create or replace function public.vol_create_roster(
+  p_first_name text, p_last_name text, p_phone text, p_city text,
+  p_role text, p_unit uuid, p_email text default null,
+  p_emergency_contact text default null, p_note text default null
+)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if not public.vol_is_admin() then
+    raise exception 'Vetëm admini shton vullnetarë.';
+  end if;
+  if nullif(trim(p_first_name), '') is null or nullif(trim(p_last_name), '') is null
+     or nullif(trim(p_phone), '') is null or nullif(trim(p_city), '') is null then
+    raise exception 'Emri, mbiemri, telefoni dhe vendndodhja janë të detyrueshme.';
+  end if;
+  if length(trim(p_first_name)) > 60 or length(trim(p_last_name)) > 60
+     or length(trim(p_phone)) > 40 or length(trim(p_city)) > 80
+     or length(coalesce(trim(p_email), '')) > 255
+     or length(coalesce(trim(p_emergency_contact), '')) > 120
+     or length(coalesce(trim(p_note), '')) > 500 then
+    raise exception 'Një nga fushat është shumë e gjatë.';
+  end if;
+  if p_role is null or p_role not in ('ndihmes','mbledhes','lw','koordinator','jurist','admin',
+                    'logjistike','burime_njerezore','pr_edukim','it') then
+    raise exception 'Rol i pavlefshëm.';
+  end if;
+  if p_role = 'lw' and p_unit is not null then
+    raise exception 'Njësia e LW-së krijohet automatikisht.';
+  end if;
+  if p_unit is not null and not exists (select 1 from public.units where id = p_unit) then
+    raise exception 'Njësia nuk u gjet.';
+  end if;
+  if nullif(trim(p_email), '') is not null and
+     trim(p_email) !~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+    raise exception 'Email i pavlefshëm.';
+  end if;
+
+  insert into public.volunteers
+    (full_name, city, role, unit_id, status, roster_only, approved_at, approved_by)
+  values
+    (trim(p_first_name) || ' ' || trim(p_last_name), trim(p_city), p_role,
+     p_unit, 'approved', true, now(), auth.uid())
+  returning id into v_id;
+
+  insert into public.volunteer_private
+    (id, phone, email, emergency_contact, note)
+  values
+    (v_id, trim(p_phone), nullif(lower(trim(p_email)), ''),
+     nullif(trim(p_emergency_contact), ''), nullif(trim(p_note), ''));
+
+  return v_id;
+end $$;
+revoke all on function public.vol_create_roster(text, text, text, text, text, uuid, text, text, text) from public, anon;
+grant execute on function public.vol_create_roster(text, text, text, text, text, uuid, text, text, text) to authenticated;
+
+
 -- 9. Rifreskimi i cache-it të PostgREST
 notify pgrst, 'reload schema';

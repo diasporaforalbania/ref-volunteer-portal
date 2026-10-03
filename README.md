@@ -16,6 +16,7 @@ Portali digjital i menaxhimit të vullnetarëve, organizimit të turneve në ter
   4. **Procedurat `SECURITY DEFINER`** me `search_path = public` kryejnë të gjitha veprimet administrative.
 * ⚡ **Ura e Sigurt e Numëruesit në Skaj (Edge API Bridge):** Endpoint me performancë të lartë në Cloudflare Workers/Pages Functions ([`functions/api/count.js`](functions/api/count.js)) që furnizon faqen kryesore ([`referendum21.org`](https://referendum21.org)) me numrin zyrtar të firmave, pa ekspozuar kredencialet e bazës së të dhënave (Zero-PII & Origin allowlisting).
 * 🔔 **Njoftime në Kohë Reale & Web Push:** Supabase Realtime Channels (WebSockets) dhe mbështetje për njoftime celulare (Web Push VAPID).
+* 👥 **Vullnetarë pa llogari:** Te Administrimi, adminët mund të shtojnë vullnetarë vetëm në listë me emër, mbiemër, telefon, vendndodhje, rol dhe njësi. Regjistrimi shënohet aktiv, por nuk krijon hyrje në portal; kontakti ruhet te `volunteer_private`.
 
 ---
 

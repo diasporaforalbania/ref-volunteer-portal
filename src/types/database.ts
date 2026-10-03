@@ -45,6 +45,7 @@ export interface UnitRow {
 
 export interface VolunteerRow {
   id: string;
+  roster_only: boolean;
   full_name: string;
   volunteer_code: string;
   role: VolunteerRole;

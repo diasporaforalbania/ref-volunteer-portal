@@ -76,6 +76,7 @@ function renderRegisteredRowHtml(v: VolunteerRow, units: UnitRow[], roleKeys: Vo
       <div class="adm-info">
         <div class="adm-nm">
           <span>${esc(v.full_name || 'I paemërtuar')}</span>
+          ${v.roster_only ? '<span class="pill gray">Pa llogari</span>' : ''}
           <span class="pill ${v.status === 'approved' ? 'ok' : 'gray'}">${v.status === 'approved' ? 'aktiv' : 'pezulluar'}</span>
           ${v.status === 'suspended' ? reasonBadgeHtml(v.reject_reason) : ''}
         </div>
@@ -142,6 +143,7 @@ async function showVolunteerContact(vol: VolunteerRow, units: UnitRow[]): Promis
           <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
             <h3 style="margin:0;font-size:19px;line-height:1.2">${esc(vol.full_name || 'Vullnetar')}</h3>
             ${statusPill}
+            ${vol.roster_only ? '<span class="pill gray">Pa llogari</span>' : ''}
           </div>
           <div class="row" style="gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
             <span class="badge-code" style="font-size:13px;margin:0">${esc(vol.volunteer_code)}</span>
@@ -261,8 +263,8 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
 
   const isSuspended = sectionKey === 'suspended' || registered.some(v => v.status === 'suspended');
   const headers = isSuspended
-    ? ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Arsyeja_Refuzimit', 'Email', 'Telefon']
-    : ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Email', 'Telefon'];
+    ? ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Llogari', 'Arsyeja_Refuzimit', 'Email', 'Telefon']
+    : ['Emri', 'Kodi', 'Qyteti', 'Statusi', 'Roli', 'Zona', 'Llogari', 'Email', 'Telefon'];
 
   const lines = [
     headers.join(','),
@@ -280,6 +282,7 @@ async function downloadRegisteredVolunteers(registered: VolunteerRow[], units: U
         csvCell(v.status === 'approved' ? 'aktiv' : 'pezulluar'),
         csvCell(ROLES[role] || role),
         csvCell(unit ? `${unit.code} · ${unit.name}` : '(Pa njësi)'),
+        csvCell(v.roster_only ? 'Pa llogari' : 'Me llogari'),
       ];
       if (isSuspended) {
         row.push(csvCell(v.reject_reason || ''));
@@ -713,6 +716,69 @@ function confirmAction(options: {
   });
 }
 
+function showRosterCreate(units: UnitRow[], roleKeys: VolunteerRole[]): void {
+  openModal(`
+    <div class="modal" style="max-width:600px">
+      <button class="modal-x" id="roster_close" type="button" aria-label="Mbyll">✕</button>
+      <h3 style="margin:0 0 4px">Shto vullnetar</h3>
+      <p class="meta" style="margin:0 0 16px">Ky regjistrim nuk krijon llogari hyrjeje.</p>
+      <form id="roster_form" class="roster-form">
+        <label>Emri *<input id="roster_first" type="text" maxlength="60" autocomplete="given-name" required></label>
+        <label>Mbiemri *<input id="roster_last" type="text" maxlength="60" autocomplete="family-name" required></label>
+        <label>Numri i kontaktit *<input id="roster_phone" type="tel" maxlength="40" autocomplete="tel" required></label>
+        <label>Qyteti / vendndodhja *<input id="roster_city" type="text" maxlength="80" autocomplete="address-level2" required></label>
+        <label>Roli *<select id="roster_role" required>
+          ${roleKeys.map(role => `<option value="${role}">${esc(ROLES[role])}</option>`).join('')}
+        </select></label>
+        <label>Njësia<select id="roster_unit">
+          <option value="">(Pa njësi)</option>
+          ${units.map(unit => `<option value="${unit.id}">${esc(unit.code)} · ${esc(unit.name)}</option>`).join('')}
+        </select></label>
+        <label>Email kontakti<input id="roster_email" type="email" maxlength="255" autocomplete="email"></label>
+        <label>Kontakt emergjence<input id="roster_emergency" type="text" maxlength="120"></label>
+        <label class="roster-wide">Shënim i brendshëm<textarea id="roster_note" maxlength="500" rows="2"></textarea></label>
+        <div class="roster-wide row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+          <button class="btn ghost sm" id="roster_cancel" type="button">Anulo</button>
+          <button class="btn sm" id="roster_save" type="submit">Shto vullnetarin</button>
+        </div>
+      </form>
+    </div>`);
+
+  document.getElementById('roster_close')?.addEventListener('click', closeModal);
+  document.getElementById('roster_cancel')?.addEventListener('click', closeModal);
+  const role = document.getElementById('roster_role') as HTMLSelectElement;
+  const unit = document.getElementById('roster_unit') as HTMLSelectElement;
+  role.addEventListener('change', () => {
+    unit.disabled = role.value === 'lw';
+    if (unit.disabled) unit.value = '';
+  });
+
+  document.getElementById('roster_form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const value = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement).value.trim();
+    const btn = document.getElementById('roster_save') as HTMLButtonElement;
+    btn.disabled = true;
+    const { error } = await sb.rpc('vol_create_roster', {
+      p_first_name: value('roster_first'),
+      p_last_name: value('roster_last'),
+      p_phone: value('roster_phone'),
+      p_city: value('roster_city'),
+      p_role: role.value,
+      p_unit: unit.value || null,
+      p_email: value('roster_email') || null,
+      p_emergency_contact: value('roster_emergency') || null,
+      p_note: value('roster_note') || null,
+    });
+    if (error) {
+      btn.disabled = false;
+      return fail(error);
+    }
+    closeModal();
+    toast('Vullnetari u shtua në listë.');
+    await vAdmin();
+  });
+}
+
 export async function vAdmin(): Promise<void> {
   const view = document.getElementById('view');
   if (!view) return;
@@ -755,6 +821,14 @@ export async function vAdmin(): Promise<void> {
   view.innerHTML = `
     <h2 class="sec">Administrimi</h2>
     <p class="sub">Miratimi i vullnetarëve të rinj, shqyrtimi i kërkesave për ndryshime dhe caktimi i roleve.</p>
+
+    <div class="card" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <h3 style="margin:0">Shto vullnetar në listë</h3>
+        <div class="meta" style="margin-top:4px">Adminët mund të caktojnë të dhënat e kontaktit, rolin dhe njësinë pa krijuar llogari hyrjeje.</div>
+      </div>
+      <button class="btn sm" id="btn_create_roster" type="button">+ Shto vullnetar</button>
+    </div>
 
     <div class="grid g4" style="margin-bottom:20px;gap:12px">
       <div class="card" style="padding:14px;display:flex;align-items:center;gap:14px;margin:0">
@@ -979,6 +1053,7 @@ export async function vAdmin(): Promise<void> {
       </div>
     </div>`;
 
+  document.getElementById('btn_create_roster')?.addEventListener('click', () => showRosterCreate(units, roleKeys));
   document.getElementById('btn_refresh_admin')?.addEventListener('click', vAdmin);
   document.getElementById('btn_go_feedback_tab')?.addEventListener('click', () => {
     const tabBtn = document.querySelector<HTMLElement>('.tab[data-tab="feedback"]');

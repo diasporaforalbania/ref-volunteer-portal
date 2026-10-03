@@ -936,6 +936,17 @@ a.link {
   background: none;
 }
 
+.roster-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+.roster-form label { min-width: 0; }
+.roster-form .roster-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) {
+  .roster-form { grid-template-columns: 1fr; }
+}
+
 .signed-qr-strip {
   display: flex;
   align-items: center;
