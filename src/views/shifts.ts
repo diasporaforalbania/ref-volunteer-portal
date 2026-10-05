@@ -175,6 +175,13 @@ export async function vShifts(): Promise<void> {
       });
     });
 
+    view.querySelectorAll<HTMLElement>('[data-copy-shift]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = shifts.find(x => x.id === btn.dataset.copyShift);
+        if (s) openCopyShiftModal(s);
+      });
+    });
+
     view.querySelectorAll<HTMLElement>('[data-close-shift]').forEach(btn => {
       btn.addEventListener('click', () => {
         const s = shifts.find(x => x.id === btn.dataset.closeShift);
@@ -195,6 +202,7 @@ export function shiftCardHtml(s: ShiftListItem): string {
   // nga cila njësi është apo nga kush ka bërë check-in brenda.
   const canEdit = admin && !closed;
   const canClose = admin && !closed;
+  const canCopy = store.isTeamLead() || admin;
 
   return `
   <div class="card" style="${closed ? 'border-color:var(--line);' : ''}">
@@ -227,6 +235,7 @@ export function shiftCardHtml(s: ShiftListItem): string {
             : `<button class="btn sec sm" data-join-shift="${s.id}">✓ Bashkohu</button>`
         ) : ''}
         ${canClose ? `<button class="btn red sm" data-close-shift="${s.id}">Mbyll turnin</button>` : ''}
+        ${canCopy ? `<button class="btn ghost sm" data-copy-shift="${s.id}">Kopjo në ditë…</button>` : ''}
         ${canEdit ? `<button class="btn ghost sm" data-edit-shift="${s.id}" title="Ndrysho turnin">✎</button>` : ''}
         ${canDel ? `<button class="btn ghost sm" data-del-shift="${s.id}" title="Fshi turnin">✕</button>` : ''}
       </div>
@@ -329,6 +338,140 @@ export async function saveShift(): Promise<void> {
   closeModal();
   toast('Turni u planifikua.');
   vShifts();
+}
+
+const addCalendarDays = (date: string, days: number): string => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+const copyShiftTimes = (s: ShiftListItem, date: string): { starts_at: string; ends_at: string } | null => {
+  if (!Number.isFinite(Date.parse(`${date}T00:00:00Z`))) return null;
+  const zone = s.time_zone || DEFAULT_SHIFT_TIME_ZONE;
+  const start = toZonedInput(s.starts_at, zone);
+  const end = toZonedInput(s.ends_at, zone);
+  const dayOffset = (Date.parse(`${end.date}T00:00:00Z`) - Date.parse(`${start.date}T00:00:00Z`)) / 86400000;
+  const starts_at = zonedDateTimeToIso(date, start.time, zone);
+  const ends_at = zonedDateTimeToIso(addCalendarDays(date, dayOffset), end.time, zone);
+  return starts_at && ends_at && ends_at > starts_at && Date.parse(starts_at) > Date.now()
+    ? { starts_at, ends_at } : null;
+};
+
+export function openCopyShiftModal(s: ShiftListItem): void {
+  const zone = s.time_zone || DEFAULT_SHIFT_TIME_ZONE;
+  const sourceDate = toZonedInput(s.starts_at, zone).date;
+  const today = toZonedInput(new Date(), zone).date;
+  const initialDate = addCalendarDays(sourceDate > today ? sourceDate : today, 1);
+  const selected = new Set<string>();
+
+  openModal(`
+  <div class="modal">
+    <button class="modal-x" id="modal_close_btn">✕</button>
+    <h3>Kopjo turnin në ditë të zgjedhura</h3>
+    <p class="meta" style="margin:0 0 12px">${esc(s.unit_code || '—')} · ${esc(shiftWhen(s))}<br>
+      Kapaciteti: ${s.capacity === 0 ? 'pa kufi' : s.capacity} · Pika e takimit: ${esc(s.notes || '—')}</p>
+    <label>Zgjidh një datë</label>
+    <input id="copy_date" type="date" min="${today}" value="${initialDate}">
+    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn sec sm" type="button" id="copy_add_date">Shto datën</button>
+      <button class="btn ghost sm" type="button" id="copy_add_week">Shto të hënën–të premten e kësaj jave</button>
+    </div>
+    <div id="copy_preview" style="margin-top:14px"></div>
+    <div class="notice warn" style="margin-top:12px">Kopjohen zona, orët, kapaciteti dhe pika e takimit. Pika e takimit shfaqet publikisht. Regjistrimet nuk kopjohen.</div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" id="copy_save_btn" type="button" disabled>Krijo turnet</button>
+      <button class="btn ghost" id="copy_cancel_btn" type="button">Anulo</button>
+    </div>
+  </div>`);
+
+  const dateInput = document.getElementById('copy_date') as HTMLInputElement;
+  const preview = document.getElementById('copy_preview') as HTMLElement;
+  const saveBtn = document.getElementById('copy_save_btn') as HTMLButtonElement;
+
+  const renderPreview = (): void => {
+    const dates = [...selected].sort();
+    preview.innerHTML = dates.length ? `
+      <div class="meta" style="margin-bottom:8px">${dates.length} turne të reja · ${esc(zoneLabel(zone))}</div>
+      <div style="max-height:230px;overflow:auto">
+        ${dates.map(date => {
+          const times = copyShiftTimes(s, date);
+          return `<div class="row" style="justify-content:space-between;gap:8px;margin:5px 0">
+            <span>${times ? esc(`${fmtDate(times.starts_at, zone)} · ${fmtTime(times.starts_at, zone)}–${fmtTime(times.ends_at, zone)}`) : esc(`${date} · orë e kaluar ose e pavlefshme`)}</span>
+            <button class="btn ghost sm" type="button" data-copy-remove="${date}" aria-label="Hiq datën ${date}">✕</button>
+          </div>`;
+        }).join('')}
+      </div>` : '<div class="meta">Shtoni datat ku doni ta kopjoni turnin.</div>';
+    saveBtn.disabled = !dates.length || dates.some(date => !copyShiftTimes(s, date));
+    preview.querySelectorAll<HTMLButtonElement>('[data-copy-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selected.delete(btn.dataset.copyRemove || '');
+        renderPreview();
+      });
+    });
+  };
+
+  const addDates = (dates: string[]): void => {
+    if (dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date))) return fail('Zgjidhni një datë të vlefshme.');
+    const next = new Set([...selected, ...dates]);
+    if (next.size > 14) return fail('Mund të kopjoni deri në 14 ditë njëherësh.');
+    if ([...next].some(date => date < today || date === sourceDate)) {
+      return fail('Zgjidhni ditë të ardhshme, të ndryshme nga dita e turnit burim.');
+    }
+    selected.clear();
+    next.forEach(date => selected.add(date));
+    renderPreview();
+  };
+
+  document.getElementById('modal_close_btn')?.addEventListener('click', closeModal);
+  document.getElementById('copy_cancel_btn')?.addEventListener('click', closeModal);
+  document.getElementById('copy_add_date')?.addEventListener('click', () => addDates([dateInput.value]));
+  document.getElementById('copy_add_week')?.addEventListener('click', () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value) || !Number.isFinite(Date.parse(`${dateInput.value}T00:00:00Z`))) {
+      return fail('Zgjidhni një datë të vlefshme.');
+    }
+    const weekday = new Date(`${dateInput.value}T00:00:00Z`).getUTCDay();
+    const monday = addCalendarDays(dateInput.value, -((weekday + 6) % 7));
+    addDates(Array.from({ length: 5 }, (_, i) => addCalendarDays(monday, i)).filter(date => date >= today && date !== sourceDate));
+  });
+  saveBtn.addEventListener('click', async () => {
+    const dates = [...selected].sort();
+    const times = dates.map(date => copyShiftTimes(s, date));
+    if (!dates.length || times.some(t => !t)) return fail('Kontrolloni datat dhe orët e turneve.');
+    if (!store.ME?.id) return fail('Hyni përsëri për të planifikuar turne.');
+    saveBtn.disabled = true;
+
+    const rows = times.map(t => ({
+      unit_id: s.unit_id,
+      starts_at: t!.starts_at,
+      ends_at: t!.ends_at,
+      time_zone: zone,
+      capacity: s.capacity,
+      notes: s.notes,
+      created_by: store.ME!.id,
+      created_by_name: store.ME!.full_name || store.ME!.volunteer_code,
+    }));
+    const { data: existing, error: lookupError } = await sb.from('shifts')
+      .select('starts_at').eq('unit_id', s.unit_id).in('starts_at', rows.map(row => row.starts_at));
+    if (lookupError) {
+      saveBtn.disabled = false;
+      return fail(lookupError);
+    }
+    if (existing?.length) {
+      saveBtn.disabled = false;
+      return fail('Një ose më shumë turne ekzistojnë tashmë në këto orare. Hiqni datat e përsëritura.');
+    }
+
+    const { error } = await sb.from('shifts').insert(rows);
+    if (error) {
+      saveBtn.disabled = false;
+      return fail(error);
+    }
+    closeModal();
+    toast(`${rows.length} turne u planifikuan.`);
+    vShifts();
+  });
+  renderPreview();
 }
 
 export function openEditShiftModal(s: ShiftListItem, units: UnitRow[]): void {
